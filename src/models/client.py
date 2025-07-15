@@ -1,25 +1,20 @@
 """Client entity model for Jobber data."""
 
 from dataclasses import dataclass
-from typing import Optional, List
-from datetime import datetime
 
 
-@dataclass
+@dataclass(frozen=True)
 class Client:
-    """Represents a Jobber client entity."""
+    """
+    Represents a Jobber client entity.
 
-    id: str
-    first_name: str
-    last_name: str
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    company_name: Optional[str] = None
-    created_at: Optional[datetime] = None
+    Matches the Jobber GraphQL Client schema exactly for seamless data mapping.
+    Clients are the customers who pay for services on Jobber's platform.
+    """
 
-    def __post_init__(self) -> None:
-        """Validate client data after initialization."""
-        if not self.id:
-            raise ValueError("Client ID is required")
-        if not self.first_name and not self.last_name:
-            raise ValueError("Client must have at least first name or last name")
+    id: str  # EncodedId! - The unique identifier
+    first_name: str  # firstName: String! - The first name of the client
+    last_name: str  # lastName: String! - The last name of the client
+    email: str  # Primary email from emails array
+    phone: str  # Primary phone from phones array
+    created_at: str  # createdAt: ISO8601DateTime! - ISO format string
