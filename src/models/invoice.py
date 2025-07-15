@@ -1,29 +1,20 @@
 """Invoice entity model for Jobber data."""
 
 from dataclasses import dataclass
-from typing import Optional
-from datetime import datetime
-from decimal import Decimal
 
 
-@dataclass
+@dataclass(frozen=True)
 class Invoice:
-    """Represents a Jobber invoice entity."""
+    """
+    Represents a Jobber invoice entity.
 
-    id: str
-    client_id: str
-    invoice_number: str
-    total_amount: Decimal
-    status: str
-    created_at: Optional[datetime] = None
-    issued_date: Optional[datetime] = None
-    due_date: Optional[datetime] = None
+    Matches the Jobber GraphQL Invoice schema exactly for seamless data mapping.
+    A receipt detailing the work done as well as the cost of the service provided.
+    """
 
-    def __post_init__(self) -> None:
-        """Validate invoice data after initialization."""
-        if not self.id:
-            raise ValueError("Invoice ID is required")
-        if not self.client_id:
-            raise ValueError("Client ID is required for invoice")
-        if not self.invoice_number:
-            raise ValueError("Invoice number is required")
+    id: str  # EncodedId! - The unique identifier
+    client_id: str  # client.id - Client relationship ID for foreign key
+    number: str  # invoiceNumber: String! - The invoice number
+    total_cents: int  # amounts.total converted to cents for precision
+    status: str  # invoiceStatus: InvoiceStatusTypeEnum! - The status of the invoice
+    issued_at: str  # issuedDate: ISO8601DateTime - ISO format string
