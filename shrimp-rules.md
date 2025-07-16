@@ -60,7 +60,7 @@
 
 ### Directory Structure
 
-```
+```sh
 tightbeam-v2/
 ├── src/
 │   ├── auth/

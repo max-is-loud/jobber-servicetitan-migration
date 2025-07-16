@@ -1,180 +1,236 @@
 {
   "tasks": [
     {
-      "id": "6a47738a-4eeb-4edc-a32d-bfa2b8572765",
-      "name": "Setup Project Structure and Dependencies",
-      "description": "Create the complete directory structure according to shrimp-rules.md specifications and establish Python dependencies management. This task creates the foundation for all subsequent development phases by setting up the exact file organization required for the object-oriented architecture.",
-      "notes": "This establishes the foundation for all other tasks. Directory structure must match shrimp-rules.md exactly to maintain architectural compliance.",
+      "id": "c1d517e6-9b99-4a1e-bcfb-5f5d65c0474c",
+      "name": "Create clients directory and JobberClient class skeleton",
+      "description": "Create the src/clients/ directory structure and implement the basic JobberClient class with constructor dependency injection for AuthProvider. This establishes the foundation for GraphQL API communication following the established project patterns from Phase 1.",
+      "notes": "Focus on directory structure and class skeleton only - no HTTP implementation yet. Ensures proper module organization following shrimp-rules.md specifications.",
       "status": "completed",
       "dependencies": [],
-      "createdAt": "2025-07-15T22:18:55.122Z",
-      "updatedAt": "2025-07-15T22:38:19.332Z",
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-16T03:41:25.392Z",
       "relatedFiles": [
         {
-          "path": "requirements.txt",
+          "path": "src/clients/__init__.py",
           "type": "CREATE",
-          "description": "Python dependencies file with typer and requests"
+          "description": "Package initialization for clients module"
         },
         {
-          "path": "src/auth/__init__.py",
+          "path": "src/clients/jobber_client.py",
           "type": "CREATE",
-          "description": "Package initialization for auth module"
+          "description": "JobberClient class skeleton with dependency injection"
         },
         {
-          "path": "src/models/__init__.py",
-          "type": "CREATE",
-          "description": "Package initialization for models module"
-        },
-        {
-          "path": "src/repositories/__init__.py",
-          "type": "CREATE",
-          "description": "Package initialization for repositories module"
-        },
-        {
-          "path": "src/exceptions/__init__.py",
-          "type": "CREATE",
-          "description": "Package initialization and domain exceptions definition"
+          "path": "src/auth/auth_provider.py",
+          "type": "DEPENDENCY",
+          "description": "AuthProvider class for authentication integration"
         }
       ],
-      "implementationGuide": "1. Create src/ directory with subdirectories: auth/, models/, repositories/, exceptions/\\n2. Add __init__.py files to make packages importable\\n3. Create requirements.txt with exact dependencies: typer>=0.9.0, requests>=2.31.0\\n4. Ensure directory structure matches: src/auth/auth_provider.py, src/models/client.py, src/models/invoice.py, src/repositories/repository.py, src/exceptions/__init__.py\\n5. Validate structure matches shrimp-rules.md specifications exactly",
-      "verificationCriteria": "Directory structure exactly matches shrimp-rules.md specification. All __init__.py files exist and are importable. requirements.txt contains correct dependencies. Python can import all package modules without errors.",
-      "analysisResult": "Phase 1 establishes the foundational object-oriented architecture for TightBeam v2 Jobber data migration tool. This creates core infrastructure components including authentication, data models, repository layer, and error handling with strict dependency injection patterns. The implementation follows exact specifications from shrimp-rules.md and prepares for seamless integration with Phase 2 (JobberClient, EntityMapper), Phase 3 (MigrationCoordinator, CLI), and Phase 4 (testing and refinement). All classes must use constructor-based dependency injection, single responsibility principle, and built-in dict type instead of typing.Dict (UP035 rule compliance).",
-      "summary": "Successfully created complete project structure with src/ directory containing auth/, models/, repositories/, and exceptions/ subdirectories. All __init__.py files exist and are importable. Requirements.txt contains correct dependencies (typer>=0.9.0, requests>=2.31.0). All package modules import without errors. Directory structure exactly matches shrimp-rules.md specifications. Foundation established for object-oriented architecture with proper dependency injection patterns.",
-      "completedAt": "2025-07-15T22:38:19.329Z"
+      "implementationGuide": "1. Create src/clients/__init__.py and src/clients/jobber_client.py\\n2. Implement JobberClient class with constructor: JobberClient(auth_provider: AuthProvider)\\n3. Add skeleton methods: fetch_clients(cursor: Optional[str] = None) -> dict, fetch_invoices(cursor: Optional[str] = None) -> dict\\n4. Follow established patterns: comprehensive docstrings, type hints with built-in dict, snake_case naming\\n5. Import AuthProvider and Optional from typing\\n6. Add basic class docstring explaining GraphQL API communication responsibility",
+      "verificationCriteria": "JobberClient class can be instantiated with AuthProvider dependency, has fetch_clients and fetch_invoices method signatures, follows established naming conventions, and matches existing code style patterns from Phase 1.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components.",
+      "summary": "Successfully implemented JobberClient class skeleton with complete dependency injection pattern, proper method signatures, comprehensive docstrings, and verified compatibility with established Phase 1 patterns. All verification criteria met including instantiation with AuthProvider, correct method signatures, naming conventions, and code style compliance.",
+      "completedAt": "2025-07-16T03:41:25.390Z"
     },
     {
-      "id": "9f895325-8b7f-467b-9542-8e8ca0b54235",
-      "name": "Implement Domain-Specific Exception Classes",
-      "description": "Create domain-specific exception classes for clear error boundaries and proper error handling throughout the application. These exceptions provide meaningful error context and support the single responsibility principle by isolating error handling concerns.",
-      "notes": "These exceptions are used by all other components and must be implemented before AuthProvider and Repository classes.",
-      "status": "pending",
+      "id": "e39c7289-46cf-45db-91a9-7b9bd5e3b2de",
+      "name": "Implement GraphQL queries and HTTP communication in JobberClient",
+      "description": "Implement the core GraphQL query execution logic in JobberClient using requests library. This includes constructing proper GraphQL queries for clients and invoices with cursor-based pagination, making HTTP POST requests to Jobber API, and handling HTTP response processing.",
+      "notes": "Focus on HTTP communication mechanics and GraphQL query structure. Error handling will be enhanced in next task. Use exact field names from Jobber API documentation.",
+      "status": "completed",
       "dependencies": [
         {
-          "taskId": "6a47738a-4eeb-4edc-a32d-bfa2b8572765"
+          "taskId": "c1d517e6-9b99-4a1e-bcfb-5f5d65c0474c"
         }
       ],
-      "createdAt": "2025-07-15T22:18:55.122Z",
-      "updatedAt": "2025-07-15T22:18:55.122Z",
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-16T03:45:03.340Z",
       "relatedFiles": [
         {
-          "path": "src/exceptions/__init__.py",
+          "path": "src/clients/jobber_client.py",
           "type": "TO_MODIFY",
-          "description": "Add domain-specific exception class definitions",
+          "description": "Add GraphQL queries and HTTP request implementation",
           "lineStart": 1,
           "lineEnd": 50
+        },
+        {
+          "path": "requirements.txt",
+          "type": "REFERENCE",
+          "description": "Confirm requests>=2.31.0 dependency availability"
         }
       ],
-      "implementationGuide": "1. Define ConfigurationError for authentication and environment issues\\n2. Define JobberApiError for API communication failures\\n3. Define MappingError for data transformation issues\\n4. Define RepositoryError for database operation failures\\n5. All exceptions inherit from base Exception class\\n6. Include descriptive docstrings explaining when each exception should be raised\\n7. Follow Python exception naming conventions (Error suffix)",
-      "verificationCriteria": "All four exception classes (ConfigurationError, JobberApiError, MappingError, RepositoryError) are defined and importable. Each has appropriate docstring. All inherit from base Exception. Can be imported from src.exceptions module.",
-      "analysisResult": "Phase 1 establishes the foundational object-oriented architecture for TightBeam v2 Jobber data migration tool. This creates core infrastructure components including authentication, data models, repository layer, and error handling with strict dependency injection patterns. The implementation follows exact specifications from shrimp-rules.md and prepares for seamless integration with Phase 2 (JobberClient, EntityMapper), Phase 3 (MigrationCoordinator, CLI), and Phase 4 (testing and refinement). All classes must use constructor-based dependency injection, single responsibility principle, and built-in dict type instead of typing.Dict (UP035 rule compliance)."
+      "implementationGuide": "1. Import requests library\\n2. Define API_URL constant: https://api.getjobber.com/api/graphql\\n3. Implement GraphQL query strings for clients and invoices with cursor pagination\\n   - clients query: id, firstName, lastName, emails, phones, createdAt\\n   - invoices query: id, client{id}, invoiceNumber, amounts{total}, invoiceStatus, issuedDate\\n4. Implement HTTP request logic:\\n   - Use requests.post(API_URL, headers=auth_provider.get_headers(), json=payload)\\n   - payload format: {\\\"query\\\": query_string, \\\"variables\\\": {\\\"cursor\\\": cursor}}\\n5. Handle response processing:\\n   - Check response.status_code\\n   - Parse response.json()\\n   - Return raw dict response for EntityMapper processing\\n6. Basic error handling for HTTP failures",
+      "verificationCriteria": "JobberClient can execute GraphQL queries to Jobber API, handles cursor-based pagination variables, returns raw dict responses, uses AuthProvider headers for authentication, and successfully communicates with https://api.getjobber.com/api/graphql endpoint.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components.",
+      "summary": "Successfully implemented GraphQL queries and HTTP communication in JobberClient with complete cursor-based pagination, proper field mapping, authentication integration, and HTTP error handling. Implementation includes API endpoint constant, structured GraphQL queries for clients and invoices, and robust HTTP request logic using requests library.",
+      "completedAt": "2025-07-16T03:45:03.338Z"
     },
     {
-      "id": "32edee7a-e700-47fc-a97a-d8a799172160",
-      "name": "Create Entity Model Dataclasses",
-      "description": "Implement Client and Invoice dataclasses representing Jobber API entities with proper type hints and field definitions. These models serve as the core data structures for the entire application and must match Jobber GraphQL schema exactly.",
-      "notes": "Must use built-in dict type instead of typing.Dict (UP035 rule). Fields must match exact Jobber API schema for seamless data mapping in later phases.",
+      "id": "f20ad6be-79e8-4248-95c6-e7a29a73af1d",
+      "name": "Add comprehensive error handling to JobberClient",
+      "description": "Implement robust error handling in JobberClient for HTTP failures, authentication errors, network issues, and GraphQL errors. Map all failure scenarios to appropriate domain exceptions (JobberApiError, ConfigurationError) following established error handling patterns from Phase 1.",
+      "notes": "Critical for production robustness. Follow AuthProvider error handling patterns. Provide actionable error messages for troubleshooting.",
       "status": "pending",
       "dependencies": [
         {
-          "taskId": "6a47738a-4eeb-4edc-a32d-bfa2b8572765"
+          "taskId": "e39c7289-46cf-45db-91a9-7b9bd5e3b2de"
         }
       ],
-      "createdAt": "2025-07-15T22:18:55.122Z",
-      "updatedAt": "2025-07-15T22:18:55.122Z",
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-15T23:22:11.359Z",
       "relatedFiles": [
         {
-          "path": "src/models/client.py",
+          "path": "src/clients/jobber_client.py",
+          "type": "TO_MODIFY",
+          "description": "Add comprehensive error handling throughout HTTP request methods",
+          "lineStart": 30,
+          "lineEnd": 120
+        },
+        {
+          "path": "src/exceptions/__init__.py",
+          "type": "REFERENCE",
+          "description": "Domain exception classes for error mapping"
+        },
+        {
+          "path": "src/auth/auth_provider.py",
+          "type": "REFERENCE",
+          "description": "Reference for error handling patterns and ConfigurationError usage"
+        }
+      ],
+      "implementationGuide": "1. Import JobberApiError and ConfigurationError from ..exceptions\\n2. Add HTTP status code error handling:\\n   - 401/403 -> ConfigurationError (\\\"Invalid or expired JOBBER_TOKEN\\\")\\n   - 4xx/5xx -> JobberApiError with descriptive messages\\n   - Network errors (requests.RequestException) -> JobberApiError\\n3. Add GraphQL error handling:\\n   - Check response[\\\"errors\\\"] field\\n   - Map GraphQL errors to JobberApiError with error details\\n4. Add timeout handling:\\n   - Set reasonable timeout values (connect=10, read=30)\\n   - Handle timeout exceptions -> JobberApiError\\n5. Add response validation:\\n   - Validate JSON structure\\n   - Check for required fields (data, clients/invoices)\\n   - Handle malformed responses -> JobberApiError\\n6. Comprehensive error messages with context",
+      "verificationCriteria": "JobberClient properly handles all error scenarios with appropriate domain exceptions, provides descriptive error messages, handles network failures gracefully, maps HTTP status codes correctly, and validates GraphQL responses robustly.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components."
+    },
+    {
+      "id": "55fb3cdc-87f6-438a-9898-47227efe341d",
+      "name": "Create mappers directory and EntityMapper class foundation",
+      "description": "Create the src/mappers/ directory structure and implement the EntityMapper class with methods for transforming GraphQL responses into Client and Invoice domain objects. This class provides pure data transformation functionality without external dependencies.",
+      "notes": "Focus on class structure and method signatures. Data transformation logic will be implemented in next task. EntityMapper has no dependencies for pure transformation logic.",
+      "status": "pending",
+      "dependencies": [],
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-15T23:22:11.359Z",
+      "relatedFiles": [
+        {
+          "path": "src/mappers/__init__.py",
           "type": "CREATE",
-          "description": "Client dataclass with Jobber API fields"
+          "description": "Package initialization for mappers module"
+        },
+        {
+          "path": "src/mappers/entity_mapper.py",
+          "type": "CREATE",
+          "description": "EntityMapper class for GraphQL response transformation"
+        },
+        {
+          "path": "src/models/client.py",
+          "type": "REFERENCE",
+          "description": "Client dataclass target structure"
         },
         {
           "path": "src/models/invoice.py",
-          "type": "CREATE",
-          "description": "Invoice dataclass with Jobber API fields"
-        },
+          "type": "REFERENCE",
+          "description": "Invoice dataclass target structure"
+        }
+      ],
+      "implementationGuide": "1. Create src/mappers/__init__.py and src/mappers/entity_mapper.py\\n2. Import Client, Invoice from ..models\\n3. Import List from typing and MappingError from ..exceptions\\n4. Implement EntityMapper class with no-dependency constructor\\n5. Add method signatures:\\n   - map_clients(response_data: dict) -> List[Client]\\n   - map_invoices(response_data: dict) -> List[Invoice]\\n6. Add comprehensive class docstring explaining transformation responsibility\\n7. Follow established patterns: type hints with built-in dict, descriptive method names\\n8. Add skeleton implementation that validates input structure",
+      "verificationCriteria": "EntityMapper class can be instantiated without dependencies, has correct method signatures for mapping clients and invoices, imports domain models properly, and follows established project code style and documentation patterns.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components."
+    },
+    {
+      "id": "9df8e041-9224-42e2-818a-7088d7e34e7a",
+      "name": "Implement Client entity mapping logic in EntityMapper",
+      "description": "Implement the complete data transformation logic for mapping Jobber GraphQL Client responses to our Client domain model. Handle the Connection pattern (edges/nodes), field name mapping, data extraction, and error scenarios for missing or invalid client data.",
+      "notes": "Critical to handle Jobber's nested array structures for emails and phones. Focus on robust data extraction with proper error handling for production use.",
+      "status": "pending",
+      "dependencies": [
         {
-          "path": "src/models/__init__.py",
+          "taskId": "55fb3cdc-87f6-438a-9898-47227efe341d"
+        }
+      ],
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-15T23:22:11.359Z",
+      "relatedFiles": [
+        {
+          "path": "src/mappers/entity_mapper.py",
           "type": "TO_MODIFY",
-          "description": "Export Client and Invoice classes",
-          "lineStart": 1,
-          "lineEnd": 10
+          "description": "Implement Client mapping logic with Connection pattern handling",
+          "lineStart": 20,
+          "lineEnd": 80
+        },
+        {
+          "path": "src/models/client.py",
+          "type": "REFERENCE",
+          "description": "Client dataclass field definitions and types"
         }
       ],
-      "implementationGuide": "1. Create Client dataclass in src/models/client.py with fields: id (str), first_name (str), last_name (str), email (str), phone (str), created_at (str)\\n2. Create Invoice dataclass in src/models/invoice.py with fields: id (str), client_id (str), number (str), total_cents (int), status (str), issued_at (str)\\n3. Use @dataclass(frozen=True) decorator for immutability\\n4. Use proper type hints with built-in types (str, int) not typing module\\n5. Add descriptive docstrings for each class\\n6. Export classes in models/__init__.py for easy importing",
-      "verificationCriteria": "Client and Invoice dataclasses can be instantiated with all required fields. Type hints use built-in types only. Classes are frozen (immutable). Can be imported via 'from src.models import Client, Invoice'. Fields match Jobber API schema exactly.",
-      "analysisResult": "Phase 1 establishes the foundational object-oriented architecture for TightBeam v2 Jobber data migration tool. This creates core infrastructure components including authentication, data models, repository layer, and error handling with strict dependency injection patterns. The implementation follows exact specifications from shrimp-rules.md and prepares for seamless integration with Phase 2 (JobberClient, EntityMapper), Phase 3 (MigrationCoordinator, CLI), and Phase 4 (testing and refinement). All classes must use constructor-based dependency injection, single responsibility principle, and built-in dict type instead of typing.Dict (UP035 rule compliance)."
+      "implementationGuide": "1. Implement map_clients method:\\n   - Extract data from GraphQL Connection: response[\\\"data\\\"][\\\"clients\\\"][\\\"edges\\\"]\\n   - Iterate through edges and extract node data: edge[\\\"node\\\"]\\n   - Map Jobber fields to Client attributes:\\n     * id -> id (direct mapping)\\n     * firstName -> first_name\\n     * lastName -> last_name  \\n     * emails[0] -> email (first email from array)\\n     * phones[0] -> phone (first phone from array, extract number)\\n     * createdAt -> created_at\\n2. Add data validation:\\n   - Check required fields exist\\n   - Handle empty arrays for emails/phones\\n   - Validate data types\\n3. Add error handling:\\n   - Missing required fields -> MappingError\\n   - Invalid data structure -> MappingError\\n   - Empty or malformed response -> MappingError\\n4. Return List[Client] with mapped objects",
+      "verificationCriteria": "EntityMapper correctly extracts Client data from GraphQL Connection responses, maps all field names properly (firstName->first_name), handles arrays for emails/phones, validates required fields, and raises MappingError for invalid data structures.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components."
     },
     {
-      "id": "1f5463f6-e8b9-4da0-a838-0584c914a0d6",
-      "name": "Implement AuthProvider Class",
-      "description": "Create AuthProvider class for reading and validating JOBBER_TOKEN environment variable with proper error handling. This class handles all authentication concerns and provides a clean interface for token access throughout the application.",
-      "notes": "This class must be implemented before JobberClient in Phase 2. Must use domain-specific ConfigurationError for missing token scenarios.",
+      "id": "e2d2405e-e49b-4de8-aad0-adb7b566d1c1",
+      "name": "Implement Invoice entity mapping logic in EntityMapper",
+      "description": "Implement the complete data transformation logic for mapping Jobber GraphQL Invoice responses to our Invoice domain model. Handle the Connection pattern, field name mapping, data type conversions (especially total amount to cents), and relationship mapping for client_id.",
+      "notes": "Critical to handle monetary conversion correctly (float to cents). Invoice has more complex nested relationships than Client. Ensure precision in financial data handling.",
       "status": "pending",
       "dependencies": [
         {
-          "taskId": "6a47738a-4eeb-4edc-a32d-bfa2b8572765"
-        },
-        {
-          "taskId": "9f895325-8b7f-467b-9542-8e8ca0b54235"
+          "taskId": "9df8e041-9224-42e2-818a-7088d7e34e7a"
         }
       ],
-      "createdAt": "2025-07-15T22:18:55.122Z",
-      "updatedAt": "2025-07-15T22:18:55.122Z",
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-15T23:22:11.359Z",
       "relatedFiles": [
         {
-          "path": "src/auth/auth_provider.py",
-          "type": "CREATE",
-          "description": "AuthProvider class for JOBBER_TOKEN validation"
+          "path": "src/mappers/entity_mapper.py",
+          "type": "TO_MODIFY",
+          "description": "Implement Invoice mapping logic with amount conversion and relationship handling",
+          "lineStart": 60,
+          "lineEnd": 120
         },
         {
-          "path": "src/exceptions/__init__.py",
-          "type": "DEPENDENCY",
-          "description": "ConfigurationError exception used for missing token"
+          "path": "src/models/invoice.py",
+          "type": "REFERENCE",
+          "description": "Invoice dataclass field definitions and types"
         }
       ],
-      "implementationGuide": "1. Create AuthProvider class in src/auth/auth_provider.py\\n2. Implement constructor with no dependencies (reads environment directly)\\n3. Implement get_token() method returning string\\n4. Raise ConfigurationError if JOBBER_TOKEN environment variable is missing\\n5. Add get_headers() method returning dict with Authorization header\\n6. Use os.environ to read environment variable\\n7. Include comprehensive docstrings and type hints\\n8. Follow single responsibility principle - only handle authentication",
-      "verificationCriteria": "AuthProvider can be instantiated without parameters. get_token() returns valid token when JOBBER_TOKEN is set. Raises ConfigurationError when JOBBER_TOKEN is missing. get_headers() returns proper Authorization header format. Class follows single responsibility principle.",
-      "analysisResult": "Phase 1 establishes the foundational object-oriented architecture for TightBeam v2 Jobber data migration tool. This creates core infrastructure components including authentication, data models, repository layer, and error handling with strict dependency injection patterns. The implementation follows exact specifications from shrimp-rules.md and prepares for seamless integration with Phase 2 (JobberClient, EntityMapper), Phase 3 (MigrationCoordinator, CLI), and Phase 4 (testing and refinement). All classes must use constructor-based dependency injection, single responsibility principle, and built-in dict type instead of typing.Dict (UP035 rule compliance)."
+      "implementationGuide": "1. Implement map_invoices method:\\n   - Extract data from GraphQL Connection: response[\\\"data\\\"][\\\"invoices\\\"][\\\"edges\\\"]\\n   - Iterate through edges and extract node data: edge[\\\"node\\\"]\\n   - Map Jobber fields to Invoice attributes:\\n     * id -> id (direct mapping)\\n     * client.id -> client_id (extract from nested client object)\\n     * invoiceNumber -> number\\n     * amounts.total -> total_cents (convert float to int cents: int(total * 100))\\n     * invoiceStatus -> status\\n     * issuedDate -> issued_at\\n2. Add data type conversions:\\n   - Convert amounts.total to integer cents for precision\\n   - Handle null/missing amounts gracefully\\n   - Ensure string fields are properly extracted\\n3. Add relationship handling:\\n   - Extract client.id for foreign key relationship\\n   - Validate client relationship exists\\n4. Add comprehensive error handling for all edge cases",
+      "verificationCriteria": "EntityMapper correctly extracts Invoice data from GraphQL responses, maps all field names properly (invoiceNumber->number), converts amounts to integer cents accurately, extracts client_id from nested relationships, and handles all data validation scenarios robustly.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components."
     },
     {
-      "id": "e57ba7a9-abe4-4864-ae02-049d3915117a",
-      "name": "Implement Repository with Schema and CRUD Interface",
-      "description": "Create Repository class with SQLite schema initialization and generic CRUD operations for Client and Invoice entities. This class abstracts all database operations and provides a clean interface for data persistence following the Repository pattern.",
-      "notes": "Database schema must match shrimp-rules.md exactly. All SQL operations must use parameterized queries for security. Repository must be generic to support both entity types.",
+      "id": "8af40ff4-219b-4bf9-b427-94eb738bbb8c",
+      "name": "Create integration exports and update project imports",
+      "description": "Update the project's import structure to expose the new Phase 2 classes (JobberClient, EntityMapper) through package __init__.py files. Ensure seamless integration with existing Phase 1 components and prepare for Phase 3 MigrationCoordinator implementation.",
+      "notes": "Critical for Phase 3 integration. Ensures MigrationCoordinator can cleanly import and use Phase 2 components. Follow established import patterns from Phase 1.",
       "status": "pending",
       "dependencies": [
         {
-          "taskId": "6a47738a-4eeb-4edc-a32d-bfa2b8572765"
-        },
-        {
-          "taskId": "9f895325-8b7f-467b-9542-8e8ca0b54235"
-        },
-        {
-          "taskId": "32edee7a-e700-47fc-a97a-d8a799172160"
+          "taskId": "e2d2405e-e49b-4de8-aad0-adb7b566d1c1"
         }
       ],
-      "createdAt": "2025-07-15T22:18:55.122Z",
-      "updatedAt": "2025-07-15T22:18:55.122Z",
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-15T23:22:11.359Z",
       "relatedFiles": [
         {
-          "path": "src/repositories/repository.py",
-          "type": "CREATE",
-          "description": "Repository class with SQLite operations and CRUD interface"
+          "path": "src/clients/__init__.py",
+          "type": "TO_MODIFY",
+          "description": "Export JobberClient class for external imports"
         },
         {
-          "path": "src/models/__init__.py",
-          "type": "DEPENDENCY",
-          "description": "Client and Invoice models used in repository operations"
+          "path": "src/mappers/__init__.py",
+          "type": "TO_MODIFY",
+          "description": "Export EntityMapper class for external imports"
         },
         {
-          "path": "src/exceptions/__init__.py",
-          "type": "DEPENDENCY",
-          "description": "RepositoryError exception for database failures"
+          "path": "src/__init__.py",
+          "type": "REFERENCE",
+          "description": "Check main package import structure"
         }
       ],
-      "implementationGuide": "1. Create Repository class in src/repositories/repository.py\\n2. Implement constructor accepting sqlite3.Connection dependency\\n3. Implement init_schema() method creating clients and invoices tables\\n4. Use exact SQL schema from shrimp-rules.md with CREATE TABLE IF NOT EXISTS\\n5. Implement generic CRUD methods: create(), read(), update(), delete()\\n6. Use parameterized queries for all SQL operations\\n7. Add save_clients() and save_invoices() batch methods\\n8. Include proper error handling with RepositoryError\\n9. Support both Client and Invoice entity types\\n10. Follow dependency injection pattern",
-      "verificationCriteria": "Repository can be instantiated with sqlite3.Connection. init_schema() creates tables matching exact schema from shrimp-rules.md. CRUD operations work for both Client and Invoice entities. All SQL uses parameterized queries. Batch save methods handle List[Client] and List[Invoice]. Proper error handling with RepositoryError.",
-      "analysisResult": "Phase 1 establishes the foundational object-oriented architecture for TightBeam v2 Jobber data migration tool. This creates core infrastructure components including authentication, data models, repository layer, and error handling with strict dependency injection patterns. The implementation follows exact specifications from shrimp-rules.md and prepares for seamless integration with Phase 2 (JobberClient, EntityMapper), Phase 3 (MigrationCoordinator, CLI), and Phase 4 (testing and refinement). All classes must use constructor-based dependency injection, single responsibility principle, and built-in dict type instead of typing.Dict (UP035 rule compliance)."
+      "implementationGuide": "1. Update src/clients/__init__.py:\\n   - Export JobberClient: from .jobber_client import JobberClient\\n2. Update src/mappers/__init__.py:\\n   - Export EntityMapper: from .entity_mapper import EntityMapper\\n3. Update main src/__init__.py if needed for top-level imports\\n4. Verify import hierarchy follows established patterns:\\n   - No circular imports between modules\\n   - Clean dependency flow: clients -> auth, mappers -> models\\n5. Test import statements work correctly:\\n   - from src.clients import JobberClient\\n   - from src.mappers import EntityMapper\\n6. Add any missing __init__.py files in directory structure",
+      "verificationCriteria": "All Phase 2 classes can be imported cleanly using standard Python import syntax, no circular import issues exist, dependency hierarchy is maintained, and integration points are properly exposed for Phase 3 implementation.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components."
     }
   ]
 }
