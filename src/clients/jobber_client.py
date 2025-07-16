@@ -6,7 +6,10 @@ with the Jobber GraphQL API, including authentication, query execution,
 and response handling.
 """
 
-from typing import Optional, Any
+from typing import Any, Optional
+
+import requests
+
 from ..auth.auth_provider import AuthProvider
 
 
@@ -23,6 +26,61 @@ class JobberClient:
     integrates with the AuthProvider for secure API authentication.
     """
 
+    # Jobber GraphQL API endpoint
+    API_URL = "https://api.getjobber.com/api/graphql"
+
+    # GraphQL query for fetching clients with cursor pagination
+    CLIENTS_QUERY = """
+    query GetClients($cursor: String) {
+      clients(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            firstName
+            lastName
+            emails {
+              address
+            }
+            phones {
+              number
+            }
+            createdAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching invoices with cursor pagination
+    INVOICES_QUERY = """
+    query GetInvoices($cursor: String) {
+      invoices(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            client {
+              id
+            }
+            invoiceNumber
+            amounts {
+              total
+            }
+            invoiceStatus
+            issuedDate
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
     def __init__(self, auth_provider: AuthProvider) -> None:
         """
         Initialize the JobberClient with authentication provider.
@@ -37,8 +95,7 @@ class JobberClient:
         Fetch clients data from Jobber GraphQL API.
 
         Retrieves client information using cursor-based pagination.
-        This method will be implemented in subsequent tasks to include
-        GraphQL query construction, HTTP communication, and response processing.
+        Constructs GraphQL query, makes HTTP POST request, and processes response.
 
         Args:
             cursor: Optional cursor for pagination (None for first page)
@@ -50,16 +107,26 @@ class JobberClient:
             JobberApiError: If API communication fails
             ConfigurationError: If authentication configuration is invalid
         """
-        # Implementation will be added in subsequent tasks
-        raise NotImplementedError("fetch_clients implementation pending")
+        # Prepare GraphQL payload
+        payload = {"query": self.CLIENTS_QUERY, "variables": {"cursor": cursor}}
+
+        # Make HTTP POST request to Jobber API
+        response = requests.post(
+            self.API_URL, headers=self.auth_provider.get_headers(), json=payload
+        )
+
+        # Check for HTTP errors
+        response.raise_for_status()
+
+        # Parse and return JSON response
+        return response.json()
 
     def fetch_invoices(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
         Fetch invoices data from Jobber GraphQL API.
 
         Retrieves invoice information using cursor-based pagination.
-        This method will be implemented in subsequent tasks to include
-        GraphQL query construction, HTTP communication, and response processing.
+        Constructs GraphQL query, makes HTTP POST request, and processes response.
 
         Args:
             cursor: Optional cursor for pagination (None for first page)
@@ -71,5 +138,16 @@ class JobberClient:
             JobberApiError: If API communication fails
             ConfigurationError: If authentication configuration is invalid
         """
-        # Implementation will be added in subsequent tasks
-        raise NotImplementedError("fetch_invoices implementation pending")
+        # Prepare GraphQL payload
+        payload = {"query": self.INVOICES_QUERY, "variables": {"cursor": cursor}}
+
+        # Make HTTP POST request to Jobber API
+        response = requests.post(
+            self.API_URL, headers=self.auth_provider.get_headers(), json=payload
+        )
+
+        # Check for HTTP errors
+        response.raise_for_status()
+
+        # Parse and return JSON response
+        return response.json()
