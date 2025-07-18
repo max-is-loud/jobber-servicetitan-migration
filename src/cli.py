@@ -13,10 +13,14 @@ from urllib.parse import parse_qs, urlparse
 
 import typer
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.panel import Panel
+from rich.status import Status
+from rich.table import Table
 
 from .auth import AuthProvider, OAuth2Manager
 from .clients import HttpClient, JobberClient
-from .coordinators import MigrationCoordinator
+from .coordinators import RichMigrationCoordinator
 from .exceptions import (
     ConfigurationError,
     JobberApiError,
@@ -24,7 +28,7 @@ from .exceptions import (
     OAuth2Error,
     RepositoryError,
 )
-from .loggers import ConsoleLogger
+from .loggers import RichLogger
 from .mappers import EntityMapper
 from .rate_limiting import (
     ExponentialBackoffStrategy,
@@ -36,6 +40,9 @@ from .repositories import Repository
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Create Rich console for enhanced output
+console = Console()
 
 # Create Typer application
 app = typer.Typer(
@@ -60,30 +67,30 @@ def init() -> None:
     Guides you through setting up the required environment variables
     for Jobber API OAuth authentication.
     """
-    typer.echo("🔧 TightBeam OAuth Setup")
-    typer.echo("========================")
-    typer.echo()
-    typer.echo(
-        "To authenticate with the Jobber API, you need to set up the following environment variables:"  # noqa: E501
+    # Create a panel with OAuth setup instructions
+    setup_content = """To authenticate with the Jobber API, you need to set up
+    the following environment variables:
+
+[bold cyan]Required OAuth Environment Variables:[/bold cyan]
+  • [green]JOBBER_CLIENT_ID[/green] - Your Jobber application's client ID
+  • [green]JOBBER_CLIENT_SECRET[/green] - Your Jobber application's client secret
+  • [green]JOBBER_REDIRECT_URI[/green] - OAuth redirect URI for your application
+  • [green]JOBBER_TOKEN[/green] - Valid Jobber API access token
+
+[bold yellow]You can set these in your shell environment:[/bold yellow]
+  export JOBBER_CLIENT_ID='your_client_id'
+  export JOBBER_CLIENT_SECRET='your_client_secret'
+  export JOBBER_REDIRECT_URI='your_redirect_uri'
+  export JOBBER_TOKEN='your_access_token'
+
+[bold yellow]Or create a .env file in your project directory with these values.[/bold yellow]
+
+[bold blue]For more information on obtaining these credentials, visit:[/bold blue]
+📖 https://developer.getjobber.com/docs/authentication"""  # noqa: E501
+
+    console.print(
+        Panel(setup_content, title="🔧 TightBeam OAuth Setup", border_style="blue")
     )
-    typer.echo()
-    typer.echo("Required OAuth Environment Variables:")
-    typer.echo("  • JOBBER_CLIENT_ID - Your Jobber application's client ID")
-    typer.echo("  • JOBBER_CLIENT_SECRET - Your Jobber application's client secret")
-    typer.echo("  • JOBBER_REDIRECT_URI - OAuth redirect URI for your application")
-    typer.echo("  • JOBBER_TOKEN - Valid Jobber API access token")
-    typer.echo()
-    typer.echo("You can set these in your shell environment:")
-    typer.echo()
-    typer.echo("  export JOBBER_CLIENT_ID='your_client_id'")
-    typer.echo("  export JOBBER_CLIENT_SECRET='your_client_secret'")
-    typer.echo("  export JOBBER_REDIRECT_URI='your_redirect_uri'")
-    typer.echo("  export JOBBER_TOKEN='your_access_token'")
-    typer.echo()
-    typer.echo("Or create a .env file in your project directory with these values.")
-    typer.echo()
-    typer.echo("For more information on obtaining these credentials, visit:")
-    typer.echo("📖 https://developer.getjobber.com/docs/authentication")
 
 
 # OAuth2 command subgroup
@@ -122,18 +129,9 @@ def _get_oauth2_config() -> tuple[str, str, str]:
 
 
 def _create_oauth2_manager() -> OAuth2Manager:
-    """
-    Create OAuth2Manager instance with environment configuration.
-
-    Returns:
-        Configured OAuth2Manager instance
-
-    Raises:
-        ConfigurationError: If OAuth2 configuration is invalid
-    """
+    """Create OAuth2Manager with configuration from environment."""
     client_id, client_secret, redirect_uri = _get_oauth2_config()
     http_client = HttpClient()
-
     return OAuth2Manager(
         client_id=client_id,
         client_secret=client_secret,
@@ -142,28 +140,14 @@ def _create_oauth2_manager() -> OAuth2Manager:
     )
 
 
-def _create_repository(db_path: Optional[Path] = None) -> Repository:
-    """
-    Create Repository instance with database connection.
+def _create_repository(db: Optional[Path] = None) -> Repository:
+    """Create Repository with database connection."""
+    if db is None:
+        db = Path("tightbeam.sqlite")
 
-    Args:
-        db_path: Optional database path, defaults to ./tightbeam.db
-
-    Returns:
-        Repository instance with database connection and initialized schema
-    """
-    if db_path is None:
-        db_path = Path("./tightbeam.db")
-
-    # Ensure parent directory exists
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.Connection(str(db_path))
-
-    # Create repository and initialize schema
-    repository = Repository(connection)
-    repository.init_schema()
-
-    return repository
+    db.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.Connection(str(db))
+    return Repository(connection)
 
 
 @oauth_app.command("init")
@@ -195,20 +179,19 @@ def oauth_init(
             _oauth_init_manual(db)
 
     except ConfigurationError as e:
-        typer.echo(f"Configuration Error: {e}", err=True)
-        typer.echo(
-            "Please ensure JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, and JOBBER_REDIRECT_URI are set.",  # noqa: E501
-            err=True,
+        console.print(f"[red]Configuration Error:[/red] {e}")
+        console.print(
+            "[yellow]Please ensure JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, and JOBBER_REDIRECT_URI are set.[/yellow]",  # noqa: E501
         )
         sys.exit(1)
 
     except Exception as e:
-        typer.echo(f"Unexpected Error: {e}", err=True)
+        console.print(f"[red]Unexpected Error:[/red] {e}")
         sys.exit(5)
 
 
 def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
-    """Initialize OAuth2 flow with local callback server."""
+    """Initialize OAuth2 flow with local callback server using Rich UI."""
 
     # Storage for the authorization code
     auth_result: dict[str, Optional[str]] = {"code": None, "error": None, "state": None}
@@ -253,6 +236,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
                 </body></html>
                 """.encode()
                 )
+
             else:
                 self.send_response(400)
                 self.send_header("Content-type", "text/html")
@@ -292,22 +276,25 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         # Generate authorization URL
         auth_url, state = oauth_manager.get_authorization_url()
 
-        typer.echo("🚀 Starting OAuth2 Authorization with Local Callback Server")
-        typer.echo("=" * 60)
-        typer.echo(f"🌐 Local callback server started on http://localhost:{port}")
-        typer.echo()
-        typer.echo("Opening authorization URL in your browser...")
-        typer.echo(f"URL: {auth_url}")
-        typer.echo()
-        typer.echo("⏳ Waiting for authorization... (this will happen automatically)")
-        typer.echo(
-            "   Complete the authorization in your browser, then come back here!"
+        # Display Rich UI for OAuth setup
+        server_info = f"""[bold green]🌐 Local callback server:[/bold green] http://localhost:{port}
+[bold blue]🔗 Authorization URL:[/bold blue] {auth_url}
+
+[bold yellow]⏳ Waiting for authorization...[/bold yellow]
+Complete the authorization in your browser, then come back here!"""
+
+        console.print(
+            Panel(
+                server_info,
+                title="🚀 OAuth2 Authorization with Local Server",
+                border_style="green",
+            )
         )
 
         # Open browser
         try:
             webbrowser.open(auth_url)
-            typer.echo("✅ Browser opened successfully")
+            console.print("✅ [green]Browser opened successfully[/green]")
         except Exception as e:
             # In WSL environment, try alternative methods
             import subprocess
@@ -320,74 +307,91 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
                         check=True,
                         capture_output=True,
                     )
-                    typer.echo("✅ Browser opened via Windows")
+                    console.print("✅ [green]Browser opened via Windows[/green]")
                 except subprocess.CalledProcessError:
-                    typer.echo("⚠️ Could not open browser automatically", err=True)
-                    typer.echo(
-                        "🔗 Please manually copy and paste this URL into your browser:"
+                    console.print(
+                        "⚠️ [yellow]Could not open browser automatically[/yellow]"
                     )
-                    typer.echo(f"   {auth_url}")
+                    console.print(
+                        f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n   {auth_url}"  # noqa: E501
+                    )
             else:
-                typer.echo(f"⚠️ Could not open browser: {e}", err=True)
-                typer.echo(
-                    "🔗 Please manually copy and paste this URL into your browser:"
+                console.print(f"⚠️ [yellow]Could not open browser: {e}[/yellow]")
+                console.print(
+                    f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n   {auth_url}"  # noqa: E501
                 )
-                typer.echo(f"   {auth_url}")
 
         # Wait for callback (with timeout)
         timeout = 300  # 5 minutes
         start_time = time.time()
 
-        while time.time() - start_time < timeout:
-            if auth_result["code"] or auth_result["error"]:
-                break
-            time.sleep(1)
+        with Status(
+            "[bold green]Waiting for authorization...", console=console, spinner="dots"
+        ):
+            while time.time() - start_time < timeout:
+                if auth_result["code"] or auth_result["error"]:
+                    break
+                time.sleep(1)
 
         if auth_result["error"]:
-            typer.echo(f"\n❌ Authorization failed: {auth_result['error']}")
+            console.print(
+                f"\n❌ [red]Authorization failed:[/red] {auth_result['error']}"
+            )
             sys.exit(1)
         elif not auth_result["code"]:
-            typer.echo(f"\n⏰ Authorization timed out after {timeout} seconds")
-            typer.echo(
-                "Please try again or use manual mode: tightbeam oauth init --no-auto"
+            console.print(
+                f"\n⏰ [yellow]Authorization timed out after {timeout} seconds[/yellow]"
+            )
+            console.print(
+                "[dim]Please try again or use manual mode: tightbeam oauth init --no-auto[/dim]"  # noqa: E501
             )
             sys.exit(1)
 
         # Verify state parameter
         if auth_result["state"] != state:
-            typer.echo("\n🔒 Security Error: State parameter mismatch")
+            console.print("\n🔒 [red]Security Error: State parameter mismatch[/red]")
             sys.exit(1)
 
-        typer.echo(f"\n🎉 Authorization code received: {auth_result['code'][:20]}...")
-        typer.echo("🔄 Exchanging authorization code for tokens...")
-
-        # Automatically complete the OAuth2 flow
-        repository = _create_repository(db)
-
-        # Exchange code for tokens
-        token_data = oauth_manager.exchange_code_for_tokens(auth_result["code"])
-
-        # Store tokens in database
-        from datetime import datetime, timedelta, timezone
-
-        # Handle missing expires_in field (Jobber API doesn't always include it)
-        expires_in = token_data.get(
-            "expires_in", 3600
-        )  # Default to 1 hour if not provided
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        ).isoformat()
-
-        repository.save_oauth_tokens(
-            access_token=token_data["access_token"],
-            refresh_token=token_data["refresh_token"],
-            expires_at=expires_at,
+        console.print(
+            f"\n🎉 [green]Authorization code received:[/green] {auth_result['code'][:20]}..."  # noqa: E501
         )
 
-        typer.echo("✅ OAuth2 tokens stored successfully!")
-        typer.echo()
-        typer.echo("🚀 You're all set! You can now run:")
-        typer.echo("   tightbeam migrate --db ./your_data.sqlite")
+        # Automatically complete the OAuth2 flow
+        with Status(
+            "[bold green]Exchanging authorization code for tokens...",
+            console=console,
+            spinner="dots",
+        ):
+            repository = _create_repository(db)
+
+            # Exchange code for tokens
+            token_data = oauth_manager.exchange_code_for_tokens(auth_result["code"])
+
+            # Store tokens in database
+            from datetime import datetime, timedelta, timezone
+
+            # Handle missing expires_in field (Jobber API doesn't always include it)
+            expires_in = token_data.get(
+                "expires_in", 3600
+            )  # Default to 1 hour if not provided
+            expires_at = (
+                datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+            ).isoformat()
+
+            repository.save_oauth_tokens(
+                access_token=token_data["access_token"],
+                refresh_token=token_data["refresh_token"],
+                expires_at=expires_at,
+            )
+
+        success_panel = """[bold green]✅ OAuth2 tokens stored successfully![/bold green]
+
+[bold cyan]🚀 You're all set! You can now run:[/bold cyan]
+   [bold]tightbeam migrate --db ./your_data.sqlite[/bold]"""  # noqa: E501
+
+        console.print(
+            Panel(success_panel, title="🎉 OAuth2 Setup Complete", border_style="green")
+        )
 
     finally:
         # Restore original environment
@@ -409,21 +413,26 @@ def _oauth_init_manual(db: Optional[Path]) -> None:
     # Generate authorization URL
     auth_url, state = oauth_manager.get_authorization_url()
 
-    typer.echo("🔐 OAuth2 Authorization Required")
-    typer.echo("=" * 50)
-    typer.echo()
-    typer.echo("Opening authorization URL in your browser...")
-    typer.echo(f"URL: {auth_url}")
-    typer.echo()
-    typer.echo("After authorization, copy the authorization code from the callback URL")
-    typer.echo("and run: tightbeam oauth callback --code YOUR_AUTHORIZATION_CODE")
-    typer.echo()
-    typer.echo(f"State parameter (for verification): {state}")
+    manual_content = f"""[bold blue]🔗 Authorization URL:[/bold blue]
+{auth_url}
+
+[bold yellow]📋 Next Steps:[/bold yellow]
+1. Complete authorization in your browser
+2. Copy the authorization code from the callback URL
+3. Run: [bold]tightbeam oauth callback --code YOUR_AUTHORIZATION_CODE[/bold]
+
+[bold dim]State parameter (for verification): {state}[/bold dim]"""
+
+    console.print(
+        Panel(
+            manual_content, title="🔐 OAuth2 Manual Authorization", border_style="blue"
+        )
+    )
 
     # Open browser
     try:
         webbrowser.open(auth_url)
-        typer.echo("✅ Browser opened successfully")
+        console.print("✅ [green]Browser opened successfully[/green]")
     except Exception as e:
         # In WSL environment, try alternative methods
         import subprocess
@@ -436,17 +445,17 @@ def _oauth_init_manual(db: Optional[Path]) -> None:
                     check=True,
                     capture_output=True,
                 )
-                typer.echo("✅ Browser opened via Windows")
+                console.print("✅ [green]Browser opened via Windows[/green]")
             except subprocess.CalledProcessError:
-                typer.echo("⚠️ Could not open browser automatically", err=True)
-                typer.echo(
-                    "🔗 Please manually copy and paste this URL into your browser:"
+                console.print("⚠️ [yellow]Could not open browser automatically[/yellow]")
+                console.print(
+                    f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n   {auth_url}"  # noqa: E501
                 )
-                typer.echo(f"   {auth_url}")
         else:
-            typer.echo(f"⚠️ Could not open browser: {e}", err=True)
-            typer.echo("🔗 Please manually copy and paste this URL into your browser:")
-            typer.echo(f"   {auth_url}")
+            console.print(f"⚠️ [yellow]Could not open browser: {e}[/yellow]")
+            console.print(
+                f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n   {auth_url}"  # noqa: E501
+            )
 
 
 @oauth_app.command("callback")
@@ -466,51 +475,64 @@ def oauth_callback(
         oauth_manager = _create_oauth2_manager()
         repository = _create_repository(db)
 
-        typer.echo("🔄 Exchanging authorization code for tokens...")
+        with Status(
+            "[bold green]Exchanging authorization code for tokens...",
+            console=console,
+            spinner="dots",
+        ):
+            # Exchange code for tokens
+            token_data = oauth_manager.exchange_code_for_tokens(code)
 
-        # Exchange code for tokens
-        token_data = oauth_manager.exchange_code_for_tokens(code)
+            # Store tokens in database
+            from datetime import datetime, timedelta, timezone
 
-        # Store tokens in database
-        from datetime import datetime, timedelta, timezone
+            expires_in = token_data.get("expires_in")
+            if not isinstance(expires_in, int) or expires_in <= 0:
+                raise OAuth2Error(
+                    "Invalid or missing 'expires_in' field in token data."
+                )
+            expires_at = (
+                datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+            ).isoformat()
 
-        expires_in = token_data.get("expires_in")
-        if not isinstance(expires_in, int) or expires_in <= 0:
-            raise OAuth2Error("Invalid or missing 'expires_in' field in token data.")
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        ).isoformat()
+            repository.save_oauth_tokens(
+                access_token=token_data["access_token"],
+                refresh_token=token_data["refresh_token"],
+                expires_at=expires_at,
+            )
 
-        repository.save_oauth_tokens(
-            access_token=token_data["access_token"],
-            refresh_token=token_data["refresh_token"],
-            expires_at=expires_at,
+        success_content = """[bold green]✅ OAuth2 tokens stored successfully![/bold green]
+
+[bold cyan]🎯 Next Steps:[/bold cyan]
+• Use the migration tool with OAuth2 authentication
+• Run [bold]tightbeam oauth status[/bold] to check token status"""  # noqa: E501
+
+        console.print(
+            Panel(
+                success_content,
+                title="🎉 OAuth2 Callback Complete",
+                border_style="green",
+            )
         )
 
-        typer.echo("✅ OAuth2 tokens stored successfully!")
-        typer.echo()
-        typer.echo("You can now use the migration tool with OAuth2 authentication.")
-        typer.echo("Run 'tightbeam oauth status' to check token status.")
-
     except ConfigurationError as e:
-        typer.echo(f"Configuration Error: {e}", err=True)
+        console.print(f"[red]Configuration Error:[/red] {e}")
         sys.exit(1)
 
     except OAuth2Error as e:
-        typer.echo(f"OAuth2 Error: {e}", err=True)
-        typer.echo(
-            "Please try the authorization flow again with 'tightbeam oauth init'",
-            err=True,
+        console.print(f"[red]OAuth2 Error:[/red] {e}")
+        console.print(
+            "[yellow]Please try the authorization flow again with 'tightbeam oauth init'[/yellow]",  # noqa: E501
         )
         sys.exit(1)
 
     except RepositoryError as e:
-        typer.echo(f"Database Error: {e}", err=True)
-        typer.echo("Please check database file permissions.", err=True)
+        console.print(f"[red]Database Error:[/red] {e}")
+        console.print("[yellow]Please check database file permissions.[/yellow]")
         sys.exit(4)
 
     except Exception as e:
-        typer.echo(f"Unexpected Error: {e}", err=True)
+        console.print(f"[red]Unexpected Error:[/red] {e}")
         sys.exit(5)
 
 
@@ -520,16 +542,24 @@ def oauth_status() -> None:
     Check the status of authentication configuration.
     Shows current authentication mode and token status.
     """
-    typer.echo("🔍 TightBeam Authentication Status")
-    typer.echo("==================================")
-    typer.echo()
+    # Create a table for authentication status
+    status_table = Table(
+        title="🔍 TightBeam Authentication Status",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    status_table.add_column("Component", style="dim", width=20)
+    status_table.add_column("Status", justify="left")
+    status_table.add_column("Details", justify="left")
 
     # Check for environment token first
     jobber_token = os.environ.get("JOBBER_TOKEN")
     if jobber_token:
-        typer.echo("🔑 Authentication Mode: Environment Token")
-        typer.echo("✅ JOBBER_TOKEN environment variable is set")
-        typer.echo()
+        status_table.add_row(
+            "Authentication Mode",
+            "[green]Environment Token[/green]",
+            "JOBBER_TOKEN variable is set",
+        )
 
         try:
             # Test token with simple API call using HttpClient directly
@@ -552,21 +582,39 @@ def oauth_status() -> None:
                 """
             }
 
-            response = http_client.post(
-                url="https://api.getjobber.com/api/graphql",
-                headers=headers,
-                json=test_query,
-            )
+            with Status(
+                "[bold green]Testing API connection...", console=console, spinner="dots"
+            ):
+                response = http_client.post(
+                    url="https://api.getjobber.com/api/graphql",
+                    headers=headers,
+                    json=test_query,
+                )
 
             if response and "data" in response:
-                typer.echo("✅ Authentication token is valid and API is accessible")
-                typer.echo("🎉 Authentication setup is working correctly!")
+                status_table.add_row(
+                    "Token Validation",
+                    "[green]✅ Valid[/green]",
+                    "API connection successful",
+                )
+                status_table.add_row(
+                    "Ready to Use",
+                    "[green]🎉 Yes[/green]",
+                    "Authentication working correctly",
+                )
             else:
-                typer.echo("⚠️  API returned unexpected response format", err=True)
+                status_table.add_row(
+                    "Token Validation",
+                    "[yellow]⚠️ Warning[/yellow]",
+                    "Unexpected API response format",
+                )
 
         except Exception as e:
-            typer.echo("❌ Token validation failed:", err=True)
-            typer.echo(f"   {e}", err=True)
+            status_table.add_row(
+                "Token Validation", "[red]❌ Failed[/red]", f"Error: {e}"
+            )
+
+        console.print(status_table)
         return
 
     # Check OAuth2 configuration
@@ -574,35 +622,75 @@ def oauth_status() -> None:
         oauth_manager = _create_oauth2_manager()
         repository = _create_repository()
 
+        status_table.add_row(
+            "Authentication Mode",
+            "[blue]OAuth2[/blue]",
+            "OAuth2 environment variables configured",
+        )
+
         # Check for stored tokens
         stored_tokens = repository.get_oauth_tokens()
 
         if stored_tokens:
-            typer.echo("🔑 Authentication Mode: OAuth2")
-            typer.echo("✅ OAuth2 tokens are stored")
+            status_table.add_row(
+                "Token Storage", "[green]✅ Found[/green]", "OAuth2 tokens are stored"
+            )
 
             # Test token validity
             try:
-                auth_provider = AuthProvider(oauth_manager, repository)
-                auth_provider.get_token()  # Verify it works
-                typer.echo("✅ OAuth2 tokens are valid")
-                typer.echo("🎉 Authentication setup is working correctly!")
+                with Status(
+                    "[bold green]Validating OAuth2 tokens...",
+                    console=console,
+                    spinner="dots",
+                ):
+                    auth_provider = AuthProvider(oauth_manager, repository)
+                    auth_provider.get_token()  # Verify it works
+
+                status_table.add_row(
+                    "Token Validation",
+                    "[green]✅ Valid[/green]",
+                    "OAuth2 tokens are working",
+                )
+                status_table.add_row(
+                    "Ready to Use",
+                    "[green]🎉 Yes[/green]",
+                    "Authentication working correctly",
+                )
             except Exception as e:
-                typer.echo("⚠️  OAuth2 token validation failed:", err=True)
-                typer.echo(f"   {e}", err=True)
-                typer.echo("💡 Try running 'tightbeam oauth init' to re-authorize")
+                status_table.add_row(
+                    "Token Validation", "[red]⚠️ Failed[/red]", f"Error: {e}"
+                )
+                status_table.add_row(
+                    "Recommendation",
+                    "[yellow]💡 Action Needed[/yellow]",
+                    "Run 'tightbeam oauth init' to re-authorize",
+                )
         else:
-            typer.echo("🔑 Authentication Mode: OAuth2 (Not Configured)")
-            typer.echo("⚠️  OAuth2 environment variables are set but no tokens stored")
-            typer.echo("💡 Run 'tightbeam oauth init' to complete OAuth2 setup")
+            status_table.add_row(
+                "Token Storage", "[yellow]⚠️ Missing[/yellow]", "No tokens stored yet"
+            )
+            status_table.add_row(
+                "Recommendation",
+                "[yellow]💡 Action Needed[/yellow]",
+                "Run 'tightbeam oauth init' to complete setup",
+            )
 
     except ConfigurationError:
-        typer.echo("🔑 Authentication Mode: Not Configured")
-        typer.echo("❌ No authentication configured")
-        typer.echo()
-        typer.echo("💡 To configure authentication:")
-        typer.echo("   Option 1: Set JOBBER_TOKEN environment variable")
-        typer.echo("   Option 2: Configure OAuth2 and run 'tightbeam oauth init'")
+        status_table.add_row(
+            "Authentication Mode",
+            "[red]❌ Not Configured[/red]",
+            "No authentication method available",
+        )
+        status_table.add_row(
+            "Option 1", "[blue]Environment Token[/blue]", "Set JOBBER_TOKEN variable"
+        )
+        status_table.add_row(
+            "Option 2",
+            "[blue]OAuth2 Setup[/blue]",
+            "Configure OAuth2 and run 'tightbeam oauth init'",
+        )
+
+    console.print(status_table)
 
 
 @oauth_app.command("clear")
@@ -625,31 +713,40 @@ def oauth_clear(
         token_data = repository.get_oauth_tokens()
 
         if not token_data:
-            typer.echo("No OAuth2 tokens found to clear.")
+            console.print("[yellow]No OAuth2 tokens found to clear.[/yellow]")
             return
 
         # Confirmation prompt
         if not confirm:
-            proceed = typer.confirm(
-                "Are you sure you want to clear OAuth2 tokens? You will need to re-authorize."  # noqa: E501
+            console.print(
+                "[yellow]⚠️ This will log you out from OAuth2 authentication.[/yellow]"
             )
+            proceed = typer.confirm("Are you sure you want to clear OAuth2 tokens?")
             if not proceed:
-                typer.echo("Operation cancelled.")
+                console.print("[dim]Operation cancelled.[/dim]")
                 return
 
         # Clear tokens
-        repository.clear_oauth_tokens()
+        with Status(
+            "[bold red]Clearing OAuth2 tokens...", console=console, spinner="dots"
+        ):
+            repository.clear_oauth_tokens()
 
-        typer.echo("✅ OAuth2 tokens cleared successfully!")
-        typer.echo("Run 'tightbeam oauth init' to re-authorize if needed.")
+        success_content = """[bold green]✅ OAuth2 tokens cleared successfully![/bold green]
+
+[bold cyan]💡 To re-authorize:[/bold cyan]
+Run [bold]tightbeam oauth init[/bold] when needed"""  # noqa: E501
+
+        console.print(
+            Panel(success_content, title="🗑️ Tokens Cleared", border_style="red")
+        )
 
     except RepositoryError as e:
-        typer.echo(f"Database Error: {e}", err=True)
+        console.print(f"[red]Database Error:[/red] {e}")
         sys.exit(4)
 
     except Exception as e:
-        typer.echo(f"Unexpected Error: {e}", err=True)
-
+        console.print(f"[red]Unexpected Error:[/red] {e}")
         sys.exit(5)
 
 
@@ -679,8 +776,8 @@ def migrate(
     connection = None
 
     try:
-        # Create database connection
-        logger = ConsoleLogger(verbose=verbose)
+        # Create database connection with Rich logger
+        logger = RichLogger(verbose=verbose)
         logger.info(f"Connecting to database: {db}")
 
         # Ensure parent directory exists
@@ -748,19 +845,19 @@ def migrate(
 
         entity_mapper = EntityMapper()
 
-        # Create migration coordinator with all dependencies
-        migration_coordinator = MigrationCoordinator(
+        # Create Rich migration coordinator with all dependencies
+        migration_coordinator = RichMigrationCoordinator(
             jobber_client=jobber_client,
             entity_mapper=entity_mapper,
             repository=repository,
             logger=logger,
         )
 
-        # Execute migration workflow
+        # Execute migration workflow with Rich progress bars
         logger.info("Starting migration process")
         summary = migration_coordinator.migrate()
 
-        # Display final summary with rate limiting metrics
+        # Display final summary with rate limiting metrics using Rich table
         rate_metrics = metrics_collector.get_human_readable_summary()
         summary_data = {
             "clients_processed": summary.clients_processed,
@@ -798,51 +895,54 @@ def migrate(
 
     except ConfigurationError as e:
         # Configuration/environment issues
-        typer.echo(f"Configuration Error: {e}", err=True)
-        typer.echo("To configure authentication, you can either:", err=True)
-        typer.echo(
-            "  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True
-        )  # noqa: E501
-        typer.echo("  2. Manually set the following environment variables:", err=True)
-        typer.echo("     - JOBBER_CLIENT_ID", err=True)
-        typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
-        typer.echo("     - JOBBER_REDIRECT_URI", err=True)
-        typer.echo("     - JOBBER_TOKEN", err=True)
+        console.print(f"[red]Configuration Error:[/red] {e}")
+        console.print("[yellow]To configure authentication, you can either:[/yellow]")
+        console.print(
+            "  1. Run [bold]tightbeam oauth init[/bold] to set up OAuth authentication"
+        )
+        console.print("  2. Manually set the following environment variables:")
+        console.print("     - JOBBER_CLIENT_ID")
+        console.print("     - JOBBER_CLIENT_SECRET")
+        console.print("     - JOBBER_REDIRECT_URI")
+        console.print("     - JOBBER_TOKEN")
 
         sys.exit(1)
 
     except JobberApiError as e:
         # API communication issues
-        typer.echo(f"API Error: {e}", err=True)
-        typer.echo(
-            "Please check your internet connection and OAuth2 token validity.", err=True
+        console.print(f"[red]API Error:[/red] {e}")
+        console.print(
+            "[yellow]Please check your internet connection and OAuth2 token validity.[/yellow]"  # noqa: E501
         )
         sys.exit(2)
 
     except MappingError as e:
         # Data transformation issues
-        typer.echo(f"Data Mapping Error: {e}", err=True)
-        typer.echo(
-            "The API response format may have changed. Please check for updates.",
-            err=True,
+        console.print(f"[red]Data Mapping Error:[/red] {e}")
+        console.print(
+            "[yellow]The API response format may have changed. Please check for updates.[/yellow]"  # noqa: E501
         )
         sys.exit(3)
 
     except RepositoryError as e:
         # Database operation issues
-        typer.echo(f"Database Error: {e}", err=True)
-        typer.echo("Please check database file permissions and disk space.", err=True)
+        console.print(f"[red]Database Error:[/red] {e}")
+        console.print(
+            "[yellow]Please check database file permissions and disk space.[/yellow]"
+        )
         sys.exit(4)
 
     except KeyboardInterrupt:
         # User interruption
-        typer.echo("\\nMigration interrupted by user.", err=True)
+        console.print("\n[yellow]Migration interrupted by user.[/yellow]")
         sys.exit(130)
 
     except Exception as e:
         # Unexpected errors
-        typer.echo(f"Unexpected Error: {e}", err=True)
-        typer.echo("Please report this issue with the full error message.", err=True)
+        console.print(f"[red]Unexpected Error:[/red] {e}")
+        console.print(
+            "[yellow]Please report this issue with the full error message.[/yellow]"
+        )
         sys.exit(5)
 
     finally:
