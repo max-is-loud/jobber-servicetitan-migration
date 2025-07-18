@@ -89,7 +89,9 @@ class AuthProvider:
                 new_tokens = self.oauth_manager.refresh_access_token(refresh_token)
 
                 # Convert expires_in to ISO 8601 timestamp
-                expires_in = new_tokens["expires_in"]
+                expires_in = new_tokens.get("expires_in")
+                if expires_in is None:
+                    raise OAuth2Error("The 'expires_in' field is missing in the token response.")
                 expires_at = (
                     datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 ).isoformat()
