@@ -29,14 +29,14 @@ class TokenBucketRateLimiter:
 
     def __init__(
         self,
-        capacity: int = 2000,
+        capacity: int = 100,
         refill_rate: float = 400,
         initial_tokens: Optional[float] = None,
     ):
         """Initialize the token bucket rate limiter.
 
         Args:
-            capacity: Maximum number of tokens the bucket can hold (default: 2000)
+            capacity: Maximum number of tokens the bucket can hold (default: 100, aligned with production settings)
             refill_rate: Number of tokens to add per minute (default: 400)
             initial_tokens: Initial number of tokens (default: capacity // 4 for conservative start)
         """
