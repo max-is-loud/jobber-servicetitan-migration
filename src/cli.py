@@ -194,6 +194,9 @@ def oauth_init(
             # Manual OAuth2 flow (original behavior)
             _oauth_init_manual(db)
 
+        # Exit successfully after OAuth completion
+        sys.exit(0)
+
     except ConfigurationError as e:
         typer.echo(f"Configuration Error: {e}", err=True)
         typer.echo(
@@ -274,7 +277,9 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
     server = HTTPServer(("localhost", port), CallbackHandler)
 
     # Start server in background thread
-    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread = threading.Thread(
+        target=server.serve_forever, name="oauth-callback-server"
+    )
     server_thread.daemon = True
     server_thread.start()
 
@@ -388,6 +393,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         typer.echo()
         typer.echo("🚀 You're all set! You can now run:")
         typer.echo("   tightbeam migrate --db ./your_data.sqlite")
+        typer.echo()
 
     finally:
         # Restore original environment
@@ -396,9 +402,16 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         elif "JOBBER_REDIRECT_URI" in os.environ:
             del os.environ["JOBBER_REDIRECT_URI"]
 
-        # Shutdown server
-        server.shutdown()
-        server.server_close()
+        # Shutdown server properly
+        try:
+            server.shutdown()
+            server.server_close()
+            # Wait for server thread to finish
+            if server_thread.is_alive():
+                server_thread.join(timeout=2.0)
+        except Exception:
+            # Ignore cleanup errors
+            pass
 
 
 def _oauth_init_manual(db: Optional[Path]) -> None:
@@ -661,11 +674,12 @@ def migrate(
     ] = False,
 ) -> None:
     """
-    Migrate client and invoice data from Jobber API to SQLite database.
+    Migrate all data from Jobber API to SQLite database.
 
-    Fetches all clients and invoices from the Jobber GraphQL API using cursor-based
-    pagination and stores them in the specified SQLite database. Requires authentication
-    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+    Fetches all clients, invoices, quotes, notes, and attachments from the Jobber
+    GraphQL API using cursor-based pagination and stores them in the specified SQLite
+    database. Attachment files are downloaded to ./attachments directory. Requires
+    authentication via JOBBER_TOKEN environment variable or OAuth2 configuration.
 
     Authentication options:
     1. Set JOBBER_TOKEN environment variable with a valid Jobber API token
@@ -748,23 +762,49 @@ def migrate(
 
         entity_mapper = EntityMapper()
 
-        # Create migration coordinator with all dependencies
+        # Create optional extractors for enhanced entity coverage
+        from .extractors import AttachmentDownloader, NotesExtractor, QuotesExtractor
+
+        quotes_extractor = QuotesExtractor(
+            jobber_client, entity_mapper, repository, logger
+        )
+        notes_extractor = NotesExtractor(
+            jobber_client, entity_mapper, repository, logger
+        )
+        attachment_downloader = AttachmentDownloader(
+            jobber_client,
+            entity_mapper,
+            repository,
+            logger,
+            base_download_path="./attachments",
+        )
+
+        # Create migration coordinator with all dependencies including optional extractors
         migration_coordinator = MigrationCoordinator(
             jobber_client=jobber_client,
             entity_mapper=entity_mapper,
             repository=repository,
             logger=logger,
+            quotes_extractor=quotes_extractor,
+            notes_extractor=notes_extractor,
+            attachment_downloader=attachment_downloader,
         )
 
         # Execute migration workflow
         logger.info("Starting migration process")
         summary = migration_coordinator.migrate()
 
-        # Display final summary with rate limiting metrics
+        # Display final summary with rate limiting metrics and all entity types
         rate_metrics = metrics_collector.get_human_readable_summary()
         summary_data = {
             "clients_processed": summary.clients_processed,
             "invoices_processed": summary.invoices_processed,
+            "quotes_processed": summary.quotes_processed,
+            "notes_processed": summary.notes_processed,
+            "attachments_processed": summary.attachments_processed,
+            "files_downloaded": summary.files_downloaded,
+            "total_bytes_downloaded": summary.total_bytes_downloaded,
+            "download_failures": summary.download_failures,
             "duration": summary.format_duration(),
             "errors_count": len(summary.errors),
             "status": (
@@ -992,7 +1032,7 @@ def _execute_entity_extraction(
         except ConfigurationError as e:
             raise ConfigurationError(
                 f"OAuth2 configuration error: {e}. "
-                "Please ensure JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, and JOBBER_REDIRECT_URI "
+                "Please ensure JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, and JOBBER_REDIRECT_URI "  # noqa: E501
                 "are set and run 'tightbeam oauth init' to authorize."
             ) from None
 
@@ -1100,31 +1140,31 @@ def _execute_entity_extraction(
         # Log entity-specific success messages
         if entity_type == "quotes":
             logger.info(
-                f"✅ Quote extraction completed: {result['entities_processed']} quotes processed"
+                f"✅ Quote extraction completed: {result['entities_processed']} quotes processed"  # noqa: E501
             )
         elif entity_type == "notes":
             logger.info(
-                f"✅ Note extraction completed: {result['entities_processed']} notes processed"
+                f"✅ Note extraction completed: {result['entities_processed']} notes processed"  # noqa: E501
             )
         elif entity_type == "attachments":
             files_downloaded = result.get("files_downloaded", 0)
             total_bytes = result.get("total_bytes_downloaded", 0)
             logger.info(
-                f"✅ Attachment extraction completed: {result['entities_processed']} attachments processed, "
+                f"✅ Attachment extraction completed: {result['entities_processed']} attachments processed, "  # noqa: E501
                 f"{files_downloaded} files downloaded ({total_bytes} bytes)"
             )
 
         # Handle continuation if more pages available
         if result["has_next_page"] and page_limit is None:
             logger.info(
-                f"📄 More {entity_type} pages available. Run again to continue extraction."
+                f"📄 More {entity_type} pages available. Run again to continue extraction."  # noqa: E501
             )
             logger.info(f"Next cursor: {result.get('end_cursor', 'N/A')}")
 
         # Exit with appropriate code
         exit_code = 0 if extraction_summary["error_count"] == 0 else 1
         logger.info(
-            f"{entity_type.capitalize()} extraction completed with exit code {exit_code}"
+            f"{entity_type.capitalize()} extraction completed with exit code {exit_code}"  # noqa: E501
         )
         sys.exit(exit_code)
 

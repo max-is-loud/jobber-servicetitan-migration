@@ -62,7 +62,6 @@ def temp_download_dir():
 
 
 # Integration test markers
-pytest_plugins = []
 
 
 def pytest_configure(config):

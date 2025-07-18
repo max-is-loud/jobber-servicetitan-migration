@@ -221,8 +221,8 @@ class AttachmentDownloader:
                 current_cursor = end_cursor
 
                 # Add delay between pages to prevent API overload
-                time.sleep(2.0)
-                self._logger.debug(f"Added 2s delay before page {pages_processed + 1}")
+                time.sleep(1.0)
+                self._logger.debug(f"Added 1s delay before page {pages_processed + 1}")
 
             extraction_time = time.time() - start_time
 
