@@ -271,6 +271,12 @@ class MigrationCoordinator:
                 cursor = page_info.get("endCursor")
                 page_number += 1
 
+                # Add mandatory delay between pages to prevent API overload
+                import time
+
+                time.sleep(2.0)  # 2 second delay between pages
+                self._logger.debug(f"Added 2s delay before invoice page {page_number}")
+
             except JobberApiError as e:
                 error_msg = (
                     f"API error during invoice migration page {page_number}: {e}"
