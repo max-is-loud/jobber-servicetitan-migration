@@ -1,0 +1,107 @@
+{
+  "tasks": [
+    {
+      "id": "c1d517e6-9b99-4a1e-bcfb-5f5d65c0474c",
+      "name": "Create clients directory and JobberClient class skeleton",
+      "description": "Create the src/clients/ directory structure and implement the basic JobberClient class with constructor dependency injection for AuthProvider. This establishes the foundation for GraphQL API communication following the established project patterns from Phase 1.",
+      "notes": "Focus on directory structure and class skeleton only - no HTTP implementation yet. Ensures proper module organization following shrimp-rules.md specifications.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-16T03:41:25.392Z",
+      "relatedFiles": [
+        {
+          "path": "src/clients/__init__.py",
+          "type": "CREATE",
+          "description": "Package initialization for clients module"
+        },
+        {
+          "path": "src/clients/jobber_client.py",
+          "type": "CREATE",
+          "description": "JobberClient class skeleton with dependency injection"
+        },
+        {
+          "path": "src/auth/auth_provider.py",
+          "type": "DEPENDENCY",
+          "description": "AuthProvider class for authentication integration"
+        }
+      ],
+      "implementationGuide": "1. Create src/clients/__init__.py and src/clients/jobber_client.py\\n2. Implement JobberClient class with constructor: JobberClient(auth_provider: AuthProvider)\\n3. Add skeleton methods: fetch_clients(cursor: Optional[str] = None) -> dict, fetch_invoices(cursor: Optional[str] = None) -> dict\\n4. Follow established patterns: comprehensive docstrings, type hints with built-in dict, snake_case naming\\n5. Import AuthProvider and Optional from typing\\n6. Add basic class docstring explaining GraphQL API communication responsibility",
+      "verificationCriteria": "JobberClient class can be instantiated with AuthProvider dependency, has fetch_clients and fetch_invoices method signatures, follows established naming conventions, and matches existing code style patterns from Phase 1.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components.",
+      "summary": "Successfully implemented JobberClient class skeleton with complete dependency injection pattern, proper method signatures, comprehensive docstrings, and verified compatibility with established Phase 1 patterns. All verification criteria met including instantiation with AuthProvider, correct method signatures, naming conventions, and code style compliance.",
+      "completedAt": "2025-07-16T03:41:25.390Z"
+    },
+    {
+      "id": "e39c7289-46cf-45db-91a9-7b9bd5e3b2de",
+      "name": "Implement GraphQL queries and HTTP communication in JobberClient",
+      "description": "Implement the core GraphQL query execution logic in JobberClient using requests library. This includes constructing proper GraphQL queries for clients and invoices with cursor-based pagination, making HTTP POST requests to Jobber API, and handling HTTP response processing.",
+      "notes": "Focus on HTTP communication mechanics and GraphQL query structure. Error handling will be enhanced in next task. Use exact field names from Jobber API documentation.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "c1d517e6-9b99-4a1e-bcfb-5f5d65c0474c"
+        }
+      ],
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-16T03:45:03.340Z",
+      "relatedFiles": [
+        {
+          "path": "src/clients/jobber_client.py",
+          "type": "TO_MODIFY",
+          "description": "Add GraphQL queries and HTTP request implementation",
+          "lineStart": 1,
+          "lineEnd": 50
+        },
+        {
+          "path": "requirements.txt",
+          "type": "REFERENCE",
+          "description": "Confirm requests>=2.31.0 dependency availability"
+        }
+      ],
+      "implementationGuide": "1. Import requests library\\n2. Define API_URL constant: https://api.getjobber.com/api/graphql\\n3. Implement GraphQL query strings for clients and invoices with cursor pagination\\n   - clients query: id, firstName, lastName, emails, phones, createdAt\\n   - invoices query: id, client{id}, invoiceNumber, amounts{total}, invoiceStatus, issuedDate\\n4. Implement HTTP request logic:\\n   - Use requests.post(API_URL, headers=auth_provider.get_headers(), json=payload)\\n   - payload format: {\\\"query\\\": query_string, \\\"variables\\\": {\\\"cursor\\\": cursor}}\\n5. Handle response processing:\\n   - Check response.status_code\\n   - Parse response.json()\\n   - Return raw dict response for EntityMapper processing\\n6. Basic error handling for HTTP failures",
+      "verificationCriteria": "JobberClient can execute GraphQL queries to Jobber API, handles cursor-based pagination variables, returns raw dict responses, uses AuthProvider headers for authentication, and successfully communicates with https://api.getjobber.com/api/graphql endpoint.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components.",
+      "summary": "Successfully implemented GraphQL queries and HTTP communication in JobberClient with complete cursor-based pagination, proper field mapping, authentication integration, and HTTP error handling. Implementation includes API endpoint constant, structured GraphQL queries for clients and invoices, and robust HTTP request logic using requests library.",
+      "completedAt": "2025-07-16T03:45:03.338Z"
+    },
+    {
+      "id": "f20ad6be-79e8-4248-95c6-e7a29a73af1d",
+      "name": "Add comprehensive error handling to JobberClient",
+      "description": "Implement robust error handling in JobberClient for HTTP failures, authentication errors, network issues, and GraphQL errors. Map all failure scenarios to appropriate domain exceptions (JobberApiError, ConfigurationError) following established error handling patterns from Phase 1.",
+      "notes": "Critical for production robustness. Follow AuthProvider error handling patterns. Provide actionable error messages for troubleshooting.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "e39c7289-46cf-45db-91a9-7b9bd5e3b2de"
+        }
+      ],
+      "createdAt": "2025-07-15T23:22:11.359Z",
+      "updatedAt": "2025-07-18T02:23:46.110Z",
+      "relatedFiles": [
+        {
+          "path": "src/clients/jobber_client.py",
+          "type": "TO_MODIFY",
+          "description": "Add comprehensive error handling throughout HTTP request methods",
+          "lineStart": 30,
+          "lineEnd": 120
+        },
+        {
+          "path": "src/exceptions/__init__.py",
+          "type": "REFERENCE",
+          "description": "Domain exception classes for error mapping"
+        },
+        {
+          "path": "src/auth/auth_provider.py",
+          "type": "REFERENCE",
+          "description": "Reference for error handling patterns and ConfigurationError usage"
+        }
+      ],
+      "implementationGuide": "1. Import JobberApiError and ConfigurationError from ..exceptions\\n2. Add HTTP status code error handling:\\n   - 401/403 -> ConfigurationError (\\\"Invalid or expired JOBBER_TOKEN\\\")\\n   - 4xx/5xx -> JobberApiError with descriptive messages\\n   - Network errors (requests.RequestException) -> JobberApiError\\n3. Add GraphQL error handling:\\n   - Check response[\\\"errors\\\"] field\\n   - Map GraphQL errors to JobberApiError with error details\\n4. Add timeout handling:\\n   - Set reasonable timeout values (connect=10, read=30)\\n   - Handle timeout exceptions -> JobberApiError\\n5. Add response validation:\\n   - Validate JSON structure\\n   - Check for required fields (data, clients/invoices)\\n   - Handle malformed responses -> JobberApiError\\n6. Comprehensive error messages with context",
+      "verificationCriteria": "JobberClient properly handles all error scenarios with appropriate domain exceptions, provides descriptive error messages, handles network failures gracefully, maps HTTP status codes correctly, and validates GraphQL responses robustly.",
+      "analysisResult": "Phase 2 implementation creates the data fetching and transformation layer for tightbeam-v2 Jobber migration tool. Building on the completed Phase 1 foundation (AuthProvider, Repository, Client/Invoice models, exceptions), this phase implements JobberClient for GraphQL API communication with cursor-based pagination and EntityMapper for transforming GraphQL responses to domain models. The implementation follows established dependency injection patterns, uses requests library for HTTP calls, handles proper error mapping to domain exceptions, and ensures seamless integration with existing components.",
+      "summary": "Successfully implemented comprehensive error handling in JobberClient with robust HTTP status code mapping, timeout configuration, GraphQL error validation, and proper domain exception mapping. All error scenarios (authentication, network, timeout, GraphQL, validation) are handled with descriptive error messages and correct exception types.",
+      "completedAt": "2025-07-18T02:23:46.109Z"
+    }
+  ]
+}

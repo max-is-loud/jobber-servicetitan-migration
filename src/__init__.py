@@ -5,8 +5,22 @@ and persisting it to SQLite database using object-oriented architecture.
 """
 
 # Core components for Phase 3 integration
-from .auth import AuthProvider, OAuthProvider
-from .clients import JobberClient
+
+from .auth import (
+    AuthProvider,
+    OAuth2Manager,
+    get_token_expiration,
+    is_token_expired,
+    is_token_valid,
+)
+from .clients import HttpClient, JobberClient
+from .mappers import EntityMapper
+from .models import Client, Invoice, MigrationSummary
+from .repositories import Repository
+
+# Logging components
+from .interfaces import Logger
+from .loggers import ConsoleLogger
 
 # Coordination components
 from .coordinators import MigrationCoordinator
@@ -17,7 +31,8 @@ from .exceptions import (
     JobberApiError,
     MappingError,
     RepositoryError,
-    TightBeamError,
+
+    OAuth2Error,
 )
 
 # Logging components
@@ -31,7 +46,11 @@ __version__ = "0.1.0"
 __all__ = [
     # Core components
     "AuthProvider",
-    "OAuthProvider",
+    "OAuth2Manager",
+    "get_token_expiration",
+    "is_token_expired",
+    "is_token_valid",
+    "HttpClient",
     "JobberClient",
     "EntityMapper",
     "Client",
@@ -49,4 +68,5 @@ __all__ = [
     "JobberApiError",
     "MappingError",
     "RepositoryError",
+    "OAuth2Error",
 ]
