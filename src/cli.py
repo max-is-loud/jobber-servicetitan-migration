@@ -8,7 +8,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Annotated, Optional, cast
+from typing import Annotated, Optional
 from urllib.parse import parse_qs, urlparse
 
 import typer
@@ -737,7 +737,7 @@ def migrate(
             max_retries=15,  # Increased for ultra-conservative scenario
             metrics_collector=metrics_collector,
         )
-        jobber_client.set_http_client(cast(HttpClient, rate_limited_client))
+        jobber_client.set_http_client(rate_limited_client)
 
         # Verify rate limiting is properly configured
         logger.info(

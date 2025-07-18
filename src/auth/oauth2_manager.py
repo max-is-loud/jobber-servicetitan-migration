@@ -9,8 +9,10 @@ code exchange for tokens, and token refresh operations.
 import secrets
 from typing import Any, Optional
 from urllib.parse import urlencode
+
 from ..clients.http_client import HttpClient
 from ..exceptions import ConfigurationError, OAuth2Error
+from ..interfaces import IHttpClient
 
 
 class OAuth2Manager:
@@ -34,8 +36,7 @@ class OAuth2Manager:
         client_id: str,
         client_secret: str,
         redirect_uri: str,
-        http_client: Optional[HttpClient] = None,
-
+        http_client: Optional[IHttpClient] = None,
     ) -> None:
         """
         Initialize OAuth2Manager with application credentials.
@@ -44,7 +45,7 @@ class OAuth2Manager:
             client_id: OAuth2 client ID from Jobber Developer Center
             client_secret: OAuth2 client secret from Jobber Developer Center
             redirect_uri: Callback URL for authorization flow
-            http_client: Optional HttpClient instance for HTTP requests
+            http_client: Optional IHttpClient instance for HTTP requests
 
         Raises:
             ConfigurationError: If required credentials are missing or invalid

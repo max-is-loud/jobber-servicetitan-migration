@@ -75,7 +75,6 @@ class AuthProvider:
         token_data = self.repository.get_oauth_tokens()
         if not token_data:
             raise ConfigurationError(
-
                 "No OAuth2 tokens found. Please complete OAuth2 authorization "
                 "using the CLI command 'tightbeam oauth init'."
             )
@@ -92,7 +91,9 @@ class AuthProvider:
                 # Convert expires_in to ISO 8601 timestamp
                 expires_in = new_tokens.get("expires_in")
                 if expires_in is None:
-                    raise OAuth2Error("The 'expires_in' field is missing in the token response.")
+                    raise OAuth2Error(
+                        "The 'expires_in' field is missing in the token response."
+                    )
                 expires_at = (
                     datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 ).isoformat()
