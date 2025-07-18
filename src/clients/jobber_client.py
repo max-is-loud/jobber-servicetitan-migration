@@ -8,10 +8,9 @@ and response handling.
 
 from typing import Any, Optional
 
-import requests
-
 from ..auth.auth_provider import AuthProvider
 from ..exceptions import ConfigurationError, JobberApiError
+from .http_client import HttpClient
 
 
 class JobberClient:
@@ -29,9 +28,6 @@ class JobberClient:
 
     # Jobber GraphQL API endpoint
     API_URL = "https://api.getjobber.com/api/graphql"
-
-    # Request timeout configuration (connect, read) in seconds
-    TIMEOUT = (10, 30)
 
     # GraphQL query for fetching clients with cursor pagination
     CLIENTS_QUERY = """
@@ -93,6 +89,7 @@ class JobberClient:
             auth_provider: AuthProvider instance for API authentication
         """
         self.auth_provider = auth_provider
+        self.http_client = HttpClient()
 
     def _execute_graphql_request(
         self, query: str, cursor: Optional[str] = None
@@ -120,51 +117,10 @@ class JobberClient:
         # Prepare GraphQL payload
         payload = {"query": query, "variables": {"cursor": cursor}}
 
-        try:
-            # Make HTTP POST request to Jobber API with timeout
-            response = requests.post(
-                self.API_URL, headers=headers, json=payload, timeout=self.TIMEOUT
-            )
-
-            # Handle HTTP status code errors
-            if response.status_code == 401:
-                raise ConfigurationError(
-                    "Invalid or expired JOBBER_TOKEN. Please check your authentication credentials."
-                )
-            elif response.status_code == 403:
-                raise ConfigurationError(
-                    "Access forbidden. Your JOBBER_TOKEN may not have sufficient permissions."
-                )
-            elif response.status_code >= 400:
-                raise JobberApiError(
-                    f"Jobber API returned HTTP {response.status_code}: {response.text}"
-                )
-
-            # Check for successful status (will raise HTTPError for 4xx/5xx if we missed any)
-            response.raise_for_status()
-
-        except requests.exceptions.Timeout as e:
-            raise JobberApiError(
-                f"Request to Jobber API timed out after {self.TIMEOUT} seconds. "
-                "Please check your network connection or try again later."
-            ) from e
-        except requests.exceptions.ConnectionError as e:
-            raise JobberApiError(
-                f"Failed to connect to Jobber API at {self.API_URL}. "
-                "Please check your network connection and API endpoint."
-            ) from e
-        except requests.exceptions.RequestException as e:
-            raise JobberApiError(
-                f"Network error occurred while contacting Jobber API: {e}"
-            ) from e
-
-        # Parse JSON response
-        try:
-            response_data = response.json()
-        except requests.exceptions.JSONDecodeError as e:
-            raise JobberApiError(
-                f"Invalid JSON response from Jobber API. Response: {response.text[:200]}..."
-            ) from e
+        # Use shared HttpClient for HTTP communication
+        response_data = self.http_client.post(
+            url=self.API_URL, headers=headers, json=payload
+        )
 
         # Validate response structure and check for GraphQL errors
         self._validate_graphql_response(response_data)
