@@ -2,8 +2,8 @@
 
 from typing import Any, Optional
 
-from ..models import Client, Invoice
 from ..exceptions import MappingError
+from ..models import Client, Invoice
 
 
 class EntityMapper:
@@ -28,11 +28,34 @@ class EntityMapper:
             MappingError: If required fields are missing or invalid
         """
         try:
-            # TODO: Implement Client mapping logic
-            # Transform: firstName -> first_name, lastName -> last_name
-            # Extract: Primary email from emails array, primary phone from phones array
-            # Convert: createdAt ISO8601DateTime to string
-            raise NotImplementedError("Client mapping not yet implemented")
+            # Extract required fields with validation
+            client_id = data.get("id")
+            if not client_id:
+                raise MappingError("Client ID is required but missing")
+
+            first_name = data.get("firstName", "")
+            last_name = data.get("lastName", "")
+
+            # Extract primary email from emails array
+            emails = data.get("emails", [])
+            email = self._extract_primary_email(emails)
+
+            # Extract primary phone from phones array
+            phones = data.get("phones", [])
+            phone = self._extract_primary_phone(phones)
+
+            # Format ISO datetime
+            created_at = self._format_iso_datetime(data.get("createdAt"))
+
+            return Client(
+                id=client_id,
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                phone=phone,
+                created_at=created_at,
+            )
+
         except Exception as e:
             raise MappingError(f"Failed to map Client data: {e}") from e
 
@@ -69,9 +92,17 @@ class EntityMapper:
         Returns:
             str: Primary email address or empty string if none found
         """
-        # TODO: Implement email extraction logic
-        # Look for primary email or first available email
-        raise NotImplementedError("Email extraction not yet implemented")
+        if not emails or not isinstance(emails, list):
+            return ""
+
+        # Look for first available email address
+        for email_obj in emails:
+            if isinstance(email_obj, dict):
+                address = email_obj.get("address", "").strip()
+                if address:
+                    return address
+
+        return ""
 
     def _extract_primary_phone(self, phones: list[dict[str, Any]]) -> str:
         """
@@ -83,9 +114,17 @@ class EntityMapper:
         Returns:
             str: Primary phone number or empty string if none found
         """
-        # TODO: Implement phone extraction logic
-        # Look for primary phone or first available phone
-        raise NotImplementedError("Phone extraction not yet implemented")
+        if not phones or not isinstance(phones, list):
+            return ""
+
+        # Look for first available phone number
+        for phone_obj in phones:
+            if isinstance(phone_obj, dict):
+                number = phone_obj.get("number", "").strip()
+                if number:
+                    return number
+
+        return ""
 
     def _convert_to_cents(self, amount: Optional[float]) -> int:
         """
