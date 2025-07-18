@@ -2,5 +2,6 @@
 
 from .client import Client
 from .invoice import Invoice
+from .migration_summary import MigrationSummary
 
-__all__ = ["Client", "Invoice"]
+__all__ = ["Client", "Invoice", "MigrationSummary"]
