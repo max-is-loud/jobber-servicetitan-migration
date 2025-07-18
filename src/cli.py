@@ -714,15 +714,17 @@ def migrate(
         # Core dependencies with rate limiting integration
         jobber_client = JobberClient(auth_provider)
 
-        # Initialize rate limiting components with very conservative settings
-        logger.debug("Setting up rate limiting (500 tokens, 120/minute for Jobber API)")
-        # Start with only 50 tokens to prevent initial burst throttling
-        rate_limiter = TokenBucketRateLimiter(
-            capacity=500, refill_rate=120, initial_tokens=50
+        # Initialize rate limiting components with EXTREMELY conservative settings
+        logger.info(
+            "Setting up ULTRA-CONSERVATIVE rate limiting (100 tokens, 60/minute)"
         )
-        # Use longer backoff delays for GraphQL throttling
+        # Start with only 10 tokens to prevent ANY burst activity
+        rate_limiter = TokenBucketRateLimiter(
+            capacity=100, refill_rate=60, initial_tokens=10
+        )
+        # Use very long backoff delays for GraphQL throttling
         backoff_strategy = ExponentialBackoffStrategy(
-            initial_delay=2.0, max_delay=120.0, multiplier=2.0
+            initial_delay=5.0, max_delay=300.0, multiplier=2.0
         )
         metrics_collector = MetricsCollector()
 
@@ -732,10 +734,17 @@ def migrate(
             http_client,
             rate_limiter,
             backoff_strategy,
-            max_retries=10,  # Increase retries for GraphQL throttling scenarios
+            max_retries=15,  # Increased for ultra-conservative scenario
             metrics_collector=metrics_collector,
         )
         jobber_client.http_client = cast(HttpClient, rate_limited_client)
+
+        # Verify rate limiting is properly configured
+        logger.info(
+            f"Rate limiter configured: {rate_limiter.get_capacity()} tokens, "
+            f"{rate_limiter.get_refill_rate()}/min, "
+            f"{rate_limiter.get_available_tokens():.1f} available"
+        )
 
         entity_mapper = EntityMapper()
 
