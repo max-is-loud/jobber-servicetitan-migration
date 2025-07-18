@@ -254,8 +254,8 @@ class MigrationCoordinator:
                 page_number += 1
 
                 # Add mandatory delay between pages to prevent API overload
-                time.sleep(2.0)  # 2 second delay between pages
-                self._logger.debug(f"Added 2s delay before page {page_number}")
+                time.sleep(1.0)  # 1 second delay between pages
+                self._logger.debug(f"Added 1s delay before page {page_number}")
 
             except JobberApiError as e:
                 error_msg = f"API error during client migration page {page_number}: {e}"
@@ -343,8 +343,8 @@ class MigrationCoordinator:
                 page_number += 1
 
                 # Add mandatory delay between pages to prevent API overload
-                time.sleep(2.0)  # 2 second delay between pages
-                self._logger.debug(f"Added 2s delay before invoice page {page_number}")
+                time.sleep(1.0)  # 1 second delay between pages
+                self._logger.debug(f"Added 1s delay before invoice page {page_number}")
 
             except JobberApiError as e:
                 error_msg = (

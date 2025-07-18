@@ -149,7 +149,7 @@ class TestCLIIntegration:
 
         assert len(quotes) == 1
         assert quotes[0].id == "quote_cli_123"
-        assert quotes[0].number == "CLI-Q-001"
+        assert quotes[0].quote_number == "CLI-Q-001"
         assert quotes[0].title == "CLI Test Quote"
 
         connection.close()

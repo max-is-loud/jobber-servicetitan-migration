@@ -133,7 +133,8 @@ class JobberClient:
     """
 
     # GraphQL query for fetching notes with cursor pagination
-    # Notes are polymorphic and attached to various entities (clients, jobs, quotes, invoices)
+    # Notes are polymorphic and attached to various entities
+    # (clients, jobs, quotes, invoices)
     NOTES_QUERY = """
     query GetNotes($cursor: String) {
       nodes(first: 100, after: $cursor) {
