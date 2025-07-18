@@ -15,7 +15,7 @@ A command-line tool for extracting client and invoice data from Jobber GraphQL A
 ## Requirements
 
 - Python 3.8 or higher
-- Valid Jobber API access token
+- Valid Jobber API access (JOBBER_TOKEN or OAuth2 configuration)
 - Internet connection for API access
 
 ## Installation
@@ -153,13 +153,26 @@ The tool provides clear error messages and appropriate exit codes:
 
 ## Troubleshooting
 
-### Missing JOBBER_TOKEN
+### Missing Authentication Configuration
 
 ```bash
-Configuration Error: JOBBER_TOKEN environment variable is required
+Configuration Error: No authentication method configured
 ```
 
-**Solution**: Set the JOBBER_TOKEN environment variable with your Jobber API access token.
+**Solution**: Choose one of the following authentication methods:
+
+**Option 1: Environment Token (Simple)**
+```bash
+export JOBBER_TOKEN="your_jobber_api_token_here"
+```
+
+**Option 2: OAuth2 (Recommended for production)**
+```bash
+export JOBBER_CLIENT_ID="your_oauth2_client_id"
+export JOBBER_CLIENT_SECRET="your_oauth2_client_secret"
+export JOBBER_REDIRECT_URI="your_redirect_uri"
+tightbeam oauth init
+```
 
 ### API Connection Issues
 
