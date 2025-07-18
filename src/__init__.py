@@ -5,7 +5,7 @@ and persisting it to SQLite database using object-oriented architecture.
 """
 
 # Core components for Phase 3 integration
-from .auth import AuthProvider
+from .auth import AuthProvider, OAuth2Manager
 from .clients import HttpClient, JobberClient
 from .mappers import EntityMapper
 from .models import Client, Invoice, MigrationSummary
@@ -25,12 +25,14 @@ from .exceptions import (
     JobberApiError,
     MappingError,
     RepositoryError,
+    OAuth2Error,
 )
 
 __version__ = "0.1.0"
 __all__ = [
     # Core components
     "AuthProvider",
+    "OAuth2Manager",
     "HttpClient",
     "JobberClient",
     "EntityMapper",
@@ -49,4 +51,5 @@ __all__ = [
     "JobberApiError",
     "MappingError",
     "RepositoryError",
+    "OAuth2Error",
 ]
