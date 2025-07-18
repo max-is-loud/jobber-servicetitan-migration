@@ -851,6 +851,333 @@ def migrate(
             connection.close()
 
 
+@app.command("fetch-quotes")
+def fetch_quotes(
+    db: Annotated[Path, typer.Option(help="SQLite database path")],
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+) -> None:
+    """
+    Extract quote data from Jobber API to SQLite database.
+
+    Fetches all quotes from the Jobber GraphQL API using cursor-based pagination
+    and stores them in the specified SQLite database. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+    """
+    _execute_entity_extraction(
+        entity_type="quotes",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+    )
+
+
+@app.command("fetch-notes")
+def fetch_notes(
+    db: Annotated[Path, typer.Option(help="SQLite database path")],
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+) -> None:
+    """
+    Extract note data from Jobber API to SQLite database.
+
+    Fetches all notes from the Jobber GraphQL API using cursor-based pagination
+    and stores them in the specified SQLite database. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+    """
+    _execute_entity_extraction(
+        entity_type="notes",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+    )
+
+
+@app.command("fetch-attachments")
+def fetch_attachments(
+    db: Annotated[Path, typer.Option(help="SQLite database path")],
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+    download_path: Annotated[
+        str, typer.Option("--download-path", help="Base path for attachment downloads")
+    ] = "./attachments",
+) -> None:
+    """
+    Extract attachment data and download files from Jobber API to local storage.
+
+    Fetches all attachments from the Jobber GraphQL API using cursor-based pagination,
+    downloads the binary files to organized local storage, and stores metadata in the
+    specified SQLite database. Requires authentication via JOBBER_TOKEN environment
+    variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+        download_path: Base directory for attachment file downloads
+    """
+    _execute_entity_extraction(
+        entity_type="attachments",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+        download_path=download_path,
+    )
+
+
+def _execute_entity_extraction(
+    entity_type: str,
+    db: Path,
+    verbose: bool = False,
+    page_limit: Optional[int] = None,
+    download_path: str = "./attachments",
+) -> None:
+    """
+    Common entity extraction workflow for quotes, notes, and attachments.
+
+    Args:
+        entity_type: Type of entity to extract ('quotes', 'notes', 'attachments')
+        db: Path to SQLite database file
+        verbose: Enable verbose logging
+        page_limit: Optional limit on number of pages to process
+        download_path: Base directory for attachment downloads (attachments only)
+    """
+    connection = None
+
+    try:
+        # Create database connection and logger
+        logger = ConsoleLogger(verbose=verbose)
+        logger.info(f"Starting {entity_type} extraction to database: {db}")
+
+        # Ensure parent directory exists
+        db.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.Connection(str(db))
+
+        # Initialize repository
+        repository = Repository(connection)
+
+        # Create OAuth2 components with error handling
+        try:
+            client_id, client_secret, redirect_uri = AuthProvider.get_oauth2_config()
+            http_client = HttpClient()
+            oauth_manager = OAuth2Manager(
+                client_id=client_id,
+                client_secret=client_secret,
+                redirect_uri=redirect_uri,
+                http_client=http_client,
+            )
+            auth_provider = AuthProvider(oauth_manager, repository)
+        except ConfigurationError as e:
+            raise ConfigurationError(
+                f"OAuth2 configuration error: {e}. "
+                "Please ensure JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, and JOBBER_REDIRECT_URI "
+                "are set and run 'tightbeam oauth init' to authorize."
+            ) from None
+
+        # Setup JobberClient with rate limiting
+        jobber_client = JobberClient(auth_provider)
+
+        logger.info("Setting up conservative rate limiting for entity extraction")
+        rate_limiter = TokenBucketRateLimiter(
+            capacity=100, refill_rate=60, initial_tokens=10
+        )
+        backoff_strategy = ExponentialBackoffStrategy(
+            initial_delay=5.0, max_delay=300.0, multiplier=2.0
+        )
+        metrics_collector = MetricsCollector()
+
+        rate_limited_client = RateLimitedHttpClient(
+            HttpClient(),
+            rate_limiter,
+            backoff_strategy,
+            max_retries=15,
+            metrics_collector=metrics_collector,
+        )
+        jobber_client.set_http_client(rate_limited_client)
+
+        # Create entity mapper
+        entity_mapper = EntityMapper()
+
+        # Import and create appropriate extractor based on entity type
+        if entity_type == "quotes":
+            from .extractors import QuotesExtractor
+
+            extractor = QuotesExtractor(
+                jobber_client, entity_mapper, repository, logger
+            )
+        elif entity_type == "notes":
+            from .extractors import NotesExtractor
+
+            extractor = NotesExtractor(jobber_client, entity_mapper, repository, logger)
+        elif entity_type == "attachments":
+            from .extractors import AttachmentDownloader
+
+            extractor = AttachmentDownloader(
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
+                base_download_path=download_path,
+            )
+        else:
+            raise ValueError(f"Unsupported entity type: {entity_type}")
+
+        # Validate dependencies
+        logger.debug("Validating extractor dependencies")
+        extractor.validate_dependencies()
+
+        # Execute extraction
+        logger.info(f"Starting {entity_type} extraction workflow")
+        start_time = time.time()
+
+        result = extractor.extract(page_limit=page_limit)
+
+        extraction_time = time.time() - start_time
+
+        # Get extraction summary and rate limiting metrics
+        extraction_summary = extractor.get_extraction_summary()
+        rate_metrics = metrics_collector.get_human_readable_summary()
+
+        # Build comprehensive summary
+        summary_data = {
+            "entity_type": entity_type,
+            "entities_processed": result["entities_processed"],
+            "pages_processed": result["pages_processed"],
+            "extraction_time": extraction_time,
+            "has_next_page": result["has_next_page"],
+            "status": (
+                "SUCCESS"
+                if extraction_summary["error_count"] == 0
+                else "COMPLETED_WITH_ERRORS"
+            ),
+            "errors_count": extraction_summary["error_count"],
+            "rate_limiting": {
+                "requests_per_minute": rate_metrics["requests_per_minute"],
+                "total_requests": rate_metrics["total_requests"],
+                "throttled_requests": rate_metrics["throttled_requests"],
+                "rate_limit_errors": rate_metrics["rate_limit_errors"],
+                "average_response_time": rate_metrics["average_response_time"],
+                "throttle_rate": rate_metrics["throttle_rate"],
+            },
+        }
+
+        # Add attachment-specific metrics
+        if entity_type == "attachments":
+            summary_data.update(
+                {
+                    "files_downloaded": result.get("files_downloaded", 0),
+                    "total_bytes_downloaded": result.get("total_bytes_downloaded", 0),
+                    "download_failures": result.get("download_failures", 0),
+                    "download_path": download_path,
+                }
+            )
+
+        # Display results
+        logger.log_summary(summary_data)
+
+        # Log entity-specific success messages
+        if entity_type == "quotes":
+            logger.info(
+                f"✅ Quote extraction completed: {result['entities_processed']} quotes processed"
+            )
+        elif entity_type == "notes":
+            logger.info(
+                f"✅ Note extraction completed: {result['entities_processed']} notes processed"
+            )
+        elif entity_type == "attachments":
+            files_downloaded = result.get("files_downloaded", 0)
+            total_bytes = result.get("total_bytes_downloaded", 0)
+            logger.info(
+                f"✅ Attachment extraction completed: {result['entities_processed']} attachments processed, "
+                f"{files_downloaded} files downloaded ({total_bytes} bytes)"
+            )
+
+        # Handle continuation if more pages available
+        if result["has_next_page"] and page_limit is None:
+            logger.info(
+                f"📄 More {entity_type} pages available. Run again to continue extraction."
+            )
+            logger.info(f"Next cursor: {result.get('end_cursor', 'N/A')}")
+
+        # Exit with appropriate code
+        exit_code = 0 if extraction_summary["error_count"] == 0 else 1
+        logger.info(
+            f"{entity_type.capitalize()} extraction completed with exit code {exit_code}"
+        )
+        sys.exit(exit_code)
+
+    except ConfigurationError as e:
+        typer.echo(f"Configuration Error: {e}", err=True)
+        typer.echo("To configure authentication, you can either:", err=True)
+        typer.echo(
+            "  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True
+        )
+        typer.echo("  2. Manually set the following environment variables:", err=True)
+        typer.echo("     - JOBBER_CLIENT_ID", err=True)
+        typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
+        typer.echo("     - JOBBER_REDIRECT_URI", err=True)
+        typer.echo("     - JOBBER_TOKEN", err=True)
+        sys.exit(1)
+
+    except JobberApiError as e:
+        typer.echo(f"API Error: {e}", err=True)
+        typer.echo(
+            "Please check your internet connection and OAuth2 token validity.", err=True
+        )
+        sys.exit(2)
+
+    except MappingError as e:
+        typer.echo(f"Data Mapping Error: {e}", err=True)
+        typer.echo(
+            "The API response format may have changed. Please check for updates.",
+            err=True,
+        )
+        sys.exit(3)
+
+    except RepositoryError as e:
+        typer.echo(f"Database Error: {e}", err=True)
+        typer.echo("Please check database file permissions and disk space.", err=True)
+        sys.exit(4)
+
+    except KeyboardInterrupt:
+        typer.echo(
+            f"\n{entity_type.capitalize()} extraction interrupted by user.", err=True
+        )
+        sys.exit(130)
+
+    except Exception as e:
+        typer.echo(f"Unexpected Error: {e}", err=True)
+        typer.echo("Please report this issue with the full error message.", err=True)
+        sys.exit(5)
+
+    finally:
+        # Ensure database connection is always closed
+        if connection:
+            connection.close()
+
+
 def main() -> None:
     """Entry point for the CLI application."""
     app()
