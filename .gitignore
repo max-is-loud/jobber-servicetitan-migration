@@ -176,3 +176,4 @@ cython_debug/
 
 # Task management and AI assistant data
 .random/ 
+.random/.shrimp-data/tightbeam-v2/tasks.json
