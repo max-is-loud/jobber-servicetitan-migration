@@ -8,7 +8,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Optional, cast
 from urllib.parse import parse_qs, urlparse
 
 import typer
@@ -26,6 +26,12 @@ from .exceptions import (
 )
 from .loggers import ConsoleLogger
 from .mappers import EntityMapper
+from .rate_limiting import (
+    ExponentialBackoffStrategy,
+    MetricsCollector,
+    RateLimitedHttpClient,
+    TokenBucketRateLimiter,
+)
 from .repositories import Repository
 
 # Load environment variables from .env file
@@ -705,8 +711,41 @@ def migrate(
                 "are set and run 'tightbeam oauth init' to authorize."
             ) from None
 
-        # Core dependencies
+        # Core dependencies with rate limiting integration
         jobber_client = JobberClient(auth_provider)
+
+        # Initialize rate limiting components with EXTREMELY conservative settings
+        logger.info(
+            "Setting up ULTRA-CONSERVATIVE rate limiting (100 tokens, 60/minute)"
+        )
+        # Start with only 10 tokens to prevent ANY burst activity
+        rate_limiter = TokenBucketRateLimiter(
+            capacity=100, refill_rate=60, initial_tokens=10
+        )
+        # Use very long backoff delays for GraphQL throttling
+        backoff_strategy = ExponentialBackoffStrategy(
+            initial_delay=5.0, max_delay=300.0, multiplier=2.0
+        )
+        metrics_collector = MetricsCollector()
+
+        # Wrap HTTP client with rate limiting - increase max retries for throttling
+        http_client = HttpClient()
+        rate_limited_client = RateLimitedHttpClient(
+            http_client,
+            rate_limiter,
+            backoff_strategy,
+            max_retries=15,  # Increased for ultra-conservative scenario
+            metrics_collector=metrics_collector,
+        )
+        jobber_client.http_client = cast(HttpClient, rate_limited_client)
+
+        # Verify rate limiting is properly configured
+        logger.info(
+            f"Rate limiter configured: {rate_limiter.get_capacity()} tokens, "
+            f"{rate_limiter.get_refill_rate()}/min, "
+            f"{rate_limiter.get_available_tokens():.1f} available"
+        )
+
         entity_mapper = EntityMapper()
 
         # Create migration coordinator with all dependencies
@@ -721,7 +760,8 @@ def migrate(
         logger.info("Starting migration process")
         summary = migration_coordinator.migrate()
 
-        # Display final summary
+        # Display final summary with rate limiting metrics
+        rate_metrics = metrics_collector.get_human_readable_summary()
         summary_data = {
             "clients_processed": summary.clients_processed,
             "invoices_processed": summary.invoices_processed,
@@ -730,6 +770,15 @@ def migrate(
             "status": (
                 "SUCCESS" if len(summary.errors) == 0 else "COMPLETED_WITH_ERRORS"
             ),
+            # Add rate limiting metrics
+            "rate_limiting": {
+                "requests_per_minute": rate_metrics["requests_per_minute"],
+                "total_requests": rate_metrics["total_requests"],
+                "throttled_requests": rate_metrics["throttled_requests"],
+                "rate_limit_errors": rate_metrics["rate_limit_errors"],
+                "average_response_time": rate_metrics["average_response_time"],
+                "throttle_rate": rate_metrics["throttle_rate"],
+            },
         }
 
         logger.log_summary(summary_data)

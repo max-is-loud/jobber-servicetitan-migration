@@ -35,6 +35,9 @@ class JobberClient:
     # Jobber GraphQL API endpoint
     API_URL = "https://api.getjobber.com/api/graphql"
 
+    # Jobber API version - required for all requests
+    API_VERSION = "2023-11-15"
+
     # GraphQL query for fetching clients with cursor pagination
     CLIENTS_QUERY = """
     query GetClients($cursor: String) {
@@ -143,6 +146,9 @@ class JobberClient:
                 f"Authentication failed: {e}. "
                 "Please verify your authentication configuration."
             ) from e
+
+        # Add required API version header - this is mandatory for all Jobber API requests
+        headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
 
         # Prepare GraphQL payload
         payload = {"query": query, "variables": {"cursor": cursor}}

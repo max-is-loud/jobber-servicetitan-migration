@@ -13,6 +13,7 @@ A command-line tool for extracting client and invoice data from Jobber GraphQL A
 - 🛡️ **Robust Error Handling** - Comprehensive error management with user-friendly messages
 - 📝 **Structured Logging** - Detailed progress tracking and summary reporting
 - 🏗️ **Clean Architecture** - Dependency injection and single responsibility patterns
+- ⚡ **Intelligent Rate Limiting** - Token bucket algorithm with exponential backoff and metrics
 
 ## Requirements
 
@@ -259,6 +260,7 @@ The tool provides clear error messages and appropriate exit codes:
 ## Troubleshooting
 
 =======
+
 ### Verifying OAuth2 Setup
 
 To verify your OAuth2 authentication configuration is working correctly, use the built-in status command:
@@ -275,12 +277,12 @@ python -m src.cli oauth status
 ```
 
 This command will:
+
 - ✅ Verify JOBBER_TOKEN environment variable is set
 - 🔗 Test API connectivity with your token
 - 📋 Report detailed status and troubleshooting tips
 
 ### Missing JOBBER_TOKEN
-
 
 ### Authentication Issues
 
@@ -356,6 +358,75 @@ If migration is slow or times out:
 - Use `--verbose` flag to monitor progress
 - Check network connection stability
 - Consider running during off-peak hours for better API performance
+
+## Rate Limiting
+
+TightBeam v2 includes intelligent rate limiting to respect Jobber API limits while maximizing throughput.
+
+### Overview
+
+- **Token Bucket Algorithm**: 100 token capacity with 60 tokens/minute refill rate
+- **Exponential Backoff**: Automatic retry with jitter for rate limit errors (HTTP 429 and GraphQL throttling)
+- **Burst Protection**: Starts with only 10 tokens to prevent initial throttling
+- **Page Delays**: Mandatory 2-second delay between pagination requests
+- **Sustained Rate**: Targets 50-60 requests/minute for maximum reliability
+- **Extended Retries**: Up to 15 retry attempts with longer backoff delays (5-300 seconds)
+- **Automatic Throttling**: Seamlessly delays requests when limits are approached
+
+### Rate Limiting Metrics
+
+The migration summary includes comprehensive rate limiting statistics:
+
+```bash
+==================================================
+MIGRATION SUMMARY
+==================================================
+Clients Processed: 250
+Invoices Processed: 1,200
+Duration: 4m 32.1s
+Errors Count: 0
+Status: SUCCESS
+
+Rate Limiting:
+  Requests per Minute: 387.2
+  Total Requests: 1,450
+  Throttled Requests: 23
+  Rate Limit Errors: 2
+  Average Response Time: 0.245s
+  Throttle Rate: 1.6%
+==================================================
+```
+
+### Metrics Explained
+
+| Metric | Description |
+|--------|-------------|
+| **Requests per Minute** | Current throughput rate |
+| **Total Requests** | All API calls made during migration |
+| **Throttled Requests** | Requests delayed by token bucket |
+| **Rate Limit Errors** | HTTP 429 responses received |
+| **Average Response Time** | Mean API response time |
+| **Throttle Rate** | Percentage of requests that were throttled |
+
+### Performance Optimization
+
+The rate limiting system automatically:
+
+- **Prevents Rate Limit Errors**: Proactively throttles before hitting limits and detects GraphQL throttling responses
+- **Maximizes Throughput**: Maintains optimal request rates while respecting Jobber API constraints
+- **Handles Bursts**: Allows temporary speed increases for small datasets
+- **Adapts to API Responses**: Honors Retry-After headers and handles GraphQL "Throttled" errors
+- **Provides Visibility**: Detailed metrics for performance monitoring
+
+### Rate Limit Configuration
+
+Rate limiting is automatically configured and requires no user configuration. The system is tuned for:
+
+- Jobber's GraphQL API limits with conservative safety margins
+- Optimal balance between speed and reliability  
+- Minimal throttling for typical dataset sizes
+- Graceful handling of both HTTP 429 and GraphQL throttling responses
+- Robust error detection and automatic retry with exponential backoff
 
 ## Development
 
