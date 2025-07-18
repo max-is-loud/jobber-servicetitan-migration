@@ -77,7 +77,7 @@ class MigrationCoordinator:
             RepositoryError: If database initialization fails
             JobberApiError: If API communication fails critically
             MappingError: If data transformation fails critically
-        """
+        """  # noqa: E501
         start_time = time.time()
         start_time_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time))
 

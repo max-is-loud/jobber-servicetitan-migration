@@ -77,7 +77,7 @@ class MigrationSummary:
             f"  • {self.quotes_processed:,} quotes processed",
             f"  • {self.notes_processed:,} notes processed",
             f"  • {self.attachments_processed:,} attachments processed",
-            f"  • {self.files_downloaded:,} files downloaded ({self.total_bytes_downloaded:,} bytes)",
+            f"  • {self.files_downloaded:,} files downloaded ({self.total_bytes_downloaded:,} bytes)",  # noqa: E501
             f"  • {total_entities:,} total entities processed",
         ]
 
