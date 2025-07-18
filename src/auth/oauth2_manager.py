@@ -149,7 +149,7 @@ class OAuth2Manager:
             response_data = self.http_client.post(
                 url=self.TOKEN_URL,
                 headers=headers,
-                json=payload,
+                data=payload,
             )
         except Exception as e:
             if "Invalid or expired" in str(e) or "Access forbidden" in str(e):
@@ -210,7 +210,7 @@ class OAuth2Manager:
             response_data = self.http_client.post(
                 url=self.TOKEN_URL,
                 headers=headers,
-                json=payload,
+                data=payload,
             )
         except Exception as e:
             if "Invalid or expired" in str(e) or "Access forbidden" in str(e):
@@ -249,7 +249,7 @@ class OAuth2Manager:
             )
 
         # Validate required token fields
-        required_fields = ["access_token", "token_type"]
+        required_fields = ["access_token"]  # Only access_token is strictly required
         missing_fields = [
             field for field in required_fields if field not in response_data
         ]
@@ -259,8 +259,9 @@ class OAuth2Manager:
                 f"Invalid token response: missing required fields {missing_fields}"
             )
 
-        # Validate token type
-        if response_data.get("token_type", "").lower() != "bearer":
+        # Validate token type if present (optional for some providers like Jobber)
+        token_type = response_data.get("token_type", "bearer").lower()
+        if token_type and token_type != "bearer":
             raise OAuth2Error(
-                f"Unsupported token type: expected 'Bearer', got '{response_data.get('token_type')}'"  # noqa: E501
+                f"Unsupported token type: expected 'Bearer', got '{token_type}'"
             )
