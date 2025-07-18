@@ -365,10 +365,10 @@ TightBeam v2 includes intelligent rate limiting to respect Jobber API limits whi
 
 ### Overview
 
-- **Token Bucket Algorithm**: 2,000 token capacity with 400 tokens/minute refill rate
-- **Exponential Backoff**: Automatic retry with jitter for rate limit errors (HTTP 429)
-- **Burst Capacity**: Handles up to 800 requests/minute for short periods
-- **Sustained Rate**: Targets 350-400 requests/minute for optimal performance
+- **Token Bucket Algorithm**: 1,000 token capacity with 200 tokens/minute refill rate
+- **Exponential Backoff**: Automatic retry with jitter for rate limit errors (HTTP 429 and GraphQL throttling)
+- **Burst Capacity**: Handles up to 400 requests/minute for short periods
+- **Sustained Rate**: Targets 180-200 requests/minute for optimal performance
 - **Automatic Throttling**: Seamlessly delays requests when limits are approached
 
 ### Rate Limiting Metrics
@@ -410,20 +410,21 @@ Rate Limiting:
 
 The rate limiting system automatically:
 
-- **Prevents Rate Limit Errors**: Proactively throttles before hitting limits
-- **Maximizes Throughput**: Maintains optimal request rates
+- **Prevents Rate Limit Errors**: Proactively throttles before hitting limits and detects GraphQL throttling responses
+- **Maximizes Throughput**: Maintains optimal request rates while respecting Jobber API constraints
 - **Handles Bursts**: Allows temporary speed increases for small datasets
-- **Adapts to API Responses**: Honors Retry-After headers from Jobber API
+- **Adapts to API Responses**: Honors Retry-After headers and handles GraphQL "Throttled" errors
 - **Provides Visibility**: Detailed metrics for performance monitoring
 
 ### Rate Limit Configuration
 
 Rate limiting is automatically configured and requires no user configuration. The system is tuned for:
 
-- Jobber's 2,500 requests per 5 minutes API limit
+- Jobber's GraphQL API limits with conservative safety margins
 - Optimal balance between speed and reliability  
 - Minimal throttling for typical dataset sizes
-- Graceful handling of large migrations
+- Graceful handling of both HTTP 429 and GraphQL throttling responses
+- Robust error detection and automatic retry with exponential backoff
 
 ## Development
 

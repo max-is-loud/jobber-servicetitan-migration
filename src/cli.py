@@ -714,9 +714,11 @@ def migrate(
         # Core dependencies with rate limiting integration
         jobber_client = JobberClient(auth_provider)
 
-        # Initialize rate limiting components
-        logger.debug("Setting up rate limiting (2000 tokens, 400/minute)")
-        rate_limiter = TokenBucketRateLimiter(capacity=2000, refill_rate=400)
+        # Initialize rate limiting components with conservative settings
+        logger.debug(
+            "Setting up rate limiting (1000 tokens, 200/minute for Jobber API)"
+        )
+        rate_limiter = TokenBucketRateLimiter(capacity=1000, refill_rate=200)
         backoff_strategy = ExponentialBackoffStrategy()
         metrics_collector = MetricsCollector()
 
