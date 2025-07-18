@@ -1,3 +1,6 @@
+from typing import Any, Optional, Protocol
+
+from ..exceptions import ConfigurationError, JobberApiError
 from .logger import Logger
 
 """
@@ -7,10 +10,6 @@ This package contains Protocol definitions that formalize interface contracts
 used throughout the application. Protocols provide structural typing that
 allows for better duck typing support without requiring inheritance.
 """
-
-from typing import Any, Optional, Protocol
-
-from ..exceptions import ConfigurationError, JobberApiError
 
 
 class IHttpClient(Protocol):
