@@ -61,11 +61,11 @@ class HttpClient:
             # Handle HTTP status code errors
             if response.status_code == 401:
                 raise ConfigurationError(
-                    "Invalid or expired JOBBER_TOKEN. Please check your authentication credentials."  # noqa: E501
+                    "Invalid or expired authentication token. Please check your authentication credentials."  # noqa: E501
                 )
             elif response.status_code == 403:
                 raise ConfigurationError(
-                    "Access forbidden. Your JOBBER_TOKEN may not have sufficient permissions."  # noqa: E501
+                    "Access forbidden. Your authentication token may not have sufficient permissions."  # noqa: E501
                 )
             elif response.status_code >= 400:
                 raise JobberApiError(
