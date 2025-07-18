@@ -39,8 +39,13 @@ def migrate(
     Migrate client and invoice data from Jobber API to SQLite database.
 
     Fetches all clients and invoices from the Jobber GraphQL API using cursor-based
-    pagination and stores them in the specified SQLite database. Requires JOBBER_TOKEN
-    environment variable to be set with a valid Jobber API token.
+    pagination and stores them in the specified SQLite database. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Authentication options:
+    1. Set JOBBER_TOKEN environment variable with a valid Jobber API token
+    2. Configure OAuth2 variables (JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, JOBBER_REDIRECT_URI)
+       and run 'tightbeam oauth init'
 
     Args:
         db: Path to SQLite database file (will be created if it doesn't exist)
@@ -107,7 +112,9 @@ def migrate(
     except ConfigurationError as e:
         # Configuration/environment issues
         typer.echo(f"Configuration Error: {e}", err=True)
-        typer.echo("Please ensure JOBBER_TOKEN environment variable is set.", err=True)
+        typer.echo("Authentication options:", err=True)
+        typer.echo("  1. Set JOBBER_TOKEN environment variable with your API token", err=True)
+        typer.echo("  2. Or configure OAuth2 (JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, JOBBER_REDIRECT_URI) and run 'tightbeam oauth init'", err=True)
         sys.exit(1)
 
     except JobberApiError as e:

@@ -46,9 +46,10 @@ class AuthProvider:
 
         if not token or not token.strip():
             raise ConfigurationError(
-                "JOBBER_TOKEN environment variable is required but not set. "
-                "Please set the JOBBER_TOKEN environment variable with a valid "
-                "Jobber API access token."
+                "No authentication method configured. "
+                "Please set JOBBER_TOKEN environment variable with a valid Jobber API access token, "
+                "or configure OAuth2 variables (JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, JOBBER_REDIRECT_URI) "
+                "and run 'tightbeam oauth init'."
             )
 
         return token.strip()
