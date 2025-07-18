@@ -6,6 +6,7 @@ concurrent access safely while enforcing rate limits with burst capacity.
 
 import threading
 import time
+from typing import Optional
 
 
 class TokenBucketRateLimiter:
@@ -26,15 +27,24 @@ class TokenBucketRateLimiter:
     multiple threads safely using a threading lock.
     """
 
-    def __init__(self, capacity: int = 2000, refill_rate: float = 400):
+    def __init__(
+        self,
+        capacity: int = 2000,
+        refill_rate: float = 400,
+        initial_tokens: Optional[float] = None,
+    ):
         """Initialize the token bucket rate limiter.
 
         Args:
             capacity: Maximum number of tokens the bucket can hold (default: 2000)
             refill_rate: Number of tokens to add per minute (default: 400)
+            initial_tokens: Initial number of tokens (default: capacity // 4 for conservative start)
         """
         self._capacity = capacity
-        self._tokens = float(capacity)  # Start with full bucket
+        # Start with conservative token count to prevent initial burst
+        self._tokens = float(
+            initial_tokens if initial_tokens is not None else capacity // 4
+        )
         self._refill_rate = refill_rate  # tokens per minute
         self._last_refill = time.time()
         self._lock = threading.Lock()
