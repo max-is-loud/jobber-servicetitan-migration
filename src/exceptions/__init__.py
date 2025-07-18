@@ -91,7 +91,6 @@ class OAuth2Error(TightBeamError):
     This exception is raised when:
     - OAuth2 authorization flow failures (invalid authorization codes)
     - Token exchange failures with Jobber OAuth API
-
     - Access token refresh failures or invalid refresh tokens
     - JWT token validation errors (expired, malformed, invalid signatures)
     - OAuth2 token storage or retrieval failures
