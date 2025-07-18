@@ -326,7 +326,10 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         # Store tokens in database
         from datetime import datetime, timedelta, timezone
 
-        expires_in = token_data["expires_in"]
+        # Handle missing expires_in field (Jobber API doesn't always include it)
+        expires_in = token_data.get(
+            "expires_in", 3600
+        )  # Default to 1 hour if not provided
         expires_at = (
             datetime.now(timezone.utc) + timedelta(seconds=expires_in)
         ).isoformat()

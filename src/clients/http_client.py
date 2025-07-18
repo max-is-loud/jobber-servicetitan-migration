@@ -31,6 +31,7 @@ class HttpClient:
         url: str,
         headers: dict[str, str],
         json: Optional[dict[str, Any]] = None,
+        data: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """
         Execute HTTP POST request with comprehensive error handling.
@@ -39,6 +40,7 @@ class HttpClient:
             url: Target URL for the POST request
             headers: HTTP headers to include in the request
             json: Optional JSON payload for the request body
+            data: Optional form data for the request body (mutually exclusive with json)
 
         Returns:
             Dictionary containing parsed JSON response
@@ -47,10 +49,13 @@ class HttpClient:
             ConfigurationError: If authentication is invalid (401/403 responses)
             JobberApiError: If API communication fails or returns errors
         """
+        if json is not None and data is not None:
+            raise ValueError("Cannot specify both 'json' and 'data' parameters")
+
         try:
             # Make HTTP POST request with timeout
             response = requests.post(
-                url, headers=headers, json=json, timeout=self.TIMEOUT
+                url, headers=headers, json=json, data=data, timeout=self.TIMEOUT
             )
 
             # Handle HTTP status code errors
