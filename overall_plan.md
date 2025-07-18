@@ -94,7 +94,7 @@ CLI → MigrationCoordinator → [AuthProvider, JobberClient, EntityMapper, Repo
 
 ### Phase 2: Data Fetching & Transformation 🚧 IN PROGRESS
 
-**Status**: 🚧 **IN PROGRESS** - 5/7 tasks completed, implementing data transformation layer
+**Status**: 🚧 **IN PROGRESS** - 6/7 tasks completed, implementing data transformation layer
 
 **Focus**: GraphQL client and data mapping
 
@@ -140,9 +140,16 @@ CLI → MigrationCoordinator → [AuthProvider, JobberClient, EntityMapper, Repo
   - Comprehensive edge case testing and validation
   - Returns properly typed Client dataclass instances
 
-**Remaining Deliverables**:
+- ✅ **Task 6**: Implement Invoice entity mapping logic in EntityMapper *(Completed: 19:26 Vancouver)*
+  - Complete map_invoice() method with GraphQL to domain model transformation
+  - Field mapping: invoiceNumber→number, invoiceStatus→status, issuedDate formatting
+  - Client relationship extraction from nested client.id field with validation
+  - Monetary conversion: amounts.total to total_cents (multiply by 100 for precision)
+  - Robust error handling for missing IDs, None amounts, malformed client data
+  - Comprehensive edge case testing and validation
 
-- ⏳ Implement Invoice entity mapping logic in EntityMapper  
+**Remaining Deliverables**:  
+
 - ⏳ Create integration exports and update project imports
 
 **Implementation Progress**:
@@ -336,7 +343,7 @@ fetch-jobber migrate --db ./data.sqlite [--verbose]
 
 **Phase 2 Achievements** (July 15-17, 2025):
 
-- **5/7 Phase 2 tasks completed** with GraphQL client implementation and Client data mapping
+- **6/7 Phase 2 tasks completed** with GraphQL client implementation and complete data mapping
 - **JobberClient fully functional** with cursor-based pagination and HTTP communication
 - **Complete GraphQL query structure** for clients and invoices data fetching
 - **AuthProvider integration** working seamlessly with requests library
@@ -346,6 +353,8 @@ fetch-jobber migrate --db ./data.sqlite [--verbose]
 - **Complete mappers package structure** with proper exports and integration
 - **Client mapping logic fully implemented** with robust error handling and comprehensive testing
 - **GraphQL Client data transformation working** with field mapping and edge case handling
+- **Invoice mapping logic fully implemented** with monetary conversion and relationship extraction
+- **Complete EntityMapper data transformation** supporting both Client and Invoice GraphQL responses
 
 **Next Immediate Steps**:
 
@@ -353,8 +362,9 @@ fetch-jobber migrate --db ./data.sqlite [--verbose]
 2. ✅ Phase 2 JobberClient with error handling completed  
 3. ✅ Phase 2 EntityMapper foundation completed
 4. ✅ Phase 2 Client mapping logic completed  
-5. 🚧 **CURRENT**: Continue Phase 2 - Invoice mapping logic implementation
-5. ⏳ Transition to Phase 3 upon Phase 2 completion
+5. ✅ Phase 2 Invoice mapping logic completed
+6. 🚧 **CURRENT**: Continue Phase 2 - Integration exports and project imports
+. ⏳ Transition to Phase 3 upon Phase 2 completion
 
 ---
 
