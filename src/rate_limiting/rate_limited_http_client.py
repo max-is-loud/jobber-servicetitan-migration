@@ -9,8 +9,9 @@ from typing import Any, Optional
 
 from ..clients.http_client import HttpClient
 from ..exceptions import RateLimitError
-from .token_bucket import TokenBucketRateLimiter
 from .backoff_strategy import ExponentialBackoffStrategy
+from .metrics_collector import MetricsCollector
+from .token_bucket import TokenBucketRateLimiter
 
 
 class RateLimitedHttpClient:
@@ -36,6 +37,7 @@ class RateLimitedHttpClient:
         rate_limiter: TokenBucketRateLimiter,
         backoff_strategy: ExponentialBackoffStrategy,
         max_retries: int = 5,
+        metrics_collector: Optional[MetricsCollector] = None,
     ):
         """Initialize the rate-limited HTTP client decorator.
 
@@ -44,11 +46,13 @@ class RateLimitedHttpClient:
             rate_limiter: TokenBucketRateLimiter for request rate limiting
             backoff_strategy: ExponentialBackoffStrategy for retry delays
             max_retries: Maximum number of retry attempts (default: 5)
+            metrics_collector: Optional metrics collector for tracking statistics
         """
         self.http_client = http_client
         self.rate_limiter = rate_limiter
         self.backoff_strategy = backoff_strategy
         self.max_retries = max_retries
+        self.metrics_collector = metrics_collector
 
     def post(
         self,
@@ -92,18 +96,33 @@ class RateLimitedHttpClient:
                 # No tokens available, wait for next token
                 wait_time = self.rate_limiter.get_wait_time()
                 if wait_time > 0:
+                    # Record throttling event
+                    if self.metrics_collector:
+                        self.metrics_collector.record_throttled(wait_time)
                     time.sleep(wait_time)
                     continue  # Try again after waiting
 
             try:
                 # Execute request through wrapped HttpClient
-                return self.http_client.post(
+                start_time = time.time()
+                result = self.http_client.post(
                     url=url, headers=headers, json=json, data=data
                 )
+                response_time = time.time() - start_time
+
+                # Record successful request
+                if self.metrics_collector:
+                    self.metrics_collector.record_request(response_time)
+
+                return result
 
             except Exception as e:
                 # Check if this is a rate limit error (HTTP 429)
                 if self._is_rate_limit_error(e):
+                    # Record rate limit error
+                    if self.metrics_collector:
+                        self.metrics_collector.record_rate_limit_error()
+
                     # Extract Retry-After header if available
                     retry_after = self._extract_retry_after(e)
 
@@ -114,6 +133,10 @@ class RateLimitedHttpClient:
                             f"Last error: {e}",
                             retry_after=retry_after,
                         ) from e
+
+                    # Record retry attempt
+                    if self.metrics_collector:
+                        self.metrics_collector.record_retry_attempt()
 
                     # Calculate backoff delay with exponential backoff
                     delay = self.backoff_strategy.calculate_delay(attempt, retry_after)
@@ -127,7 +150,7 @@ class RateLimitedHttpClient:
 
         # This should never be reached due to the loop logic above
         raise RateLimitError(
-            f"Unexpected: Rate limit retry loop completed without result after {attempt} attempts"
+            f"Unexpected: Rate limit retry loop completed without result after {attempt} attempts"  # noqa: E501
         )
 
     def _is_rate_limit_error(self, exception: Exception) -> bool:
@@ -162,7 +185,7 @@ class RateLimitedHttpClient:
         """
         # This is a simplified implementation - in production you might want
         # to access the actual HTTP response object if available
-        error_message = str(exception)
+        str(exception)
 
         # Look for common Retry-After patterns in error messages
         # This could be enhanced to parse actual HTTP response headers
