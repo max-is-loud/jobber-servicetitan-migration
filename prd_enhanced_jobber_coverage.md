@@ -1,4 +1,5 @@
 # Product Requirements Document (PRD): Enhanced Jobber Data Coverage
+
 *Feature Branch – Implements Missing Legacy Export Coverage*
 
 ---
@@ -12,6 +13,7 @@ This feature branch closes gaps between Tightbeam-v2 and the original legacy Job
 ## 2. Scope
 
 **In-Scope:**
+
 - Quotes/Estimates entity extraction, mapping, and persistence
 - Client Notes extraction, mapping, and persistence
 - Note Attachments: download and storage with file metadata captured in SQLite
@@ -19,6 +21,7 @@ This feature branch closes gaps between Tightbeam-v2 and the original legacy Job
 - Multi-contact support for Clients (all emails and phone numbers)
 
 **Out of Scope:**
+
 - ServiceTitan integration
 - Other Jobber entities (e.g., Tasks, Jobs, Custom Fields unless found in scripts)
 - Full binary file deduplication/deep file analysis
@@ -28,7 +31,9 @@ This feature branch closes gaps between Tightbeam-v2 and the original legacy Job
 ## 3. Architecture & Design Patterns
 
 ### 3.1 Modular OO Extractors
+
 Each new entity or feature will be implemented as a dedicated Extractor module/class, following Tightbeam-v2 conventions:
+
 - `QuotesExtractor` (for Estimates/Quotes)
 - `NotesExtractor` (for Client Notes)
 - `AttachmentDownloader`/`NoteAttachmentExtractor` (for binary files)
@@ -38,6 +43,7 @@ Each new entity or feature will be implemented as a dedicated Extractor module/c
 Each Extractor will implement a common interface (e.g., `BaseExtractor`).
 
 ### 3.2 Model & Schema Enhancements
+
 - Add `quotes` table, with quote number, title, timestamps, total/subtotal, disclaimer, and line items (normalized as child table or JSONB)
 - Add `notes` table, with note ID, client/job reference, created_at, message
 - Add `attachments` table, with note reference, file name, content type, original URL, and local file path
@@ -95,15 +101,16 @@ Each Extractor will implement a common interface (e.g., `BaseExtractor`).
 ---
 
 ## 8. Documentation
+
 - Update all relevant `/docs` entries (see main PRD Appendix)
 - Document new schema, CLI usage, error and logging strategies, attachment storage layout, and batch operation behavior
 
 ---
 
 ## 9. Out of Scope
+
 - No ServiceTitan push/mapping in this branch
 - No UI or third-party integrations
 - No deduplication/deep scanning of attachments
 
 ---
-
