@@ -1,9 +1,11 @@
 """Migration coordinator for orchestrating complete data migration workflow."""
 
 import time
+from typing import Optional
 
 from ..clients import JobberClient
 from ..exceptions import JobberApiError, MappingError, RepositoryError
+from ..extractors import AttachmentDownloader, NotesExtractor, QuotesExtractor
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import MigrationSummary
@@ -15,9 +17,10 @@ class MigrationCoordinator:
     Orchestrates complete migration workflow from Jobber API to SQLite database.
 
     Coordinates the entire data migration process including initialization,
-    cursor-based pagination, data transformation, persistence, and error handling.
+    cursor-based pagination, data transformation, persistence, and error handling
+    for all entity types: Client, Invoice, Quote, Note, and Attachment.
     Maintains single responsibility by delegating business logic to injected
-    dependencies.
+    dependencies including specialized extractors.
     """
 
     def __init__(
@@ -26,6 +29,9 @@ class MigrationCoordinator:
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        quotes_extractor: Optional[QuotesExtractor] = None,
+        notes_extractor: Optional[NotesExtractor] = None,
+        attachment_downloader: Optional[AttachmentDownloader] = None,
     ) -> None:
         """Initialize MigrationCoordinator with required dependencies.
 
@@ -34,13 +40,21 @@ class MigrationCoordinator:
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            quotes_extractor: Optional extractor for Quote entities
+            notes_extractor: Optional extractor for Note entities
+            attachment_downloader: Optional downloader for Attachment files
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
         self._repository = repository
         self._logger = logger
 
-    def migrate(self) -> MigrationSummary:
+        # Optional extractors for enhanced entity coverage
+        self._quotes_extractor = quotes_extractor
+        self._notes_extractor = notes_extractor
+        self._attachment_downloader = attachment_downloader
+
+    def migrate(self, include_extended_entities: bool = True) -> MigrationSummary:
         """
         Execute complete migration workflow with error handling and progress tracking.
 
@@ -48,7 +62,13 @@ class MigrationCoordinator:
         1. Initialize database schema
         2. Migrate clients with cursor pagination
         3. Migrate invoices with cursor pagination
-        4. Calculate timing and return structured summary
+        4. Migrate quotes (if extractor provided and enabled)
+        5. Migrate notes (if extractor provided and enabled)
+        6. Migrate attachments with file downloads (if downloader provided and enabled)
+        7. Calculate timing and return comprehensive summary
+
+        Args:
+            include_extended_entities: Whether to include Quote, Note, Attachment extraction
 
         Returns:
             MigrationSummary with processing counts, timing, and any errors
@@ -61,10 +81,16 @@ class MigrationCoordinator:
         start_time = time.time()
         start_time_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time))
 
-        # Initialize summary for tracking
+        # Initialize comprehensive summary for tracking all entity types
         summary = MigrationSummary(
             clients_processed=0,
             invoices_processed=0,
+            quotes_processed=0,
+            notes_processed=0,
+            attachments_processed=0,
+            files_downloaded=0,
+            total_bytes_downloaded=0,
+            download_failures=0,
             start_time=start_time_iso,
             end_time="",
             duration_seconds=0.0,
@@ -72,19 +98,56 @@ class MigrationCoordinator:
         )
 
         try:
-            self._logger.info("Starting migration workflow")
+            self._logger.info("Starting comprehensive migration workflow")
 
             # Initialize database schema
             self._logger.info("Initializing database schema")
             self._repository.init_schema()
 
-            # Migrate clients with cursor pagination
+            # Core entity migrations (backward compatibility)
             self._logger.info("Starting client migration")
             summary.clients_processed = self._migrate_clients(summary)
 
-            # Migrate invoices with cursor pagination
             self._logger.info("Starting invoice migration")
             summary.invoices_processed = self._migrate_invoices(summary)
+
+            # Extended entity migrations (if enabled and extractors available)
+            if include_extended_entities:
+                if self._quotes_extractor:
+                    self._logger.info("Starting quote migration")
+                    summary.quotes_processed = self._migrate_quotes(summary)
+                else:
+                    self._logger.debug(
+                        "Quote extraction skipped - no extractor provided"
+                    )
+
+                if self._notes_extractor:
+                    self._logger.info("Starting note migration")
+                    summary.notes_processed = self._migrate_notes(summary)
+                else:
+                    self._logger.debug(
+                        "Note extraction skipped - no extractor provided"
+                    )
+
+                if self._attachment_downloader:
+                    self._logger.info(
+                        "Starting attachment migration with file downloads"
+                    )
+                    attachment_results = self._migrate_attachments(summary)
+                    summary.attachments_processed = attachment_results["entities"]
+                    summary.files_downloaded = attachment_results["files_downloaded"]
+                    summary.total_bytes_downloaded = attachment_results[
+                        "bytes_downloaded"
+                    ]
+                    summary.download_failures = attachment_results["download_failures"]
+                else:
+                    self._logger.debug(
+                        "Attachment extraction skipped - no downloader provided"
+                    )
+            else:
+                self._logger.info(
+                    "Extended entity migration disabled - using legacy Client/Invoice only mode"
+                )
 
         except (RepositoryError, JobberApiError, MappingError) as e:
             self._logger.error(f"Critical migration error: {e}")
@@ -102,13 +165,23 @@ class MigrationCoordinator:
             )
             summary.duration_seconds = end_time - start_time
 
-            # Log completion summary
-            self._logger.info(
-                f"Migration completed: {summary.clients_processed} clients, "
-                f"{summary.invoices_processed} invoices in {summary.format_duration()}"
-            )
+            # Log comprehensive completion summary
+            self._logger.info("Migration workflow completed")
+            self._logger.info(summary.format_summary())
 
         return summary
+
+    def migrate_legacy(self) -> MigrationSummary:
+        """
+        Execute legacy migration workflow (Client and Invoice only).
+
+        Provides backward compatibility with existing systems that expect
+        only Client and Invoice migration without extended entity types.
+
+        Returns:
+            MigrationSummary with Client and Invoice counts only
+        """
+        return self.migrate(include_extended_entities=False)
 
     def _migrate_clients(self, summary: MigrationSummary) -> int:
         """
@@ -289,3 +362,160 @@ class MigrationCoordinator:
                 raise
 
         return total_processed
+
+    def _migrate_quotes(self, summary: MigrationSummary) -> int:
+        """
+        Migrate all quotes using the dedicated QuotesExtractor.
+
+        Uses the injected QuotesExtractor to handle cursor-based pagination,
+        data transformation, and persistence with comprehensive error handling.
+
+        Args:
+            summary: Migration summary for error tracking
+
+        Returns:
+            Total number of quotes processed
+
+        Raises:
+            JobberApiError: If API communication fails
+            MappingError: If quote data transformation fails
+            RepositoryError: If database operations fail
+        """
+        if not self._quotes_extractor:
+            self._logger.info(
+                "Quote migration requested but no QuotesExtractor provided"
+            )
+            return 0
+
+        try:
+            # Execute quote extraction using dedicated extractor
+            result = self._quotes_extractor.extract()
+
+            # Track any errors from extractor summary
+            extractor_summary = self._quotes_extractor.get_extraction_summary()
+            if extractor_summary["error_count"] > 0:
+                summary.add_error(
+                    f"Quote extraction completed with {extractor_summary['error_count']} recoverable errors"
+                )
+
+            self._logger.info(
+                f"Quote migration completed: {result['entities_processed']} quotes processed"
+            )
+            return result["entities_processed"]
+
+        except Exception as e:
+            error_msg = f"Quote migration failed: {e}"
+            self._logger.error(error_msg)
+            summary.add_error(error_msg)
+            raise
+
+    def _migrate_notes(self, summary: MigrationSummary) -> int:
+        """
+        Migrate all notes using the dedicated NotesExtractor.
+
+        Uses the injected NotesExtractor to handle cursor-based pagination,
+        data transformation, and persistence with comprehensive error handling.
+
+        Args:
+            summary: Migration summary for error tracking
+
+        Returns:
+            Total number of notes processed
+
+        Raises:
+            JobberApiError: If API communication fails
+            MappingError: If note data transformation fails
+            RepositoryError: If database operations fail
+        """
+        if not self._notes_extractor:
+            self._logger.info("Note migration requested but no NotesExtractor provided")
+            return 0
+
+        try:
+            # Execute note extraction using dedicated extractor
+            result = self._notes_extractor.extract()
+
+            # Track any errors from extractor summary
+            extractor_summary = self._notes_extractor.get_extraction_summary()
+            if extractor_summary["error_count"] > 0:
+                summary.add_error(
+                    f"Note extraction completed with {extractor_summary['error_count']} recoverable errors"
+                )
+
+            self._logger.info(
+                f"Note migration completed: {result['entities_processed']} notes processed"
+            )
+            return result["entities_processed"]
+
+        except Exception as e:
+            error_msg = f"Note migration failed: {e}"
+            self._logger.error(error_msg)
+            summary.add_error(error_msg)
+            raise
+
+    def _migrate_attachments(self, summary: MigrationSummary) -> dict[str, int]:
+        """
+        Migrate all attachments using the dedicated AttachmentDownloader.
+
+        Uses the injected AttachmentDownloader to handle cursor-based pagination,
+        data transformation, file downloads, and persistence with comprehensive
+        error handling.
+
+        Args:
+            summary: Migration summary for error tracking
+
+        Returns:
+            Dictionary with attachment migration metrics:
+            - 'entities': Total number of attachments processed
+            - 'files_downloaded': Number of files successfully downloaded
+            - 'bytes_downloaded': Total bytes downloaded
+            - 'download_failures': Number of download failures
+
+        Raises:
+            JobberApiError: If API communication fails
+            MappingError: If attachment data transformation fails
+            RepositoryError: If database operations fail
+        """
+        if not self._attachment_downloader:
+            self._logger.info(
+                "Attachment migration requested but no AttachmentDownloader provided"
+            )
+            return {
+                "entities": 0,
+                "files_downloaded": 0,
+                "bytes_downloaded": 0,
+                "download_failures": 0,
+            }
+
+        try:
+            # Execute attachment extraction and download using dedicated downloader
+            result = self._attachment_downloader.extract()
+
+            # Track any errors from downloader summary
+            downloader_summary = self._attachment_downloader.get_extraction_summary()
+            if downloader_summary["error_count"] > 0:
+                summary.add_error(
+                    f"Attachment extraction completed with {downloader_summary['error_count']} recoverable errors"
+                )
+
+            files_downloaded = result.get("files_downloaded", 0)
+            bytes_downloaded = result.get("total_bytes_downloaded", 0)
+            download_failures = result.get("download_failures", 0)
+
+            self._logger.info(
+                f"Attachment migration completed: {result['entities_processed']} attachments processed, "
+                f"{files_downloaded} files downloaded ({bytes_downloaded} bytes)"
+            )
+
+            return {
+                "entities": result["entities_processed"],
+                "files_downloaded": files_downloaded,
+                "bytes_downloaded": bytes_downloaded,
+                "download_failures": download_failures,
+            }
+
+        except Exception as e:
+            error_msg = f"Attachment migration failed: {e}"
+            self._logger.error(error_msg)
+            summary.add_error(error_msg)
+            raise
