@@ -5,6 +5,7 @@ and persisting it to SQLite database using object-oriented architecture.
 """
 
 # Core components for Phase 3 integration
+
 from .auth import (
     AuthProvider,
     OAuth2Manager,
@@ -26,13 +27,20 @@ from .coordinators import MigrationCoordinator
 
 # Exception classes for error handling
 from .exceptions import (
-    TightBeamError,
     ConfigurationError,
     JobberApiError,
     MappingError,
     RepositoryError,
+
     OAuth2Error,
 )
+
+# Logging components
+from .interfaces import Logger
+from .loggers import ConsoleLogger
+from .mappers import EntityMapper
+from .models import Client, Invoice, MigrationSummary
+from .repositories import Repository
 
 __version__ = "0.1.0"
 __all__ = [
