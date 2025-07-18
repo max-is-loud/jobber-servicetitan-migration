@@ -1,7 +1,7 @@
 # TightBeam v2 MVP Development Plan
 
 *Created: 2025-07-15 15:15:03 (Vancouver)*
-*Last Updated: 2025-07-17 23:17:09 (Vancouver)*
+*Last Updated: 2025-07-17 23:26:52 (Vancouver)*
 
 ---
 
@@ -14,6 +14,78 @@
 - ✅ All architectural, OOP, and dependency injection requirements are met.
 - ✅ Comprehensive error handling, logging, and summary reporting are in place.
 - ✅ Integration and system tests confirm production readiness.
+
+---
+
+## 🚀 RATE LIMITING STRATEGY (July 17, 2025, 23:26 Vancouver)
+
+### Jobber API Rate Limits
+
+Based on comprehensive research, Jobber implements a dual-layer rate limiting system:
+
+1. **DDoS Protection Layer**: 2,500 requests per 5 minutes (500 req/min average)
+2. **GraphQL Query Complexity**: Dynamic limits based on query complexity calculations
+
+### Recommended Implementation Strategy
+
+#### 1. **Token Bucket Rate Limiter**
+
+- Implement a token bucket algorithm with:
+  - **Capacity**: 2,000 tokens (80% of limit for safety margin)
+  - **Refill Rate**: 400 tokens/minute (sustainable rate)
+  - **Burst Capacity**: Allow bursts up to 800 requests/minute for short periods
+
+#### 2. **Exponential Backoff with Jitter**
+
+- Initial retry delay: 1 second
+- Maximum retry delay: 60 seconds
+- Backoff multiplier: 2.0
+- Jitter: ±20% to prevent thundering herd
+- Maximum retries: 5 before circuit breaker triggers
+
+#### 3. **Adaptive Throttling**
+
+- Monitor response times and adjust request rate dynamically
+- Target: 350-400 requests/minute sustained rate
+- Reduce rate by 25% on first 429 error
+- Increase rate by 10% after 5 minutes of success
+
+#### 4. **Query Complexity Optimization**
+
+- Batch similar queries when possible
+- Use field selection to minimize response size
+- Implement query caching for frequently accessed data
+- Priority queue for critical operations
+
+#### 5. **Distributed Rate Limiting (Future Enhancement)**
+
+- Use Redis for shared rate limit state across instances
+- Implement sliding window counter for precise tracking
+- Support for multiple TightBeam instances
+
+### Implementation Components
+
+1. **RateLimiter Class**: Core token bucket implementation
+2. **BackoffStrategy Class**: Exponential backoff with jitter
+3. **RequestQueue Class**: Priority-based request queuing
+4. **MetricsCollector Class**: Track API usage patterns
+5. **CircuitBreaker Class**: Prevent cascading failures
+
+### Key Metrics to Monitor
+
+- Requests per minute (current vs. target)
+- 429 error rate
+- Average response time
+- Queue depth
+- Token bucket utilization
+
+### Best Practices
+
+1. **Graceful Degradation**: Continue processing with reduced rate on errors
+2. **Request Batching**: Combine multiple small queries when possible
+3. **Cache Warming**: Pre-fetch commonly accessed data during low-traffic periods
+4. **Health Checks**: Regular lightweight queries to monitor API availability
+5. **Alerting**: Notify when approaching rate limits or experiencing high error rates
 
 ---
 
