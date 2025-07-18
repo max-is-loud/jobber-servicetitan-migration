@@ -1,0 +1,259 @@
+{
+  "tasks": [
+    {
+      "id": "5fffb31d-0195-430d-8de3-0ce46fd178e8",
+      "name": "Add PyJWT dependency and create OAuth2Error exception",
+      "description": "Add PyJWT library to project dependencies and create OAuth2Error exception class to extend the existing exception hierarchy. This provides the foundation for JWT token expiration detection and OAuth2-specific error handling throughout the system.",
+      "notes": "This task establishes the foundation for all subsequent OAuth2 functionality. PyJWT is essential for token expiration detection and OAuth2Error provides proper error handling integration.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2025-07-18T03:48:13.460Z",
+      "updatedAt": "2025-07-18T03:50:45.675Z",
+      "relatedFiles": [
+        {
+          "path": "pyproject.toml",
+          "type": "TO_MODIFY",
+          "description": "Add PyJWT dependency",
+          "lineStart": 25,
+          "lineEnd": 30
+        },
+        {
+          "path": "src/exceptions/__init__.py",
+          "type": "TO_MODIFY",
+          "description": "Add OAuth2Error class",
+          "lineStart": 1,
+          "lineEnd": 95
+        }
+      ],
+      "implementationGuide": "1. Update pyproject.toml to add PyJWT = '^2.8.0' to [tool.poetry.dependencies] section\\n2. In src/exceptions/__init__.py, add new OAuth2Error class:\\n   - Inherit from TightBeamError\\n   - Include docstring explaining OAuth2 authentication and token refresh failures\\n   - Add to __all__ list for proper export\\n3. Follow existing exception patterns with comprehensive docstring explaining when raised\\n4. Test import to ensure no circular dependencies",
+      "verificationCriteria": "PyJWT dependency is added correctly, OAuth2Error class follows existing exception patterns, imports work without errors, and exception hierarchy is maintained",
+      "analysisResult": "Implement comprehensive OAuth2 support for Jobber API integration while maintaining backward compatibility with existing JOBBER_TOKEN approach. The solution extends the current architecture with OAuth2 authorization code flow, automatic token refresh, secure token storage, and CLI commands. Key principles: maintain strict OOP patterns from shrimp-rules.md, reuse existing HTTP and database patterns, ensure zero breaking changes for current users, and provide seamless upgrade path to full OAuth2 lifecycle management.",
+      "summary": "Successfully implemented Task 1: Added PyJWT dependency (^2.8.0) to pyproject.toml and created OAuth2Error exception class following existing patterns. OAuth2Error inherits from TightBeamError with comprehensive docstring covering authorization flow failures, token exchange errors, JWT validation issues, and refresh token problems. All exception imports verified working correctly with proper inheritance hierarchy maintained. Foundation established for OAuth2 functionality.",
+      "completedAt": "2025-07-18T03:50:45.673Z"
+    },
+    {
+      "id": "d3cfc680-51ec-40d1-a916-7e1c4bfb9f17",
+      "name": "Create shared HttpClient class for reusable HTTP patterns",
+      "description": "Extract common HTTP request patterns from JobberClient into a reusable HttpClient class. This eliminates code duplication between JobberClient and the upcoming OAuth2Manager while maintaining the established error handling and timeout patterns.",
+      "notes": "This creates a shared foundation for both GraphQL API calls and OAuth2 token endpoint requests. Critical to maintain identical error handling behavior to ensure no breaking changes.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "5fffb31d-0195-430d-8de3-0ce46fd178e8"
+        }
+      ],
+      "createdAt": "2025-07-18T03:48:13.460Z",
+      "updatedAt": "2025-07-18T03:54:47.063Z",
+      "relatedFiles": [
+        {
+          "path": "src/clients/http_client.py",
+          "type": "CREATE",
+          "description": "New shared HTTP client class"
+        },
+        {
+          "path": "src/clients/__init__.py",
+          "type": "TO_MODIFY",
+          "description": "Export HttpClient",
+          "lineStart": 1,
+          "lineEnd": 10
+        },
+        {
+          "path": "src/clients/jobber_client.py",
+          "type": "TO_MODIFY",
+          "description": "Refactor to use HttpClient",
+          "lineStart": 110,
+          "lineEnd": 160
+        }
+      ],
+      "implementationGuide": "1. Create src/clients/http_client.py with HttpClient class\\n2. Extract HTTP logic from JobberClient._execute_graphql_request (lines 110-160):\\n   - TIMEOUT = (10, 30) constant\\n   - post() method with url, headers, json parameters\\n   - Error mapping: 401/403 -> ConfigurationError, 4xx/5xx -> JobberApiError\\n   - Network error handling: Timeout, ConnectionError, RequestException -> JobberApiError\\n   - Exception chaining with 'from e' pattern\\n3. Update src/clients/__init__.py to export HttpClient\\n4. Modify JobberClient to use HttpClient instead of direct requests.post\\n5. Maintain exact same error handling behavior for backward compatibility",
+      "verificationCriteria": "HttpClient class follows existing patterns, JobberClient behavior unchanged, error handling identical, timeout configuration preserved, and no breaking changes in API behavior",
+      "analysisResult": "Implement comprehensive OAuth2 support for Jobber API integration while maintaining backward compatibility with existing JOBBER_TOKEN approach. The solution extends the current architecture with OAuth2 authorization code flow, automatic token refresh, secure token storage, and CLI commands. Key principles: maintain strict OOP patterns from shrimp-rules.md, reuse existing HTTP and database patterns, ensure zero breaking changes for current users, and provide seamless upgrade path to full OAuth2 lifecycle management.",
+      "summary": "Successfully implemented Task 2: Created shared HttpClient class by extracting HTTP request patterns from JobberClient. HttpClient encapsulates timeout configuration (10,30), error handling (401/403→ConfigurationError, 4xx/5xx→JobberApiError), network error handling (Timeout, ConnectionError→JobberApiError), and JSON response parsing. JobberClient refactored to use HttpClient via dependency injection while maintaining identical API behavior. All imports verified working correctly with proper module exports updated.",
+      "completedAt": "2025-07-18T03:54:47.060Z"
+    },
+    {
+      "id": "c1374f1f-6056-4a4e-a5af-47e5a694a0f6",
+      "name": "Implement OAuth2Manager class for authorization flow",
+      "description": "Create OAuth2Manager class to handle the complete OAuth2 authorization code flow including authorization URL generation, code exchange for tokens, and refresh token operations. This class encapsulates all OAuth2 protocol interactions with the Jobber API.",
+      "notes": "This class implements the core OAuth2 protocol flow according to Jobber API documentation. Uses shared HttpClient for consistent error handling and timeout behavior.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "d3cfc680-51ec-40d1-a916-7e1c4bfb9f17"
+        }
+      ],
+      "createdAt": "2025-07-18T03:48:13.460Z",
+      "updatedAt": "2025-07-18T04:03:07.924Z",
+      "relatedFiles": [
+        {
+          "path": "src/auth/oauth2_manager.py",
+          "type": "CREATE",
+          "description": "OAuth2 authorization flow management"
+        },
+        {
+          "path": "src/auth/__init__.py",
+          "type": "TO_MODIFY",
+          "description": "Export OAuth2Manager",
+          "lineStart": 1,
+          "lineEnd": 10
+        }
+      ],
+      "implementationGuide": "1. Create src/auth/oauth2_manager.py with OAuth2Manager class\\n2. Constructor: OAuth2Manager(client_id: str, client_secret: str, redirect_uri: str, http_client: HttpClient)\\n3. Implement methods:\\n   - get_authorization_url(state: Optional[str] = None) -> str: builds authorization URL\\n   - exchange_code_for_tokens(authorization_code: str) -> dict: POST to /api/oauth/token\\n   - refresh_access_token(refresh_token: str) -> dict: POST to /api/oauth/token with refresh_token grant\\n4. Use Jobber API endpoints: authorize and token URLs from documentation\\n5. Generate secure random state using secrets.token_urlsafe()\\n6. Error handling: map HTTP errors to ConfigurationError/JobberApiError using shared patterns\\n7. Return dict with access_token, refresh_token, expires_in fields\\n8. Include comprehensive docstrings explaining OAuth2 flow steps",
+      "verificationCriteria": "OAuth2Manager follows single responsibility principle, implements complete authorization flow, uses shared HttpClient, handles all error cases, and provides proper interface for token operations",
+      "analysisResult": "Implement comprehensive OAuth2 support for Jobber API integration while maintaining backward compatibility with existing JOBBER_TOKEN approach. The solution extends the current architecture with OAuth2 authorization code flow, automatic token refresh, secure token storage, and CLI commands. Key principles: maintain strict OOP patterns from shrimp-rules.md, reuse existing HTTP and database patterns, ensure zero breaking changes for current users, and provide seamless upgrade path to full OAuth2 lifecycle management.",
+      "summary": "Successfully implemented Task 3: Created OAuth2Manager class implementing complete OAuth2 authorization code flow for Jobber API. Class includes get_authorization_url() with secure state generation, exchange_code_for_tokens() for code-to-token exchange, refresh_access_token() for token refresh, and comprehensive error handling mapping HTTP errors to ConfigurationError/OAuth2Error. Uses shared HttpClient for consistent behavior, validates all inputs/responses, and follows dependency injection patterns. All exports updated and verified working.",
+      "completedAt": "2025-07-18T04:03:07.922Z"
+    },
+    {
+      "id": "dd63f4b2-8674-47ae-bdad-bc01a6f2e13a",
+      "name": "Extend Repository class for OAuth token storage",
+      "description": "Extend the existing Repository class to support OAuth token storage by adding an oauth_tokens table and related methods. This maintains consistency with the existing database patterns while adding OAuth2 persistence capabilities.",
+      "notes": "Extends existing Repository class rather than creating separate TokenStorage to maintain architectural consistency. Uses established database operation patterns from the project.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "5fffb31d-0195-430d-8de3-0ce46fd178e8"
+        }
+      ],
+      "createdAt": "2025-07-18T03:48:13.460Z",
+      "updatedAt": "2025-07-18T04:06:04.528Z",
+      "relatedFiles": [
+        {
+          "path": "src/repositories/repository.py",
+          "type": "TO_MODIFY",
+          "description": "Add OAuth token storage methods",
+          "lineStart": 30,
+          "lineEnd": 80
+        }
+      ],
+      "implementationGuide": "1. Modify src/repositories/repository.py to extend init_schema() method\\n2. Add oauth_tokens table creation in init_schema():\\n   CREATE TABLE IF NOT EXISTS oauth_tokens (\\n     id INTEGER PRIMARY KEY,\\n     access_token TEXT NOT NULL,\\n     refresh_token TEXT NOT NULL,\\n     expires_at TEXT NOT NULL,\\n     created_at TEXT NOT NULL\\n   )\\n3. Add methods following existing patterns:\\n   - save_oauth_tokens(access_token: str, refresh_token: str, expires_at: str) -> None\\n   - get_oauth_tokens() -> Optional[dict[str, str]]\\n   - clear_oauth_tokens() -> None\\n4. Use parameterized queries for security following existing save_clients pattern\\n5. Handle RepositoryError for database failures\\n6. Include comprehensive docstrings matching existing method documentation\\n7. Follow existing error handling patterns with try/except blocks",
+      "verificationCriteria": "OAuth token table integrates with existing schema, methods follow established patterns, error handling is consistent, parameterized queries used, and database operations work correctly",
+      "analysisResult": "Implement comprehensive OAuth2 support for Jobber API integration while maintaining backward compatibility with existing JOBBER_TOKEN approach. The solution extends the current architecture with OAuth2 authorization code flow, automatic token refresh, secure token storage, and CLI commands. Key principles: maintain strict OOP patterns from shrimp-rules.md, reuse existing HTTP and database patterns, ensure zero breaking changes for current users, and provide seamless upgrade path to full OAuth2 lifecycle management.",
+      "summary": "Successfully implemented Task 4: Extended Repository class for OAuth token storage by adding oauth_tokens table to init_schema() and implementing save_oauth_tokens(), get_oauth_tokens(), and clear_oauth_tokens() methods. All methods follow established patterns with parameterized queries, proper error handling with RepositoryError exceptions, and comprehensive docstrings. OAuth token storage maintains single token set, includes timestamps, and integrates seamlessly with existing database operations while preserving backward compatibility.",
+      "completedAt": "2025-07-18T04:06:04.526Z"
+    },
+    {
+      "id": "c7fc95ff-9875-49e9-b1d5-2e91f0f12876",
+      "name": "Create token expiration utility functions",
+      "description": "Create utility functions for JWT token expiration detection and validation using PyJWT library. These functions will be used by AuthProvider to determine when tokens need refreshing.",
+      "notes": "These utilities provide clean interface for token expiration checking without requiring signature verification. Used by AuthProvider for automatic token refresh logic.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "5fffb31d-0195-430d-8de3-0ce46fd178e8"
+        }
+      ],
+      "createdAt": "2025-07-18T03:48:13.460Z",
+      "updatedAt": "2025-07-18T04:11:00.108Z",
+      "relatedFiles": [
+        {
+          "path": "src/auth/token_utils.py",
+          "type": "CREATE",
+          "description": "JWT token expiration utilities"
+        },
+        {
+          "path": "src/auth/__init__.py",
+          "type": "TO_MODIFY",
+          "description": "Export token utilities",
+          "lineStart": 1,
+          "lineEnd": 10
+        }
+      ],
+      "implementationGuide": "1. Create src/auth/token_utils.py with utility functions\\n2. Implement functions:\\n   - is_token_expired(token: str) -> bool: decode JWT and check exp claim\\n   - get_token_expiration(token: str) -> Optional[datetime]: extract exp claim as datetime\\n   - is_token_valid(token: str) -> bool: basic JWT structure validation\\n3. Use PyJWT library with options={'verify_signature': False, 'verify_exp': False}\\n4. Handle jwt.DecodeError for malformed tokens\\n5. Convert Unix timestamp from exp claim to datetime\\n6. Add 30-second buffer before expiration for refresh timing\\n7. Include comprehensive docstrings with examples\\n8. Follow existing naming conventions and error handling patterns",
+      "verificationCriteria": "Token utilities correctly detect expiration, handle malformed tokens gracefully, provide proper datetime conversion, and include appropriate expiration buffer for refresh timing",
+      "analysisResult": "Implement comprehensive OAuth2 support for Jobber API integration while maintaining backward compatibility with existing JOBBER_TOKEN approach. The solution extends the current architecture with OAuth2 authorization code flow, automatic token refresh, secure token storage, and CLI commands. Key principles: maintain strict OOP patterns from shrimp-rules.md, reuse existing HTTP and database patterns, ensure zero breaking changes for current users, and provide seamless upgrade path to full OAuth2 lifecycle management.",
+      "summary": "Successfully implemented Task 5: Created JWT token expiration utility functions using PyJWT library. Implemented is_token_expired() with configurable 30-second buffer, get_token_expiration() returning timezone-aware datetime, and is_token_valid() for structure validation. All functions handle malformed tokens gracefully with OAuth2Error exceptions, use PyJWT without signature verification, and include comprehensive docstrings with examples. Buffer functionality enables proactive token refresh before expiration.",
+      "completedAt": "2025-07-18T04:11:00.106Z"
+    },
+    {
+      "id": "26cdfab4-40e5-45ad-904c-3130297a580f",
+      "name": "Enhance AuthProvider with OAuth2 support and backward compatibility",
+      "description": "Extend the existing AuthProvider class to support OAuth2 token management while maintaining full backward compatibility with the current JOBBER_TOKEN environment variable approach. This provides automatic token refresh and seamless upgrade path.",
+      "notes": "Critical to maintain backward compatibility. Users with JOBBER_TOKEN should experience zero changes. OAuth2 features are optional and additive only.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "c1374f1f-6056-4a4e-a5af-47e5a694a0f6"
+        },
+        {
+          "taskId": "dd63f4b2-8674-47ae-bdad-bc01a6f2e13a"
+        },
+        {
+          "taskId": "c7fc95ff-9875-49e9-b1d5-2e91f0f12876"
+        }
+      ],
+      "createdAt": "2025-07-18T03:48:13.460Z",
+      "updatedAt": "2025-07-18T04:16:30.445Z",
+      "relatedFiles": [
+        {
+          "path": "src/auth/auth_provider.py",
+          "type": "TO_MODIFY",
+          "description": "Add OAuth2 support with backward compatibility",
+          "lineStart": 1,
+          "lineEnd": 79
+        }
+      ],
+      "implementationGuide": "1. Modify src/auth/auth_provider.py constructor:\\n   AuthProvider(oauth_manager: Optional[OAuth2Manager] = None, repository: Optional[Repository] = None)\\n2. Enhance get_token() method to get_valid_token():\\n   - First check JOBBER_TOKEN environment variable (backward compatibility)\\n   - If not found and oauth_manager provided, get stored OAuth tokens\\n   - Check token expiration using token_utils\\n   - Auto-refresh if expired using oauth_manager.refresh_access_token()\\n   - Return valid access token\\n3. Keep existing get_token() method for backward compatibility\\n4. Update get_headers() method to use get_valid_token()\\n5. Add new methods:\\n   - is_oauth_configured() -> bool: check if OAuth2 dependencies available\\n   - clear_stored_tokens() -> None: clear OAuth tokens from storage\\n6. Error handling: ConfigurationError for auth failures, OAuth2Error for token issues\\n7. Maintain existing docstrings and add OAuth2 documentation\\n8. Follow dependency injection patterns from shrimp-rules.md",
+      "verificationCriteria": "Backward compatibility maintained, OAuth2 features work when configured, automatic token refresh functions correctly, error handling preserved, and existing JOBBER_TOKEN behavior unchanged",
+      "analysisResult": "Implement comprehensive OAuth2 support for Jobber API integration while maintaining backward compatibility with existing JOBBER_TOKEN approach. The solution extends the current architecture with OAuth2 authorization code flow, automatic token refresh, secure token storage, and CLI commands. Key principles: maintain strict OOP patterns from shrimp-rules.md, reuse existing HTTP and database patterns, ensure zero breaking changes for current users, and provide seamless upgrade path to full OAuth2 lifecycle management.",
+      "summary": "Successfully enhanced AuthProvider with OAuth2 support while maintaining full backward compatibility. All verification criteria met: JOBBER_TOKEN behavior unchanged, OAuth2 features work when configured, automatic token refresh implemented, error handling preserved, and dependency injection patterns followed.",
+      "completedAt": "2025-07-18T04:16:30.442Z"
+    },
+    {
+      "id": "9baac696-1667-424b-bd4b-9dc0735a1ab8",
+      "name": "Add OAuth2 CLI commands for user management",
+      "description": "Extend the existing CLI with new OAuth2 commands for initializing OAuth flow, handling callbacks, checking status, and clearing tokens. These commands provide user-friendly interface for OAuth2 lifecycle management.",
+      "notes": "CLI commands provide user-friendly OAuth2 management. Commands are optional and don't affect existing migrate functionality. Follow established Typer patterns from existing codebase.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "26cdfab4-40e5-45ad-904c-3130297a580f"
+        }
+      ],
+      "createdAt": "2025-07-18T03:48:13.460Z",
+      "updatedAt": "2025-07-18T04:21:08.548Z",
+      "relatedFiles": [
+        {
+          "path": "src/cli.py",
+          "type": "TO_MODIFY",
+          "description": "Add OAuth2 CLI commands",
+          "lineStart": 1,
+          "lineEnd": 160
+        }
+      ],
+      "implementationGuide": "1. Modify src/cli.py to add OAuth2 commands using Typer patterns\\n2. Add environment variable detection for OAuth2 vs token mode\\n3. Implement commands:\\n   - oauth-init: generate authorization URL, open browser, provide instructions\\n   - oauth-callback --code=CODE: exchange authorization code for tokens\\n   - oauth-status: show current token status and expiration\\n   - oauth-clear: clear stored OAuth tokens\\n4. Environment variables: JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, JOBBER_REDIRECT_URI\\n5. Follow existing CLI patterns:\\n   - typer.Option() with help text\\n   - Exception handling for ConfigurationError, OAuth2Error\\n   - Consistent error messages and success feedback\\n6. Use webbrowser.open() for authorization URL\\n7. Dependency injection: instantiate OAuth2Manager, Repository in commands\\n8. Preserve existing migrate command unchanged",
+      "verificationCriteria": "OAuth2 commands follow existing CLI patterns, environment variable detection works correctly, browser integration functions, error handling is consistent, and existing migrate command behavior unchanged",
+      "analysisResult": "Implement comprehensive OAuth2 support for Jobber API integration while maintaining backward compatibility with existing JOBBER_TOKEN approach. The solution extends the current architecture with OAuth2 authorization code flow, automatic token refresh, secure token storage, and CLI commands. Key principles: maintain strict OOP patterns from shrimp-rules.md, reuse existing HTTP and database patterns, ensure zero breaking changes for current users, and provide seamless upgrade path to full OAuth2 lifecycle management.",
+      "summary": "Successfully added OAuth2 CLI commands for user management including init, callback, status, and clear commands. All commands follow existing Typer patterns with comprehensive error handling, environment variable detection, browser integration, and backward compatibility. The existing migrate command remains completely unchanged.",
+      "completedAt": "2025-07-18T04:21:08.547Z"
+    },
+    {
+      "id": "962c7a15-5679-4e93-be69-f7cb82f176d1",
+      "name": "Update JobberClient to use enhanced AuthProvider",
+      "description": "Modify JobberClient to utilize the enhanced AuthProvider's get_valid_token() method instead of get_token(), enabling automatic token refresh for OAuth2 users while maintaining backward compatibility for static token users.",
+      "notes": "This integration enables automatic token refresh for OAuth2 users transparent to the application layer. Critical to maintain identical behavior for existing JOBBER_TOKEN users.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "26cdfab4-40e5-45ad-904c-3130297a580f"
+        }
+      ],
+      "createdAt": "2025-07-18T03:48:13.460Z",
+      "updatedAt": "2025-07-18T04:25:56.676Z",
+      "relatedFiles": [
+        {
+          "path": "src/clients/jobber_client.py",
+          "type": "TO_MODIFY",
+          "description": "Integrate enhanced AuthProvider",
+          "lineStart": 110,
+          "lineEnd": 130
+        }
+      ],
+      "implementationGuide": "1. Modify src/clients/jobber_client.py in _execute_graphql_request method\\n2. Change auth_provider.get_headers() call to use get_valid_token() internally\\n3. Update AuthProvider integration to handle OAuth2Error exceptions\\n4. Map OAuth2Error to appropriate ConfigurationError/JobberApiError\\n5. Ensure backward compatibility: static JOBBER_TOKEN users see no changes\\n6. Update error messages to mention both token types when appropriate\\n7. Maintain existing timeout and error handling patterns\\n8. Add docstring notes about automatic token refresh for OAuth2 users\\n9. Test with both authentication modes to ensure compatibility",
+      "verificationCriteria": "JobberClient automatically refreshes OAuth2 tokens, backward compatibility maintained for static tokens, error handling updated appropriately, and no behavior changes for existing users",
+      "analysisResult": "Implement comprehensive OAuth2 support for Jobber API integration while maintaining backward compatibility with existing JOBBER_TOKEN approach. The solution extends the current architecture with OAuth2 authorization code flow, automatic token refresh, secure token storage, and CLI commands. Key principles: maintain strict OOP patterns from shrimp-rules.md, reuse existing HTTP and database patterns, ensure zero breaking changes for current users, and provide seamless upgrade path to full OAuth2 lifecycle management.",
+      "summary": "Successfully updated JobberClient to use enhanced AuthProvider's OAuth2 capabilities. Added proper OAuth2Error handling, enhanced error messages for OAuth2 scenarios, and updated documentation. Backward compatibility fully maintained for JOBBER_TOKEN users while enabling automatic token refresh for OAuth2 users.",
+      "completedAt": "2025-07-18T04:25:56.674Z"
+    }
+  ]
+}
