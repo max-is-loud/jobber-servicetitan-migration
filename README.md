@@ -153,6 +153,26 @@ The tool provides clear error messages and appropriate exit codes:
 
 ## Troubleshooting
 
+### Verifying OAuth2 Setup
+
+To verify your OAuth2 authentication configuration is working correctly, use the built-in status command:
+
+```bash
+# Check OAuth2 token status
+tightbeam oauth status
+
+# Using Poetry
+poetry run tightbeam oauth status
+
+# Using Python module
+python -m src.cli oauth status
+```
+
+This command will:
+- ✅ Verify JOBBER_TOKEN environment variable is set
+- 🔗 Test API connectivity with your token
+- 📋 Report detailed status and troubleshooting tips
+
 ### Missing JOBBER_TOKEN
 
 ```bash
