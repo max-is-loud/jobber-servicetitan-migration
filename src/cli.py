@@ -34,6 +34,81 @@ app = typer.Typer(
     add_completion=False,
 )
 
+
+# Create OAuth subcommand group
+oauth_app = typer.Typer(help="OAuth2 authentication management commands")
+app.add_typer(oauth_app, name="oauth")
+
+
+@oauth_app.command()
+def status() -> None:
+    """
+    Check the status of OAuth2 authentication configuration.
+    
+    Verifies that the JOBBER_TOKEN environment variable is set and validates
+    the token by making a test API call to the Jobber GraphQL endpoint.
+    This helps troubleshoot authentication issues before running data migration.
+    """
+    try:
+        # Test authentication configuration
+        auth_provider = AuthProvider()
+        
+        # Check if token is available
+        typer.echo("🔍 Checking OAuth2 configuration...")
+        token = auth_provider.get_token()
+        typer.echo("✅ JOBBER_TOKEN environment variable is set")
+        
+        # Test API connectivity with a minimal query
+        typer.echo("🔗 Testing API connectivity...")
+        jobber_client = JobberClient(auth_provider)
+        
+        # Use a simple introspection query to validate the token
+        test_query = """
+        query TestConnection {
+          __schema {
+            queryType {
+              name
+            }
+          }
+        }
+        """
+        
+        # Make test API call
+        response = jobber_client._execute_graphql_request(test_query)
+        
+        # Check if we got a valid response
+        if response and "data" in response:
+            typer.echo("✅ OAuth2 token is valid and API is accessible")
+            typer.echo("🎉 Authentication setup is working correctly!")
+        else:
+            typer.echo("⚠️  API returned unexpected response format", err=True)
+            typer.echo("Please verify your token permissions.", err=True)
+            sys.exit(1)
+            
+    except ConfigurationError as e:
+        typer.echo("❌ Configuration Error:", err=True)
+        typer.echo(f"   {e}", err=True)
+        typer.echo("\n💡 To fix this:", err=True)
+        typer.echo("   1. Set JOBBER_TOKEN environment variable:", err=True)
+        typer.echo("      export JOBBER_TOKEN=\"your_token_here\"", err=True)
+        typer.echo("   2. Or create a .env file with:", err=True)
+        typer.echo("      JOBBER_TOKEN=your_token_here", err=True)
+        sys.exit(1)
+        
+    except JobberApiError as e:
+        typer.echo("❌ API Connection Error:", err=True)
+        typer.echo(f"   {e}", err=True)
+        typer.echo("\n💡 To fix this:", err=True)
+        typer.echo("   1. Check your internet connection", err=True)
+        typer.echo("   2. Verify your token is not expired", err=True)
+        typer.echo("   3. Ensure your token has proper permissions", err=True)
+        sys.exit(2)
+        
+    except Exception as e:
+        typer.echo("❌ Unexpected Error:", err=True)
+        typer.echo(f"   {e}", err=True)
+        typer.echo("Please report this issue with the full error message.", err=True)
+=======
 # OAuth2 command subgroup
 oauth_app = typer.Typer(
     name="oauth",
@@ -594,6 +669,7 @@ def oauth_clear(
 
     except Exception as e:
         typer.echo(f"Unexpected Error: {e}", err=True)
+
         sys.exit(5)
 
 
