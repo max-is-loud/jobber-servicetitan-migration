@@ -5,6 +5,8 @@ A command-line tool for extracting client and invoice data from Jobber GraphQL A
 ## Features
 
 - 🚀 **Simple CLI Interface** - Easy-to-use command with clear options
+- 🔐 **Dual Authentication** - Supports both OAuth2 and environment token authentication
+- 🔄 **Automatic Token Refresh** - OAuth2 tokens refresh automatically when expired
 - 📊 **Complete Data Migration** - Fetches both clients and invoices with relationships
 - 🔄 **Cursor-based Pagination** - Efficiently handles large datasets
 - 💾 **SQLite Storage** - Reliable local database persistence  
@@ -14,8 +16,8 @@ A command-line tool for extracting client and invoice data from Jobber GraphQL A
 
 ## Requirements
 
-- Python 3.8 or higher
-- Valid Jobber API access (JOBBER_TOKEN or OAuth2 configuration)
+- Valid Jobber API access (either OAuth2 app or API token)
+
 - Internet connection for API access
 
 ## Installation
@@ -45,7 +47,11 @@ cd tightbeam-v2
 pip install -r requirements.txt
 ```
 
-## Configuration
+## Authentication Setup
+
+TightBeam v2 supports two authentication methods. Choose the one that best fits your needs:
+
+### Option 1: Environment Token (Simple)
 
 Set your Jobber API token as an environment variable:
 
@@ -59,37 +65,136 @@ Or create a `.env` file in the project root:
 JOBBER_TOKEN=your_jobber_api_token_here
 ```
 
+### Option 2: OAuth2 (Recommended for Production)
+
+Set up OAuth2 environment variables:
+
+```bash
+export JOBBER_CLIENT_ID="your_oauth2_client_id"
+export JOBBER_CLIENT_SECRET="your_oauth2_client_secret"
+export JOBBER_REDIRECT_URI="your_redirect_uri"
+```
+
+Or add to your `.env` file:
+
+```env
+JOBBER_CLIENT_ID=your_oauth2_client_id
+JOBBER_CLIENT_SECRET=your_oauth2_client_secret
+JOBBER_REDIRECT_URI=your_redirect_uri
+```
+
+## Quick Start
+
+### Method 1: Environment Token
+
+1. **Set your token**:
+
+   ```bash
+   export JOBBER_TOKEN="your_jobber_api_token_here"
+   ```
+
+2. **Run migration**:
+
+   ```bash
+   tightbeam migrate --db ./jobber_data.sqlite
+   ```
+
+### Method 2: OAuth2 Setup
+
+1. **Configure OAuth2 variables**:
+
+   ```bash
+   export JOBBER_CLIENT_ID="your_client_id"
+   export JOBBER_CLIENT_SECRET="your_client_secret"  
+   export JOBBER_REDIRECT_URI="your_redirect_uri"
+   ```
+
+2. **Initialize OAuth2 authorization**:
+
+   ```bash
+   tightbeam oauth init
+   ```
+
+   This opens your browser for authorization.
+
+3. **Complete authorization** by copying the code from the callback URL:
+
+   ```bash
+   tightbeam oauth callback --code YOUR_AUTHORIZATION_CODE
+   ```
+
+4. **Run migration**:
+
+   ```bash
+   tightbeam migrate --db ./jobber_data.sqlite
+   ```
+
 ## Usage
 
-### Basic Migration
+### Authentication Management
+
+Check your current authentication status:
+
+```bash
+# Check authentication status
+tightbeam oauth status
+```
+
+#### OAuth2 Commands
+
+```bash
+# Initialize OAuth2 flow (opens browser)
+tightbeam oauth init
+
+# Complete OAuth2 authorization
+tightbeam oauth callback --code YOUR_CODE
+
+# Check token status and expiration
+tightbeam oauth status
+
+# Clear stored OAuth2 tokens
+tightbeam oauth clear
+```
+
+### Data Migration
+
+#### Basic Migration
 
 ```bash
 # Migrate data to SQLite database
-tightbeam --db ./jobber_data.sqlite
+tightbeam migrate --db ./jobber_data.sqlite
 
 # Using Poetry
-poetry run tightbeam --db ./jobber_data.sqlite
+poetry run tightbeam migrate --db ./jobber_data.sqlite
 ```
 
-### Verbose Output
+#### Verbose Output
 
 ```bash
 # Enable verbose logging for debugging
-tightbeam --db ./jobber_data.sqlite --verbose
+tightbeam migrate --db ./jobber_data.sqlite --verbose
 
 # Short form
-tightbeam --db ./jobber_data.sqlite -v
+tightbeam migrate --db ./jobber_data.sqlite -v
 ```
 
-### Using Python Module
+#### Using Python Module
 
 ```bash
 # Run as Python module
-python -m src.cli --db ./jobber_data.sqlite
+python -m src.cli migrate --db ./jobber_data.sqlite
 
 # With verbose output
-python -m src.cli --db ./jobber_data.sqlite --verbose
+python -m src.cli migrate --db ./jobber_data.sqlite --verbose
 ```
+
+### Authentication Priority
+
+TightBeam uses the following authentication priority:
+
+1. **JOBBER_TOKEN** environment variable (if set)
+2. **OAuth2 tokens** (if configured and authorized)
+3. **Error** if neither is available
 
 ## Output
 
@@ -145,7 +250,7 @@ The tool provides clear error messages and appropriate exit codes:
 | Exit Code | Error Type | Description |
 |-----------|------------|-------------|
 | 0 | Success | Migration completed successfully |
-| 1 | Configuration | Missing or invalid JOBBER_TOKEN |
+| 1 | Configuration | Missing authentication or OAuth2 setup issues |
 | 2 | API Error | Network or API communication issues |
 | 3 | Data Mapping | Data transformation problems |
 | 4 | Database | SQLite database operation failures |
@@ -153,24 +258,68 @@ The tool provides clear error messages and appropriate exit codes:
 
 ## Troubleshooting
 
-### Missing Authentication Configuration
+=======
+### Verifying OAuth2 Setup
+
+To verify your OAuth2 authentication configuration is working correctly, use the built-in status command:
 
 ```bash
-Configuration Error: No authentication method configured
+# Check OAuth2 token status
+tightbeam oauth status
+
+# Using Poetry
+poetry run tightbeam oauth status
+
+# Using Python module
+python -m src.cli oauth status
 ```
 
-**Solution**: Choose one of the following authentication methods:
+This command will:
+- ✅ Verify JOBBER_TOKEN environment variable is set
+- 🔗 Test API connectivity with your token
+- 📋 Report detailed status and troubleshooting tips
 
-**Option 1: Environment Token (Simple)**
+### Missing JOBBER_TOKEN
+
+
+### Authentication Issues
+
+#### No Authentication Configured
+
 ```bash
-export JOBBER_TOKEN="your_jobber_api_token_here"
+Configuration Error: No authentication method available
 ```
 
-**Option 2: OAuth2 (Recommended for production)**
+**Solution**: Choose one authentication method:
+
+- Set `JOBBER_TOKEN` environment variable, OR
+- Set OAuth2 variables and run `tightbeam oauth init`
+
+#### OAuth2 Not Authorized
+
 ```bash
-export JOBBER_CLIENT_ID="your_oauth2_client_id"
-export JOBBER_CLIENT_SECRET="your_oauth2_client_secret"
-export JOBBER_REDIRECT_URI="your_redirect_uri"
+Configuration Error: No OAuth2 tokens found
+```
+
+**Solution**: Complete OAuth2 authorization:
+
+```bash
+tightbeam oauth init
+tightbeam oauth callback --code YOUR_CODE
+```
+
+#### OAuth2 Token Expired
+
+OAuth2 tokens refresh automatically, but if manual refresh fails:
+
+```bash
+Configuration Error: OAuth2 tokens are invalid and refresh failed
+```
+
+**Solution**: Re-authorize:
+
+```bash
+tightbeam oauth clear
 tightbeam oauth init
 ```
 
@@ -183,7 +332,9 @@ API Error: Failed to connect to Jobber API
 **Solution**:
 
 - Check your internet connection
-- Verify your API token is valid and not expired
+- Verify your authentication is valid:
+  - For tokens: ensure JOBBER_TOKEN is not expired
+  - For OAuth2: run `tightbeam oauth status` to check token status
 - Ensure API rate limits are not exceeded
 
 ### Database Permission Issues
@@ -216,22 +367,25 @@ python integration_test.py
 
 # Check CLI help
 python -m src.cli --help
+
+# Check OAuth2 commands
+python -m src.cli oauth --help
 ```
 
 ### Project Structure
 
 ```bash
 src/
-├── auth/                 # Authentication management
-├── clients/              # Jobber API client
+├── auth/                 # Authentication management (OAuth2 + Token)
+├── clients/              # Jobber API client with auto-refresh
 ├── coordinators/         # Workflow orchestration
 ├── exceptions/           # Domain-specific exceptions
 ├── interfaces/           # Protocol definitions
 ├── loggers/              # Logging implementations
 ├── mappers/              # Data transformation
 ├── models/               # Data models
-├── repositories/         # Database operations
-└── cli.py                # Command-line interface
+├── repositories/         # Database operations (includes OAuth2 storage)
+└── cli.py                # Command-line interface with OAuth2 commands
 ```
 
 ## License
@@ -253,3 +407,4 @@ For issues and questions:
 - Create an issue on GitHub
 - Check the troubleshooting section above
 - Review error messages and exit codes for guidance
+- Use `tightbeam oauth status` to check authentication status
