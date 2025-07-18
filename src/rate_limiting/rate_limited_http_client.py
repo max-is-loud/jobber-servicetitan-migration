@@ -160,14 +160,17 @@ class RateLimitedHttpClient:
             exception: Exception to check
 
         Returns:
-            bool: True if the exception represents an HTTP 429 rate limit error
+            bool: True if the exception represents a rate limit error (HTTP 429 or GraphQL throttled)
         """
-        # Check for JobberApiError with HTTP 429 status code
+        # Check for JobberApiError with HTTP 429 status code or GraphQL throttling
         error_message = str(exception).lower()
         return (
             "429" in error_message
             or "too many requests" in error_message
             or "rate limit" in error_message
+            or "throttled" in error_message
+            or "throttle" in error_message
+            or "graphql errors in response: throttled" in error_message
         )
 
     def _extract_retry_after(self, exception: Exception) -> Optional[float]:
