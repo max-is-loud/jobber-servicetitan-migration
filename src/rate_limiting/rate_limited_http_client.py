@@ -33,14 +33,22 @@ class RateLimitedHttpClient:
     """
 
     # Default error patterns for rate limit detection
+<<<<<<< HEAD
     DEFAULT_RATE_LIMIT_ERROR_PATTERNS = [
+=======
+    DEFAULT_RATE_LIMIT_ERROR_PATTERNS = {
+>>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
         "429",
         "too many requests",
         "rate limit",
         "throttled",
         "throttle",
         "graphql errors in response: throttled",
+<<<<<<< HEAD
     ]
+=======
+    }
+>>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def __init__(
         self,
@@ -49,7 +57,11 @@ class RateLimitedHttpClient:
         backoff_strategy: ExponentialBackoffStrategy,
         max_retries: int = 5,
         metrics_collector: Optional[MetricsCollector] = None,
+<<<<<<< HEAD
         rate_limit_error_patterns: Optional[list[str]] = None,
+=======
+        rate_limit_error_patterns: Optional[set[str]] = None,
+>>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
     ):
         """Initialize the rate-limited HTTP client decorator.
 
@@ -59,7 +71,11 @@ class RateLimitedHttpClient:
             backoff_strategy: ExponentialBackoffStrategy for retry delays
             max_retries: Maximum number of retry attempts (default: 5)
             metrics_collector: Optional metrics collector for tracking statistics
+<<<<<<< HEAD
             rate_limit_error_patterns: Optional list of error message patterns to detect
+=======
+            rate_limit_error_patterns: Optional set of error message patterns to detect
+>>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
                                      rate limiting. If not provided, uses default patterns.
         """
         self.http_client = http_client
@@ -243,7 +259,11 @@ class RateLimitedHttpClient:
         Returns:
             list[str]: List of error message patterns used for rate limit detection
         """
+<<<<<<< HEAD
         return self.rate_limit_error_patterns.copy()
+=======
+        return list(self.rate_limit_error_patterns)
+>>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def set_rate_limit_error_patterns(self, patterns: list[str]) -> None:
         """Set new rate limit error patterns.
@@ -255,7 +275,11 @@ class RateLimitedHttpClient:
         Args:
             patterns: List of error message patterns to use for rate limit detection
         """
+<<<<<<< HEAD
         self.rate_limit_error_patterns = patterns.copy()
+=======
+        self.rate_limit_error_patterns = set(patterns)
+>>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def add_rate_limit_error_pattern(self, pattern: str) -> None:
         """Add a new rate limit error pattern.
@@ -263,8 +287,12 @@ class RateLimitedHttpClient:
         Args:
             pattern: Error message pattern to add to the detection list
         """
+<<<<<<< HEAD
         if pattern not in self.rate_limit_error_patterns:
             self.rate_limit_error_patterns.append(pattern)
+=======
+        self.rate_limit_error_patterns.add(pattern)
+>>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def remove_rate_limit_error_pattern(self, pattern: str) -> None:
         """Remove a rate limit error pattern.
@@ -272,8 +300,12 @@ class RateLimitedHttpClient:
         Args:
             pattern: Error message pattern to remove from the detection list
         """
+<<<<<<< HEAD
         if pattern in self.rate_limit_error_patterns:
             self.rate_limit_error_patterns.remove(pattern)
+=======
+        self.rate_limit_error_patterns.discard(pattern)
+>>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def __repr__(self) -> str:
         """Return string representation of the rate-limited client."""
