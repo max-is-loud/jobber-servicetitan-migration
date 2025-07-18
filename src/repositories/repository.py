@@ -180,14 +180,14 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to initialize database schema: {e}") from e
 
-    def create(self, entity: Union[Client, Invoice]) -> None:
+    def create(self, entity: Union[Client, Invoice, Quote, Note, Attachment]) -> None:
         """Create a new entity in the database.
 
-        Generic method supporting both Client and Invoice entities.
+        Generic method supporting Client, Invoice, Quote, Note, and Attachment entities.
         Uses INSERT OR REPLACE for upsert behavior.
 
         Args:
-            entity: Client or Invoice entity to create
+            entity: Client, Invoice, Quote, Note, or Attachment entity to create
 
         Raises:
             RepositoryError: If database operation fails
@@ -228,6 +228,55 @@ class Repository:
                         entity.line_items,
                     ),
                 )
+            elif isinstance(entity, Quote):
+                cursor.execute(
+                    """INSERT OR REPLACE INTO quotes
+                       (id, client_id, quote_number, title, total, subtotal, disclaimer, line_items, created_at, transitioned_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                    (
+                        entity.id,
+                        entity.client_id,
+                        entity.quote_number,
+                        entity.title,
+                        entity.total,
+                        entity.subtotal,
+                        entity.disclaimer,
+                        entity.line_items,
+                        entity.created_at,
+                        entity.transitioned_at,
+                        entity.updated_at,
+                    ),
+                )
+            elif isinstance(entity, Note):
+                cursor.execute(
+                    """INSERT OR REPLACE INTO notes
+                       (id, entity_type, entity_id, message, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                    (
+                        entity.id,
+                        entity.entity_type,
+                        entity.entity_id,
+                        entity.message,
+                        entity.created_at,
+                        entity.updated_at,
+                    ),
+                )
+            elif isinstance(entity, Attachment):
+                cursor.execute(
+                    """INSERT OR REPLACE INTO attachments
+                       (id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                    (
+                        entity.id,
+                        entity.note_id,
+                        entity.file_name,
+                        entity.content_type,
+                        entity.original_url,
+                        entity.local_file_path,
+                        entity.file_size,
+                        entity.created_at,
+                    ),
+                )
             else:
                 raise RepositoryError(f"Unsupported entity type: {type(entity)}")
 
@@ -239,13 +288,13 @@ class Repository:
 
     def read(
         self, entity_type: type, entity_id: str
-    ) -> Optional[Union[Client, Invoice]]:
+    ) -> Optional[Union[Client, Invoice, Quote, Note, Attachment]]:
         """Read a single entity by ID.
 
-        Generic method supporting both Client and Invoice entities.
+        Generic method supporting Client, Invoice, Quote, Note, and Attachment entities.
 
         Args:
-            entity_type: Client or Invoice class type
+            entity_type: Client, Invoice, Quote, Note, or Attachment class type
             entity_id: Entity ID to retrieve
 
         Returns:
@@ -297,6 +346,67 @@ class Repository:
                         subtotal=row[7] if row[7] is not None else 0,
                         line_items=row[8] if row[8] is not None else "[]",
                     )
+
+            elif entity_type == Quote:
+                cursor.execute(
+                    "SELECT id, client_id, quote_number, title, total, subtotal, disclaimer, line_items, created_at, transitioned_at, updated_at FROM quotes WHERE id = ?",  # noqa: E501
+                    (entity_id,),
+                )
+                row = cursor.fetchone()
+                cursor.close()
+
+                if row:
+                    return Quote(
+                        id=row[0],
+                        client_id=row[1],
+                        quote_number=row[2],
+                        title=row[3],
+                        total=row[4],
+                        subtotal=row[5],
+                        disclaimer=row[6],
+                        line_items=row[7],
+                        created_at=row[8],
+                        transitioned_at=row[9],
+                        updated_at=row[10],
+                    )
+
+            elif entity_type == Note:
+                cursor.execute(
+                    "SELECT id, entity_type, entity_id, message, created_at, updated_at FROM notes WHERE id = ?",  # noqa: E501
+                    (entity_id,),
+                )
+                row = cursor.fetchone()
+                cursor.close()
+
+                if row:
+                    return Note(
+                        id=row[0],
+                        entity_type=row[1],
+                        entity_id=row[2],
+                        message=row[3],
+                        created_at=row[4],
+                        updated_at=row[5],
+                    )
+
+            elif entity_type == Attachment:
+                cursor.execute(
+                    "SELECT id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at FROM attachments WHERE id = ?",  # noqa: E501
+                    (entity_id,),
+                )
+                row = cursor.fetchone()
+                cursor.close()
+
+                if row:
+                    return Attachment(
+                        id=row[0],
+                        note_id=row[1],
+                        file_name=row[2],
+                        content_type=row[3],
+                        original_url=row[4],
+                        local_file_path=row[5],
+                        file_size=row[6],
+                        created_at=row[7],
+                    )
             else:
                 raise RepositoryError(f"Unsupported entity type: {entity_type}")
 
@@ -305,14 +415,14 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to read entity: {e}") from e
 
-    def update(self, entity: Union[Client, Invoice]) -> None:
+    def update(self, entity: Union[Client, Invoice, Quote, Note, Attachment]) -> None:
         """Update an existing entity in the database.
 
-        Generic method supporting both Client and Invoice entities.
+        Generic method supporting Client, Invoice, Quote, Note, and Attachment entities.
         Uses UPDATE with parameterized queries.
 
         Args:
-            entity: Client or Invoice entity to update
+            entity: Client, Invoice, Quote, Note, or Attachment entity to update
 
         Raises:
             RepositoryError: If database operation fails
@@ -353,6 +463,55 @@ class Repository:
                         entity.id,
                     ),
                 )
+            elif isinstance(entity, Quote):
+                cursor.execute(
+                    """UPDATE quotes SET
+                       client_id = ?, quote_number = ?, title = ?, total = ?, subtotal = ?, disclaimer = ?, line_items = ?, created_at = ?, transitioned_at = ?, updated_at = ?
+                       WHERE id = ?""",  # noqa: E501
+                    (
+                        entity.client_id,
+                        entity.quote_number,
+                        entity.title,
+                        entity.total,
+                        entity.subtotal,
+                        entity.disclaimer,
+                        entity.line_items,
+                        entity.created_at,
+                        entity.transitioned_at,
+                        entity.updated_at,
+                        entity.id,
+                    ),
+                )
+            elif isinstance(entity, Note):
+                cursor.execute(
+                    """UPDATE notes SET
+                       entity_type = ?, entity_id = ?, message = ?, created_at = ?, updated_at = ?
+                       WHERE id = ?""",  # noqa: E501
+                    (
+                        entity.entity_type,
+                        entity.entity_id,
+                        entity.message,
+                        entity.created_at,
+                        entity.updated_at,
+                        entity.id,
+                    ),
+                )
+            elif isinstance(entity, Attachment):
+                cursor.execute(
+                    """UPDATE attachments SET
+                       note_id = ?, file_name = ?, content_type = ?, original_url = ?, local_file_path = ?, file_size = ?, created_at = ?
+                       WHERE id = ?""",  # noqa: E501
+                    (
+                        entity.note_id,
+                        entity.file_name,
+                        entity.content_type,
+                        entity.original_url,
+                        entity.local_file_path,
+                        entity.file_size,
+                        entity.created_at,
+                        entity.id,
+                    ),
+                )
             else:
                 raise RepositoryError(f"Unsupported entity type: {type(entity)}")
 
@@ -365,10 +524,10 @@ class Repository:
     def delete(self, entity_type: type, entity_id: str) -> bool:
         """Delete an entity by ID.
 
-        Generic method supporting both Client and Invoice entities.
+        Generic method supporting Client, Invoice, Quote, Note, and Attachment entities.
 
         Args:
-            entity_type: Client or Invoice class type
+            entity_type: Client, Invoice, Quote, Note, or Attachment class type
             entity_id: Entity ID to delete
 
         Returns:
@@ -384,6 +543,12 @@ class Repository:
                 cursor.execute("DELETE FROM clients WHERE id = ?", (entity_id,))
             elif entity_type == Invoice:
                 cursor.execute("DELETE FROM invoices WHERE id = ?", (entity_id,))
+            elif entity_type == Quote:
+                cursor.execute("DELETE FROM quotes WHERE id = ?", (entity_id,))
+            elif entity_type == Note:
+                cursor.execute("DELETE FROM notes WHERE id = ?", (entity_id,))
+            elif entity_type == Attachment:
+                cursor.execute("DELETE FROM attachments WHERE id = ?", (entity_id,))
             else:
                 raise RepositoryError(f"Unsupported entity type: {entity_type}")
 
