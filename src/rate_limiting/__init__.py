@@ -5,17 +5,19 @@ manage request flow to the Jobber API. It includes token bucket algorithms,
 exponential backoff strategies, and metrics collection.
 """
 
+from .backoff_strategy import ExponentialBackoffStrategy
 from .token_bucket import TokenBucketRateLimiter
 
 # Rate limiting components will be exported here as they are implemented
 # Expected exports:
 # - TokenBucketRateLimiter ✅
-# - ExponentialBackoffStrategy
+# - ExponentialBackoffStrategy ✅
 # - RateLimitedHttpClient
 # - MetricsCollector
 # - RateLimitError (from exceptions)
 
 __all__ = [
     "TokenBucketRateLimiter",
+    "ExponentialBackoffStrategy",
     # Components will be added here as they are implemented
 ]
