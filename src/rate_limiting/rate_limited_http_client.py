@@ -55,6 +55,16 @@ class RateLimitedHttpClient:
         self.max_retries = max_retries
         self.metrics_collector = metrics_collector
 
+        # Configurable error patterns for rate limit detection
+        self.rate_limit_error_patterns = [
+            "429",
+            "too many requests",
+            "rate limit",
+            "throttled",
+            "throttle",
+            "graphql errors in response: throttled",
+        ]
+
     def post(
         self,
         url: str,
@@ -163,15 +173,10 @@ class RateLimitedHttpClient:
         Returns:
             bool: True if the exception represents a rate limit error (HTTP 429 or GraphQL throttled)
         """
-        # Check for JobberApiError with HTTP 429 status code or GraphQL throttling
+        # Check if the exception message matches any of the configured error patterns
         error_message = str(exception).lower()
-        return (
-            "429" in error_message
-            or "too many requests" in error_message
-            or "rate limit" in error_message
-            or "throttled" in error_message
-            or "throttle" in error_message
-            or "graphql errors in response: throttled" in error_message
+        return any(
+            pattern in error_message for pattern in self.rate_limit_error_patterns
         )
 
     def _extract_retry_after(self, exception: Exception) -> Optional[float]:
