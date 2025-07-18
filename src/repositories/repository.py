@@ -862,6 +862,109 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve all invoices: {e}") from e
 
+    def get_all_quotes(self) -> List[Quote]:
+        """Retrieve all quotes from the database.
+
+        Returns:
+            List of all Quote entities
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                "SELECT id, client_id, quote_number, title, total, subtotal, disclaimer, line_items, created_at, transitioned_at, updated_at FROM quotes ORDER BY id"  # noqa: E501
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            return [
+                Quote(
+                    id=row[0],
+                    client_id=row[1],
+                    quote_number=row[2],
+                    title=row[3],
+                    total=row[4],
+                    subtotal=row[5],
+                    disclaimer=row[6],
+                    line_items=row[7],
+                    created_at=row[8],
+                    transitioned_at=row[9],
+                    updated_at=row[10],
+                )
+                for row in rows
+            ]
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve all quotes: {e}") from e
+
+    def get_all_notes(self) -> List[Note]:
+        """Retrieve all notes from the database.
+
+        Returns:
+            List of all Note entities
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                "SELECT id, entity_type, entity_id, message, created_at, updated_at FROM notes ORDER BY id"  # noqa: E501
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            return [
+                Note(
+                    id=row[0],
+                    entity_type=row[1],
+                    entity_id=row[2],
+                    message=row[3],
+                    created_at=row[4],
+                    updated_at=row[5],
+                )
+                for row in rows
+            ]
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve all notes: {e}") from e
+
+    def get_all_attachments(self) -> List[Attachment]:
+        """Retrieve all attachments from the database.
+
+        Returns:
+            List of all Attachment entities
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                "SELECT id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at FROM attachments ORDER BY id"  # noqa: E501
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            return [
+                Attachment(
+                    id=row[0],
+                    note_id=row[1],
+                    file_name=row[2],
+                    content_type=row[3],
+                    original_url=row[4],
+                    local_file_path=row[5],
+                    file_size=row[6],
+                    created_at=row[7],
+                )
+                for row in rows
+            ]
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve all attachments: {e}") from e
+
     def save_oauth_tokens(
         self, access_token: str, refresh_token: str, expires_at: str
     ) -> None:
