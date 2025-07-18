@@ -181,8 +181,6 @@ class MigrationCoordinator:
                 page_number += 1
 
                 # Add mandatory delay between pages to prevent API overload
-                import time
-
                 time.sleep(2.0)  # 2 second delay between pages
                 self._logger.debug(f"Added 2s delay before page {page_number}")
 
