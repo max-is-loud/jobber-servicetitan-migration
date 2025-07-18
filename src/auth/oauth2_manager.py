@@ -9,9 +9,7 @@ code exchange for tokens, and token refresh operations.
 import secrets
 from typing import Any, Optional
 from urllib.parse import urlencode
-
-import requests
-
+from ..clients.http_client import HttpClient
 from ..exceptions import ConfigurationError, OAuth2Error
 
 
@@ -23,22 +21,21 @@ class OAuth2Manager:
     to the Jobber API OAuth2 specification. It handles authorization URL generation,
     authorization code exchange for access tokens, and refresh token operations.
 
-    The class follows established dependency injection patterns and provides
-    resilient token validation that handles missing or non-standard token_type fields.
+    The class follows established dependency injection patterns and uses the shared
+    HttpClient for consistent error handling and timeout behavior.
     """
 
     # Jobber OAuth2 API endpoints
     AUTHORIZATION_URL = "https://api.getjobber.com/api/oauth/authorize"
     TOKEN_URL = "https://api.getjobber.com/api/oauth/token"
 
-    # Request timeout configuration (connect, read) in seconds
-    TIMEOUT = (10, 30)
-
     def __init__(
         self,
         client_id: str,
         client_secret: str,
         redirect_uri: str,
+        http_client: Optional[HttpClient] = None,
+
     ) -> None:
         """
         Initialize OAuth2Manager with application credentials.
@@ -47,6 +44,7 @@ class OAuth2Manager:
             client_id: OAuth2 client ID from Jobber Developer Center
             client_secret: OAuth2 client secret from Jobber Developer Center
             redirect_uri: Callback URL for authorization flow
+            http_client: Optional HttpClient instance for HTTP requests
 
         Raises:
             ConfigurationError: If required credentials are missing or invalid
@@ -65,6 +63,7 @@ class OAuth2Manager:
         self.client_id = client_id.strip()
         self.client_secret = client_secret.strip()
         self.redirect_uri = redirect_uri.strip()
+        self.http_client = http_client or HttpClient()
 
     def get_authorization_url(self, state: Optional[str] = None) -> tuple[str, str]:
         """
@@ -116,8 +115,8 @@ class OAuth2Manager:
             Dictionary containing token information with keys:
             - access_token: Bearer token for API requests
             - refresh_token: Token for refreshing access tokens
-            - expires_in: Token expiration time in seconds (optional)
-            - token_type: Token type, typically "Bearer" (optional)
+            - expires_in: Token expiration time in seconds
+            - token_type: Token type (typically "Bearer")
 
         Raises:
             ConfigurationError: If authorization code is invalid or credentials are wrong
@@ -127,7 +126,7 @@ class OAuth2Manager:
             >>> manager = OAuth2Manager(client_id, client_secret, redirect_uri)
             >>> tokens = manager.exchange_code_for_tokens("auth_code_from_callback")
             >>> access_token = tokens["access_token"]
-        """
+        """  # noqa: E501
         if not authorization_code or not authorization_code.strip():
             raise ConfigurationError(
                 "Authorization code is required and cannot be empty"
@@ -147,45 +146,18 @@ class OAuth2Manager:
         }
 
         try:
-            response = requests.post(
-                self.TOKEN_URL,
+            response_data = self.http_client.post(
+                url=self.TOKEN_URL,
                 headers=headers,
                 data=payload,
-                timeout=self.TIMEOUT,
             )
-
-            # Handle HTTP status code errors
-            if response.status_code == 401:
+        except Exception as e:
+            if "Invalid or expired" in str(e) or "Access forbidden" in str(e):
                 raise ConfigurationError(
-                    "Invalid or expired authorization code or client credentials"
-                )
-            elif response.status_code == 403:
-                raise ConfigurationError(
-                    "Access forbidden. Check your OAuth2 client permissions"
-                )
-            elif response.status_code >= 400:
-                raise OAuth2Error(
-                    f"Token exchange failed with HTTP {response.status_code}: {response.text}"
-                )
-
-            response.raise_for_status()
-            response_data = response.json()
-
-        except requests.exceptions.Timeout as e:
+                    f"OAuth2 token exchange failed - invalid credentials or authorization code: {e}"  # noqa: E501
+                ) from e
             raise OAuth2Error(
-                f"Token exchange timed out after {self.TIMEOUT} seconds"
-            ) from e
-        except requests.exceptions.ConnectionError as e:
-            raise OAuth2Error(
-                f"Failed to connect to OAuth2 token endpoint: {e}"
-            ) from e
-        except requests.exceptions.RequestException as e:
-            raise OAuth2Error(
-                f"Network error during token exchange: {e}"
-            ) from e
-        except requests.exceptions.JSONDecodeError as e:
-            raise OAuth2Error(
-                f"Invalid JSON response from token endpoint: {e}"
+                f"Failed to exchange authorization code for tokens: {e}"
             ) from e
 
         # Validate token response structure
@@ -207,8 +179,7 @@ class OAuth2Manager:
             Dictionary containing refreshed token information with keys:
             - access_token: New bearer token for API requests
             - refresh_token: New refresh token (may be the same or rotated)
-            - expires_in: Token expiration time in seconds (optional)
-            - token_type: Token type, typically "Bearer" (optional)
+            - expires_in: Token expiration time in seconds
 
         Raises:
             ConfigurationError: If refresh token is invalid or expired
@@ -235,45 +206,17 @@ class OAuth2Manager:
         }
 
         try:
-            response = requests.post(
-                self.TOKEN_URL,
+            response_data = self.http_client.post(
+                url=self.TOKEN_URL,
                 headers=headers,
                 data=payload,
-                timeout=self.TIMEOUT,
             )
-
-            if response.status_code == 401:
+        except Exception as e:
+            if "Invalid or expired" in str(e) or "Access forbidden" in str(e):
                 raise ConfigurationError(
-                    "Invalid or expired refresh token or client credentials"
-                )
-            elif response.status_code == 403:
-                raise ConfigurationError(
-                    "Access forbidden. Check your OAuth2 client permissions"
-                )
-            elif response.status_code >= 400:
-                raise OAuth2Error(
-                    f"Token refresh failed with HTTP {response.status_code}: {response.text}"
-                )
-
-            response.raise_for_status()
-            response_data = response.json()
-
-        except requests.exceptions.Timeout as e:
-            raise OAuth2Error(
-                f"Token refresh timed out after {self.TIMEOUT} seconds"
-            ) from e
-        except requests.exceptions.ConnectionError as e:
-            raise OAuth2Error(
-                f"Failed to connect to OAuth2 token endpoint: {e}"
-            ) from e
-        except requests.exceptions.RequestException as e:
-            raise OAuth2Error(
-                f"Network error during token refresh: {e}"
-            ) from e
-        except requests.exceptions.JSONDecodeError as e:
-            raise OAuth2Error(
-                f"Invalid JSON response from token endpoint: {e}"
-            ) from e
+                    f"OAuth2 token refresh failed - invalid or expired refresh token: {e}"  # noqa: E501
+                ) from e
+            raise OAuth2Error(f"Failed to refresh access token: {e}") from e
 
         # Validate token response structure
         self._validate_token_response(response_data)
@@ -281,11 +224,7 @@ class OAuth2Manager:
 
     def _validate_token_response(self, response_data: dict[str, Any]) -> None:
         """
-        Validate OAuth2 token response structure with resilient token_type handling.
-
-        This method validates the OAuth2 token response but is resilient to missing
-        or non-standard token_type fields. The Jobber API might not always return
-        the token_type field, so this validation handles that gracefully.
+        Validate OAuth2 token response structure.
 
         Args:
             response_data: Response dictionary from token endpoint
@@ -295,7 +234,7 @@ class OAuth2Manager:
         """
         if not isinstance(response_data, dict):
             raise OAuth2Error(
-                f"Invalid token response format: expected dictionary, got {type(response_data)}"
+                f"Invalid token response format: expected dictionary, got {type(response_data)}"  # noqa: E501
             )
 
         # Check for OAuth2 error response
@@ -319,16 +258,9 @@ class OAuth2Manager:
                 f"Invalid token response: missing required fields {missing_fields}"
             )
 
-        # FIXED: Make token_type validation resilient
-        # The Jobber API might not always return the token_type field, and the code
-        # should be more resilient to this. Instead of raising an error if the 
-        # token_type is not 'bearer', we simply ignore the token_type if it's 
-        # present and not 'bearer'.
-        token_type = response_data.get("token_type")
-        if token_type is not None:
-            # Only validate if token_type is present, and use case-insensitive comparison
-            # If it's not 'bearer' (any case), we just ignore it rather than raising an error
-            if token_type.casefold() != "bearer":
-                # Log or ignore non-bearer token types silently
-                # The Jobber API may not include this field or may use different values
-                pass
+        # Validate token type if present (optional for some providers like Jobber)
+        token_type = response_data.get("token_type", "bearer")
+        if token_type and token_type.casefold() != "bearer".casefold():
+            raise OAuth2Error(
+                f"Unsupported token type: expected 'Bearer', got '{token_type}'"
+            )
