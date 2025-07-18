@@ -166,35 +166,3 @@ def is_token_valid(token: str) -> bool:
     except jwt.DecodeError:
         return False
 
-
-def extract_token_expiration_for_storage(token: str) -> str:
-    """
-    Extract expiration from JWT token and return as ISO format string for storage.
-
-    This function extracts the 'exp' claim from a JWT token and converts it to
-    an ISO 8601 formatted string suitable for database storage. This eliminates
-    the need to rely on the unreliable expires_in field from token responses.
-
-    Args:
-        token: JWT access token string
-
-    Returns:
-        ISO 8601 formatted expiration timestamp string
-
-    Raises:
-        OAuth2Error: If token is malformed or missing expiration claim
-                     or if expires_in field was needed but token has no exp claim
-
-    Example:
-        >>> token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
-        >>> expires_at = extract_token_expiration_for_storage(token)
-        >>> # Store expires_at in database instead of calculating from expires_in
-    """
-    expiration = get_token_expiration(token)
-    if expiration is None:
-        raise OAuth2Error(
-            "JWT token missing expiration claim. Cannot determine token lifetime. "
-            "This may indicate a non-standard token format from the Jobber API."
-        )
-    
-    return expiration.isoformat()
