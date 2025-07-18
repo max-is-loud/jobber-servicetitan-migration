@@ -16,8 +16,8 @@ A command-line tool for extracting client and invoice data from Jobber GraphQL A
 
 ## Requirements
 
-- Python 3.8 or higher
 - Valid Jobber API access (either OAuth2 app or API token)
+
 - Internet connection for API access
 
 ## Installation
@@ -258,6 +258,7 @@ The tool provides clear error messages and appropriate exit codes:
 
 ## Troubleshooting
 
+=======
 ### Verifying OAuth2 Setup
 
 To verify your OAuth2 authentication configuration is working correctly, use the built-in status command:
@@ -279,6 +280,7 @@ This command will:
 - 📋 Report detailed status and troubleshooting tips
 
 ### Missing JOBBER_TOKEN
+
 
 ### Authentication Issues
 
