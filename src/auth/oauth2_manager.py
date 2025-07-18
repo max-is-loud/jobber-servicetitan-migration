@@ -9,7 +9,6 @@ code exchange for tokens, and token refresh operations.
 import secrets
 from typing import Any, Optional
 from urllib.parse import urlencode
-
 from ..clients.http_client import HttpClient
 from ..exceptions import ConfigurationError, OAuth2Error
 
@@ -36,6 +35,7 @@ class OAuth2Manager:
         client_secret: str,
         redirect_uri: str,
         http_client: Optional[HttpClient] = None,
+
     ) -> None:
         """
         Initialize OAuth2Manager with application credentials.
@@ -180,7 +180,6 @@ class OAuth2Manager:
             - access_token: New bearer token for API requests
             - refresh_token: New refresh token (may be the same or rotated)
             - expires_in: Token expiration time in seconds
-            - token_type: Token type (typically "Bearer")
 
         Raises:
             ConfigurationError: If refresh token is invalid or expired
