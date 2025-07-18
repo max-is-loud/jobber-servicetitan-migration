@@ -75,6 +75,7 @@ class AuthProvider:
         token_data = self.repository.get_oauth_tokens()
         if not token_data:
             raise ConfigurationError(
+
                 "No OAuth2 tokens found. Please complete OAuth2 authorization "
                 "using the CLI command 'tightbeam oauth init'."
             )
