@@ -73,12 +73,44 @@ class EntityMapper:
             MappingError: If required fields are missing or invalid
         """
         try:
-            # TODO: Implement Invoice mapping logic
-            # Transform: invoiceNumber -> number, invoiceStatus -> status
-            # Extract: client.id for client_id foreign key
-            # Convert: amounts.total to total_cents (multiply by 100)
-            # Convert: issuedDate ISO8601DateTime to string
-            raise NotImplementedError("Invoice mapping not yet implemented")
+            # Extract required fields with validation
+            invoice_id = data.get("id")
+            if not invoice_id:
+                raise MappingError("Invoice ID is required but missing")
+
+            # Extract client ID from client relationship
+            client = data.get("client", {})
+            client_id = ""
+            if isinstance(client, dict):
+                client_id = client.get("id", "")
+            if not client_id:
+                raise MappingError("Invoice client ID is required but missing")
+
+            # Extract invoice number
+            number = data.get("invoiceNumber", "")
+
+            # Extract and convert total amount to cents
+            amounts = data.get("amounts", {})
+            total_amount = None
+            if isinstance(amounts, dict):
+                total_amount = amounts.get("total")
+            total_cents = self._convert_to_cents(total_amount)
+
+            # Extract invoice status
+            status = data.get("invoiceStatus", "")
+
+            # Format issued date
+            issued_at = self._format_iso_datetime(data.get("issuedDate"))
+
+            return Invoice(
+                id=invoice_id,
+                client_id=client_id,
+                number=number,
+                total_cents=total_cents,
+                status=status,
+                issued_at=issued_at,
+            )
+
         except Exception as e:
             raise MappingError(f"Failed to map Invoice data: {e}") from e
 
