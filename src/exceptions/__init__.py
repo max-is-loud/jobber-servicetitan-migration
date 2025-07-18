@@ -85,10 +85,32 @@ class RepositoryError(TightBeamError):
     pass
 
 
+class OAuth2Error(TightBeamError):
+    """Raised when OAuth2 authentication and token management operations fail.
+
+    This exception is raised when:
+    - OAuth2 authorization flow failures (invalid authorization codes)
+    - Token exchange failures with Jobber OAuth API
+    - Access token refresh failures or invalid refresh tokens  
+    - JWT token validation errors (expired, malformed, invalid signatures)
+    - OAuth2 token storage or retrieval failures
+
+    Examples:
+        - Invalid or expired authorization codes
+        - Network failures during token exchange
+        - Malformed JWT tokens or signature validation failures
+        - Refresh token rotation failures
+        - Token storage database errors
+    """
+
+    pass
+
+
 __all__ = [
     "TightBeamError",
     "ConfigurationError",
     "JobberApiError",
     "MappingError",
     "RepositoryError",
+    "OAuth2Error",
 ]
