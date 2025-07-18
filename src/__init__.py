@@ -15,6 +15,9 @@ from .repositories import Repository
 from .interfaces import Logger
 from .loggers import ConsoleLogger
 
+# Coordination components
+from .coordinators import MigrationCoordinator
+
 # Exception classes for error handling
 from .exceptions import (
     TightBeamError,
@@ -37,6 +40,8 @@ __all__ = [
     # Logging components
     "Logger",
     "ConsoleLogger",
+    # Coordination components
+    "MigrationCoordinator",
     # Exception classes
     "TightBeamError",
     "ConfigurationError",
