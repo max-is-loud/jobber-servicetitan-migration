@@ -5,32 +5,33 @@ and persisting it to SQLite database using object-oriented architecture.
 """
 
 # Core components for Phase 3 integration
-from .auth import AuthProvider
+from .auth import AuthProvider, OAuthProvider
 from .clients import JobberClient
-from .mappers import EntityMapper
-from .models import Client, Invoice, MigrationSummary
-from .repositories import Repository
-
-# Logging components
-from .interfaces import Logger
-from .loggers import ConsoleLogger
 
 # Coordination components
 from .coordinators import MigrationCoordinator
 
 # Exception classes for error handling
 from .exceptions import (
-    TightBeamError,
     ConfigurationError,
     JobberApiError,
     MappingError,
     RepositoryError,
+    TightBeamError,
 )
+
+# Logging components
+from .interfaces import Logger
+from .loggers import ConsoleLogger
+from .mappers import EntityMapper
+from .models import Client, Invoice, MigrationSummary
+from .repositories import Repository
 
 __version__ = "0.1.0"
 __all__ = [
     # Core components
     "AuthProvider",
+    "OAuthProvider",
     "JobberClient",
     "EntityMapper",
     "Client",
