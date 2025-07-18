@@ -365,11 +365,12 @@ TightBeam v2 includes intelligent rate limiting to respect Jobber API limits whi
 
 ### Overview
 
-- **Token Bucket Algorithm**: 500 token capacity with 120 tokens/minute refill rate
+- **Token Bucket Algorithm**: 100 token capacity with 60 tokens/minute refill rate
 - **Exponential Backoff**: Automatic retry with jitter for rate limit errors (HTTP 429 and GraphQL throttling)
-- **Burst Protection**: Starts with only 50 tokens to prevent initial throttling
-- **Sustained Rate**: Targets 100-120 requests/minute for optimal performance
-- **Extended Retries**: Up to 10 retry attempts with longer backoff delays (2-120 seconds)
+- **Burst Protection**: Starts with only 10 tokens to prevent initial throttling
+- **Page Delays**: Mandatory 2-second delay between pagination requests
+- **Sustained Rate**: Targets 50-60 requests/minute for maximum reliability
+- **Extended Retries**: Up to 15 retry attempts with longer backoff delays (5-300 seconds)
 - **Automatic Throttling**: Seamlessly delays requests when limits are approached
 
 ### Rate Limiting Metrics
