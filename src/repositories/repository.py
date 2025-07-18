@@ -62,6 +62,18 @@ class Repository:
             """
             cursor.execute(invoices_schema)
 
+            # Create oauth_tokens table for OAuth2 token storage
+            oauth_tokens_schema = """
+                CREATE TABLE IF NOT EXISTS oauth_tokens (
+                    id INTEGER PRIMARY KEY,
+                    access_token TEXT NOT NULL,
+                    refresh_token TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """
+            cursor.execute(oauth_tokens_schema)
+
             self._connection.commit()
             cursor.close()
 
@@ -420,3 +432,100 @@ class Repository:
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve all invoices: {e}") from e
+
+    def save_oauth_tokens(
+        self, access_token: str, refresh_token: str, expires_at: str
+    ) -> None:
+        """Save OAuth2 tokens to the database.
+
+        Stores access token, refresh token, and expiration information in the oauth_tokens
+        table. Uses INSERT OR REPLACE to maintain only one set of tokens at a time.
+        Includes created_at timestamp for audit purposes.
+
+        Args:
+            access_token: OAuth2 access token for API authentication
+            refresh_token: OAuth2 refresh token for token renewal
+            expires_at: ISO 8601 formatted expiration timestamp
+
+        Raises:
+            RepositoryError: If database operation fails
+        """  # noqa: E501
+        try:
+            cursor = self._connection.cursor()
+
+            # Clear existing tokens and insert new ones (maintain single token set)
+            cursor.execute("DELETE FROM oauth_tokens")
+
+            # Insert new tokens with current timestamp
+            cursor.execute(
+                """INSERT INTO oauth_tokens
+                   (access_token, refresh_token, expires_at, created_at)
+                   VALUES (?, ?, ?, datetime('now'))""",
+                (access_token, refresh_token, expires_at),
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save OAuth tokens: {e}") from e
+
+    def get_oauth_tokens(self) -> Optional[dict[str, str]]:
+        """Retrieve OAuth2 tokens from the database.
+
+        Fetches the most recently stored OAuth tokens including access token,
+        refresh token, expiration time, and creation timestamp.
+
+        Returns:
+            Dictionary containing token information with keys:
+            - access_token: OAuth2 access token
+            - refresh_token: OAuth2 refresh token
+            - expires_at: ISO 8601 formatted expiration timestamp
+            - created_at: ISO 8601 formatted creation timestamp
+            Returns None if no tokens are stored.
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                """SELECT access_token, refresh_token, expires_at, created_at
+                   FROM oauth_tokens
+                   ORDER BY id DESC
+                   LIMIT 1"""
+            )
+            row = cursor.fetchone()
+            cursor.close()
+
+            if row:
+                return {
+                    "access_token": row[0],
+                    "refresh_token": row[1],
+                    "expires_at": row[2],
+                    "created_at": row[3],
+                }
+
+            return None
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve OAuth tokens: {e}") from e
+
+    def clear_oauth_tokens(self) -> None:
+        """Clear all OAuth2 tokens from the database.
+
+        Removes all stored OAuth tokens, effectively logging out the user from
+        OAuth2 authentication. This is useful for logout operations or when
+        tokens become invalid.
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute("DELETE FROM oauth_tokens")
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to clear OAuth tokens: {e}") from e
