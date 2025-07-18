@@ -654,6 +654,145 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to save invoices batch: {e}") from e
 
+    def save_quotes(self, quotes: List[Quote]) -> None:
+        """Batch save multiple quotes to the database.
+
+        Efficiently handles List[Quote] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            quotes: List of Quote entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not quotes:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            quote_data = [
+                (
+                    quote.id,
+                    quote.client_id,
+                    quote.quote_number,
+                    quote.title,
+                    quote.total,
+                    quote.subtotal,
+                    quote.disclaimer,
+                    quote.line_items,
+                    quote.created_at,
+                    quote.transitioned_at,
+                    quote.updated_at,
+                )
+                for quote in quotes
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO quotes
+                   (id, client_id, quote_number, title, total, subtotal, disclaimer, line_items, created_at, transitioned_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                quote_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save quotes batch: {e}") from e
+
+    def save_notes(self, notes: List[Note]) -> None:
+        """Batch save multiple notes to the database.
+
+        Efficiently handles List[Note] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            notes: List of Note entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not notes:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            note_data = [
+                (
+                    note.id,
+                    note.entity_type,
+                    note.entity_id,
+                    note.message,
+                    note.created_at,
+                    note.updated_at,
+                )
+                for note in notes
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO notes
+                   (id, entity_type, entity_id, message, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                note_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save notes batch: {e}") from e
+
+    def save_attachments(self, attachments: List[Attachment]) -> None:
+        """Batch save multiple attachments to the database.
+
+        Efficiently handles List[Attachment] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            attachments: List of Attachment entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not attachments:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            attachment_data = [
+                (
+                    attachment.id,
+                    attachment.note_id,
+                    attachment.file_name,
+                    attachment.content_type,
+                    attachment.original_url,
+                    attachment.local_file_path,
+                    attachment.file_size,
+                    attachment.created_at,
+                )
+                for attachment in attachments
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO attachments
+                   (id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                attachment_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save attachments batch: {e}") from e
+
     def get_all_clients(self) -> List[Client]:
         """Retrieve all clients from the database.
 
