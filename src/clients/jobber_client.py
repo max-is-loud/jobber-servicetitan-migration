@@ -3,15 +3,15 @@ JobberClient module for GraphQL API communication with Jobber.
 
 This module provides the JobberClient class which handles all communication
 with the Jobber GraphQL API, including authentication, query execution,
-and response handling.
+and response handling. The client supports both environment token and
+OAuth2 authentication with automatic token refresh.
 """
 
 from typing import Any, Optional
 
-import requests
-
 from ..auth.auth_provider import AuthProvider
-from ..exceptions import ConfigurationError, JobberApiError
+from ..exceptions import ConfigurationError, JobberApiError, OAuth2Error
+from .http_client import HttpClient
 
 
 class JobberClient:
@@ -23,15 +23,17 @@ class JobberClient:
     processing. It provides methods to fetch clients and invoices data
     from the Jobber platform.
 
+    The class integrates with the enhanced AuthProvider to support both
+    environment token authentication (JOBBER_TOKEN) and OAuth2 authentication
+    with automatic token refresh. OAuth2 tokens are automatically refreshed
+    when expired, providing seamless API access without user intervention.
+
     The class follows the established dependency injection pattern and
-    integrates with the AuthProvider for secure API authentication.
+    maintains full backward compatibility with existing authentication methods.
     """
 
     # Jobber GraphQL API endpoint
     API_URL = "https://api.getjobber.com/api/graphql"
-
-    # Request timeout configuration (connect, read) in seconds
-    TIMEOUT = (10, 30)
 
     # GraphQL query for fetching clients with cursor pagination
     CLIENTS_QUERY = """
@@ -90,15 +92,22 @@ class JobberClient:
         Initialize the JobberClient with authentication provider.
 
         Args:
-            auth_provider: AuthProvider instance for API authentication
+            auth_provider: AuthProvider instance for API authentication.
+                          Supports both environment token (JOBBER_TOKEN)
+                          and OAuth2 authentication with automatic refresh.
         """
         self.auth_provider = auth_provider
+        self.http_client = HttpClient()
 
     def _execute_graphql_request(
         self, query: str, cursor: Optional[str] = None
     ) -> dict[str, Any]:
         """
         Execute a GraphQL request with comprehensive error handling.
+
+        This method handles authentication automatically, including OAuth2 token
+        refresh when needed. For OAuth2 users, expired tokens are automatically
+        refreshed transparently. Environment token users see no changes in behavior.
 
         Args:
             query: GraphQL query string to execute
@@ -109,62 +118,39 @@ class JobberClient:
 
         Raises:
             ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
             JobberApiError: If API communication fails
         """
         try:
-            # Get authentication headers (may raise ConfigurationError)
+            # Get authentication headers with automatic OAuth2 token refresh
+            # This may raise ConfigurationError or OAuth2Error
             headers = self.auth_provider.get_headers()
+
+        except ConfigurationError:
+            # Re-raise configuration errors as-is (includes OAuth2 auth failures)
+            raise
+
+        except OAuth2Error as e:
+            # Convert OAuth2 errors to user-friendly configuration errors
+            raise ConfigurationError(
+                f"OAuth2 authentication failed: {e}. "
+                "Please re-authorize using 'tightbeam oauth init' or set JOBBER_TOKEN."
+            ) from None
+
         except Exception as e:
-            raise ConfigurationError(f"Authentication configuration failed: {e}") from e
+            # Catch any other unexpected authentication errors
+            raise ConfigurationError(
+                f"Authentication failed: {e}. "
+                "Please verify your authentication configuration."
+            ) from e
 
         # Prepare GraphQL payload
         payload = {"query": query, "variables": {"cursor": cursor}}
 
-        try:
-            # Make HTTP POST request to Jobber API with timeout
-            response = requests.post(
-                self.API_URL, headers=headers, json=payload, timeout=self.TIMEOUT
-            )
-
-            # Handle HTTP status code errors
-            if response.status_code == 401:
-                raise ConfigurationError(
-                    "Invalid or expired JOBBER_TOKEN. Please check your authentication credentials."
-                )
-            elif response.status_code == 403:
-                raise ConfigurationError(
-                    "Access forbidden. Your JOBBER_TOKEN may not have sufficient permissions."
-                )
-            elif response.status_code >= 400:
-                raise JobberApiError(
-                    f"Jobber API returned HTTP {response.status_code}: {response.text}"
-                )
-
-            # Check for successful status (will raise HTTPError for 4xx/5xx if we missed any)
-            response.raise_for_status()
-
-        except requests.exceptions.Timeout as e:
-            raise JobberApiError(
-                f"Request to Jobber API timed out after {self.TIMEOUT} seconds. "
-                "Please check your network connection or try again later."
-            ) from e
-        except requests.exceptions.ConnectionError as e:
-            raise JobberApiError(
-                f"Failed to connect to Jobber API at {self.API_URL}. "
-                "Please check your network connection and API endpoint."
-            ) from e
-        except requests.exceptions.RequestException as e:
-            raise JobberApiError(
-                f"Network error occurred while contacting Jobber API: {e}"
-            ) from e
-
-        # Parse JSON response
-        try:
-            response_data = response.json()
-        except requests.exceptions.JSONDecodeError as e:
-            raise JobberApiError(
-                f"Invalid JSON response from Jobber API. Response: {response.text[:200]}..."
-            ) from e
+        # Use shared HttpClient for HTTP communication
+        response_data = self.http_client.post(
+            url=self.API_URL, headers=headers, json=payload
+        )
 
         # Validate response structure and check for GraphQL errors
         self._validate_graphql_response(response_data)
@@ -184,7 +170,7 @@ class JobberClient:
         # Check if response is a dictionary
         if not isinstance(response_data, dict):
             raise JobberApiError(
-                f"Invalid response format: expected dictionary, got {type(response_data)}"
+                f"Invalid response format: expected dictionary, got {type(response_data)}"  # noqa: E501
             )
 
         # Check for GraphQL errors
@@ -212,8 +198,9 @@ class JobberClient:
         """
         Fetch clients data from Jobber GraphQL API.
 
-        Retrieves client information using cursor-based pagination.
-        Constructs GraphQL query, makes HTTP POST request, and processes response.
+        Retrieves client information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
 
         Args:
             cursor: Optional cursor for pagination (None for first page)
@@ -224,6 +211,7 @@ class JobberClient:
         Raises:
             JobberApiError: If API communication fails
             ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
         """
         try:
             response_data = self._execute_graphql_request(self.CLIENTS_QUERY, cursor)
@@ -250,8 +238,9 @@ class JobberClient:
         """
         Fetch invoices data from Jobber GraphQL API.
 
-        Retrieves invoice information using cursor-based pagination.
-        Constructs GraphQL query, makes HTTP POST request, and processes response.
+        Retrieves invoice information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
 
         Args:
             cursor: Optional cursor for pagination (None for first page)
@@ -262,6 +251,7 @@ class JobberClient:
         Raises:
             JobberApiError: If API communication fails
             ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
         """
         try:
             response_data = self._execute_graphql_request(self.INVOICES_QUERY, cursor)
