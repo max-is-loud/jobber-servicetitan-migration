@@ -11,6 +11,10 @@ from .mappers import EntityMapper
 from .models import Client, Invoice
 from .repositories import Repository
 
+# Logging components
+from .interfaces import Logger
+from .loggers import ConsoleLogger
+
 # Exception classes for error handling
 from .exceptions import (
     TightBeamError,
@@ -29,6 +33,9 @@ __all__ = [
     "Client",
     "Invoice",
     "Repository",
+    # Logging components
+    "Logger",
+    "ConsoleLogger",
     # Exception classes
     "TightBeamError",
     "ConfigurationError",
