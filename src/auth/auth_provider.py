@@ -1,8 +1,8 @@
-"""AuthProvider class for handling Jobber API authentication."""
+"""AuthProvider class for handling Jobber API OAuth2 authentication."""
 
 import os
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ..exceptions import ConfigurationError, OAuth2Error
 from .token_utils import is_token_expired
@@ -14,100 +14,63 @@ if TYPE_CHECKING:
 
 class AuthProvider:
     """
-    Handles authentication for Jobber API with OAuth2 and environment token support.
+    Handles OAuth2 authentication for Jobber API with automatic token management.
 
-    This class provides a clean interface for authentication concerns throughout
-    the application, following the single responsibility principle by only
-    handling token access and validation.
+    This class provides a clean interface for OAuth2 authentication concerns throughout
+    the application, following the single responsibility principle by only handling
+    token access, validation, and automatic refresh.
 
-    The class supports two authentication modes:
-    1. Environment token mode: Uses JOBBER_TOKEN environment variable (backward compatible)
-    2. OAuth2 mode: Uses OAuth2 tokens with automatic refresh capability
+    The class requires OAuth2 configuration through environment variables:
+    - JOBBER_CLIENT_ID: OAuth2 client ID from Jobber Developer Center
+    - JOBBER_CLIENT_SECRET: OAuth2 client secret from Jobber Developer Center
+    - JOBBER_REDIRECT_URI: OAuth2 redirect URI for authorization flow
 
-    For backward compatibility, JOBBER_TOKEN always takes precedence when present.
-    OAuth2 features are optional and additive only.
-    """  # noqa: E501
+    OAuth2 tokens are automatically refreshed when expired, and the class will
+    initiate new authorization flows when needed.
+    """
 
     def __init__(
         self,
-        oauth_manager: Optional["OAuth2Manager"] = None,
-        repository: Optional["Repository"] = None,
+        oauth_manager: "OAuth2Manager",
+        repository: "Repository",
     ) -> None:
         """
-        Initialize AuthProvider with optional OAuth2 dependencies.
-
-        Constructor maintains backward compatibility by requiring no dependencies.
-        OAuth2 features are only available when both oauth_manager and repository
-        are provided.
+        Initialize AuthProvider with required OAuth2 dependencies.
 
         Args:
-            oauth_manager: Optional OAuth2Manager for token refresh operations
-            repository: Optional Repository for OAuth token storage/retrieval
+            oauth_manager: OAuth2Manager for token refresh and authorization operations
+            repository: Repository for OAuth token storage/retrieval
+
+        Raises:
+            ConfigurationError: If required dependencies are not provided
         """
+        if oauth_manager is None:
+            raise ConfigurationError(
+                "OAuth2Manager is required. AuthProvider only supports OAuth2 authentication."  # noqa: E501
+            )
+        if repository is None:
+            raise ConfigurationError("Repository is required for OAuth2 token storage.")
+
         self.oauth_manager = oauth_manager
         self.repository = repository
 
     def get_token(self) -> str:
         """
-        Get and validate the Jobber API token from environment.
+        Get a valid Jobber API OAuth2 access token with automatic refresh.
 
-        Legacy method maintained for backward compatibility. This method only
-        reads from the JOBBER_TOKEN environment variable and does not support
-        OAuth2 token management or automatic refresh.
-
-        For applications requiring OAuth2 support, use get_valid_token() instead.
-
-        Returns:
-            str: The validated Jobber API token from environment
-
-        Raises:
-            ConfigurationError: If JOBBER_TOKEN environment variable is missing,
-                               empty, or contains only whitespace
-        """
-        token = os.environ.get("JOBBER_TOKEN")
-
-        if not token or not token.strip():
-            raise ConfigurationError(
-                "JOBBER_TOKEN environment variable is required but not set. "
-                "Please set the JOBBER_TOKEN environment variable with a valid "
-                "Jobber API access token."
-            )
-
-        return token.strip()
-
-    def get_valid_token(self) -> str:
-        """
-        Get a valid Jobber API token with automatic OAuth2 refresh support.
-
-        This method implements the primary authentication logic with OAuth2 support:
-        1. First checks JOBBER_TOKEN environment variable (backward compatibility)
-        2. If not found and OAuth2 is configured, retrieves stored OAuth tokens
-        3. Checks token expiration and auto-refreshes if needed
-        4. Returns a valid access token
+        This method implements the primary authentication logic:
+        1. Retrieves stored OAuth2 tokens from repository
+        2. Checks token expiration and auto-refreshes if needed
+        3. Returns a valid access token
+        4. If no tokens exist, raises ConfigurationError with setup instructions
 
         Returns:
-            str: Valid Jobber API access token
+            str: Valid Jobber API OAuth2 access token
 
         Raises:
-            ConfigurationError: If no authentication method is available or configured
+            ConfigurationError: If no OAuth2 tokens are found or refresh fails
             OAuth2Error: If OAuth token operations fail
         """
-        # Prioritize environment token for backward compatibility
-        env_token = os.environ.get("JOBBER_TOKEN")
-        if env_token and env_token.strip():
-            return env_token.strip()
-
-        # Check OAuth2 configuration
-        if not self.is_oauth_configured():
-            raise ConfigurationError(
-                "No authentication method available. Please set JOBBER_TOKEN "
-                "environment variable or configure OAuth2 authentication."
-            )
-
-        # Type narrowing: we know these are not None due to is_oauth_configured() check
-        assert self.repository is not None
-        assert self.oauth_manager is not None
-
         # Get stored OAuth tokens
         token_data = self.repository.get_oauth_tokens()
         if not token_data:
@@ -154,53 +117,67 @@ class AuthProvider:
         Generate HTTP headers for Jobber API requests.
 
         Creates a dictionary containing the Authorization header with the Bearer
-        token format required by Jobber's GraphQL API. Uses get_valid_token()
-        to support both environment tokens and OAuth2 with automatic refresh.
+        token format required by Jobber's GraphQL API. Uses OAuth2 tokens with
+        automatic refresh capability.
 
         Returns:
             dict[str, str]: HTTP headers dictionary with Authorization header
 
         Raises:
-            ConfigurationError: If no valid authentication method is available
+            ConfigurationError: If OAuth2 tokens are not available or refresh fails
             OAuth2Error: If OAuth token operations fail
 
         Example:
-            >>> auth = AuthProvider()
+            >>> auth = AuthProvider(oauth_manager, repository)
             >>> headers = auth.get_headers()
             >>> headers
             {'Authorization': 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...'}
         """
-        token = self.get_valid_token()
+        token = self.get_token()
         return {"Authorization": f"Bearer {token}"}
-
-    def is_oauth_configured(self) -> bool:
-        """
-        Check if OAuth2 dependencies are properly configured.
-
-        Returns True if both oauth_manager and repository are available,
-        enabling OAuth2 token management features.
-
-        Returns:
-            bool: True if OAuth2 is configured, False otherwise
-        """
-        return self.oauth_manager is not None and self.repository is not None
 
     def clear_stored_tokens(self) -> None:
         """
         Clear OAuth tokens from storage.
 
         Removes all stored OAuth2 tokens, effectively logging out the user from
-        OAuth2 authentication. This method only affects OAuth2 tokens and does
-        not modify environment variables.
+        OAuth2 authentication. The user will need to re-authorize using the
+        'tightbeam oauth init' command.
+        """
+        self.repository.clear_oauth_tokens()
+
+    @staticmethod
+    def get_oauth2_config() -> tuple[str, str, str]:
+        """
+        Get OAuth2 configuration from environment variables.
+
+        Returns:
+            Tuple of (client_id, client_secret, redirect_uri)
 
         Raises:
-            ConfigurationError: If OAuth2 is not configured
+            ConfigurationError: If required OAuth2 environment variables are missing
         """
-        if not self.is_oauth_configured():
+        client_id = os.environ.get("JOBBER_CLIENT_ID")
+        client_secret = os.environ.get("JOBBER_CLIENT_SECRET")
+        redirect_uri = os.environ.get("JOBBER_REDIRECT_URI")
+
+        missing_vars = []
+        if not client_id:
+            missing_vars.append("JOBBER_CLIENT_ID")
+        if not client_secret:
+            missing_vars.append("JOBBER_CLIENT_SECRET")
+        if not redirect_uri:
+            missing_vars.append("JOBBER_REDIRECT_URI")
+
+        if missing_vars:
             raise ConfigurationError(
-                "OAuth2 is not configured. Cannot clear OAuth tokens."
+                f"Missing required OAuth2 environment variables: {', '.join(missing_vars)}. "  # noqa: E501
+                "Please set these variables and run 'tightbeam oauth init' to authorize."  # noqa: E501
             )
 
-        # Type narrowing: we know repository is not None due to is_oauth_configured() check  # noqa: E501
-        assert self.repository is not None
-        self.repository.clear_oauth_tokens()
+        # Type narrowing: after the check above, we know these are not None
+        assert client_id is not None
+        assert client_secret is not None
+        assert redirect_uri is not None
+
+        return client_id, client_secret, redirect_uri

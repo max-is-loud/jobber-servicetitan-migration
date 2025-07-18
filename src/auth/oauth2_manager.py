@@ -65,7 +65,7 @@ class OAuth2Manager:
         self.redirect_uri = redirect_uri.strip()
         self.http_client = http_client or HttpClient()
 
-    def get_authorization_url(self, state: Optional[str] = None) -> str:
+    def get_authorization_url(self, state: Optional[str] = None) -> tuple[str, str]:
         """
         Generate OAuth2 authorization URL for user authorization.
 
@@ -78,11 +78,11 @@ class OAuth2Manager:
                   random state will be generated using secrets.token_urlsafe()
 
         Returns:
-            Complete authorization URL with all required parameters
+            Tuple containing (authorization_url, state) for CSRF protection
 
         Example:
             >>> manager = OAuth2Manager(client_id, client_secret, redirect_uri)
-            >>> auth_url = manager.get_authorization_url("my_custom_state")
+            >>> auth_url, state = manager.get_authorization_url("my_custom_state")
             >>> # User visits auth_url and authorizes the application
         """
         if state is None:
@@ -96,7 +96,9 @@ class OAuth2Manager:
         }
 
         query_string = urlencode(params)
-        return f"{self.AUTHORIZATION_URL}?{query_string}"
+        authorization_url = f"{self.AUTHORIZATION_URL}?{query_string}"
+
+        return authorization_url, state
 
     def exchange_code_for_tokens(self, authorization_code: str) -> dict[str, Any]:
         """
