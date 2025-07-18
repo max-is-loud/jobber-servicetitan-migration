@@ -3,9 +3,13 @@
 import os
 import sqlite3
 import sys
+import threading
+import time
 import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Annotated, Optional
+from urllib.parse import parse_qs, urlparse
 
 import typer
 from dotenv import load_dotenv
@@ -47,14 +51,15 @@ app.add_typer(oauth_app, name="oauth")
 def init() -> None:
     """
     Initialize OAuth authentication setup.
-    
     Guides you through setting up the required environment variables
     for Jobber API OAuth authentication.
     """
     typer.echo("🔧 TightBeam OAuth Setup")
     typer.echo("========================")
     typer.echo()
-    typer.echo("To authenticate with the Jobber API, you need to set up the following environment variables:")
+    typer.echo(
+        "To authenticate with the Jobber API, you need to set up the following environment variables:"  # noqa: E501
+    )
     typer.echo()
     typer.echo("Required OAuth Environment Variables:")
     typer.echo("  • JOBBER_CLIENT_ID - Your Jobber application's client ID")
@@ -75,86 +80,8 @@ def init() -> None:
     typer.echo("📖 https://developer.getjobber.com/docs/authentication")
 
 
-# Create OAuth subcommand group
-oauth_app = typer.Typer(help="OAuth2 authentication management commands")
-app.add_typer(oauth_app, name="oauth")
-
-
-@oauth_app.command()
-def status() -> None:
-    """
-    Check the status of OAuth2 authentication configuration.
-    
-    Verifies that the JOBBER_TOKEN environment variable is set and validates
-    the token by making a test API call to the Jobber GraphQL endpoint.
-    This helps troubleshoot authentication issues before running data migration.
-    """
-    try:
-        # Test authentication configuration
-        auth_provider = AuthProvider()
-        
-        # Check if token is available
-        typer.echo("🔍 Checking OAuth2 configuration...")
-        token = auth_provider.get_token()
-        typer.echo("✅ JOBBER_TOKEN environment variable is set")
-        
-        # Test API connectivity with a minimal query
-        typer.echo("🔗 Testing API connectivity...")
-        jobber_client = JobberClient(auth_provider)
-        
-        # Use a simple introspection query to validate the token
-        test_query = """
-        query TestConnection {
-          __schema {
-            queryType {
-              name
-            }
-          }
-        }
-        """
-        
-        # Make test API call
-        response = jobber_client._execute_graphql_request(test_query)
-        
-        # Check if we got a valid response
-        if response and "data" in response:
-            typer.echo("✅ OAuth2 token is valid and API is accessible")
-            typer.echo("🎉 Authentication setup is working correctly!")
-        else:
-            typer.echo("⚠️  API returned unexpected response format", err=True)
-            typer.echo("Please verify your token permissions.", err=True)
-            sys.exit(1)
-            
-    except ConfigurationError as e:
-        typer.echo("❌ Configuration Error:", err=True)
-        typer.echo(f"   {e}", err=True)
-        typer.echo("\n💡 To fix this:", err=True)
-        typer.echo("   1. Set JOBBER_TOKEN environment variable:", err=True)
-        typer.echo("      export JOBBER_TOKEN=\"your_token_here\"", err=True)
-        typer.echo("   2. Or create a .env file with:", err=True)
-        typer.echo("      JOBBER_TOKEN=your_token_here", err=True)
-        sys.exit(1)
-        
-    except JobberApiError as e:
-        typer.echo("❌ API Connection Error:", err=True)
-        typer.echo(f"   {e}", err=True)
-        typer.echo("\n💡 To fix this:", err=True)
-        typer.echo("   1. Check your internet connection", err=True)
-        typer.echo("   2. Verify your token is not expired", err=True)
-        typer.echo("   3. Ensure your token has proper permissions", err=True)
-        sys.exit(2)
-        
-    except Exception as e:
-        typer.echo("❌ Unexpected Error:", err=True)
-        typer.echo(f"   {e}", err=True)
-        typer.echo("Please report this issue with the full error message.", err=True)
-=======
 # OAuth2 command subgroup
-oauth_app = typer.Typer(
-    name="oauth",
-    help="OAuth2 authentication management commands",
-    add_completion=False,
-)
+oauth_app = typer.Typer(help="OAuth2 authentication management commands")
 app.add_typer(oauth_app, name="oauth")
 
 
@@ -276,10 +203,6 @@ def oauth_init(
 
 def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
     """Initialize OAuth2 flow with local callback server."""
-    import threading
-    import time
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-    from urllib.parse import parse_qs, urlparse
 
     # Storage for the authorization code
     auth_result: dict[str, Optional[str]] = {"code": None, "error": None, "state": None}
@@ -586,83 +509,94 @@ def oauth_callback(
 
 
 @oauth_app.command("status")
-def oauth_status(
-    db: Annotated[
-        Optional[Path], typer.Option(help="SQLite database path for token storage")
-    ] = None,
-) -> None:
+def oauth_status() -> None:
     """
-    Show current OAuth2 token status and expiration information.
-
-    Displays whether OAuth2 tokens are stored, their expiration status,
-    and OAuth2 configuration status.
+    Check the status of authentication configuration.
+    Shows current authentication mode and token status.
     """
-    try:
-        # Check OAuth2 configuration
-        try:
-            _get_oauth2_config()
-        except ConfigurationError:
-            typer.echo("🔑 Authentication Status: No OAuth2 Configuration")
-            typer.echo("=" * 50)
-            typer.echo("OAuth2 environment variables not found")
-            typer.echo()
-            typer.echo("Required OAuth2 environment variables:")
-            typer.echo("- JOBBER_CLIENT_ID")
-            typer.echo("- JOBBER_CLIENT_SECRET")
-            typer.echo("- JOBBER_REDIRECT_URI")
-            typer.echo()
-            typer.echo(
-                "After setting variables, run 'tightbeam oauth init' to authorize"
-            )
-            return
+    typer.echo("🔍 TightBeam Authentication Status")
+    typer.echo("==================================")
+    typer.echo()
 
-        # Check OAuth2 tokens
-        repository = _create_repository(db)
-        token_data = repository.get_oauth_tokens()
-
-        if not token_data:
-            typer.echo("🔑 Authentication Status: OAuth2 Not Authorized")
-            typer.echo("=" * 50)
-            typer.echo("OAuth2 configuration found but no tokens stored")
-            typer.echo("Run 'tightbeam oauth init' to authorize")
-            return
-
-        # Check token expiration
-        from .auth.token_utils import get_token_expiration, is_token_expired
-
-        access_token = token_data["access_token"]
-        created_at = token_data["created_at"]
-
-        typer.echo("🔑 Authentication Status: OAuth2 Active")
-        typer.echo("=" * 50)
-        typer.echo(f"Tokens created: {created_at}")
-
-        try:
-            expiration = get_token_expiration(access_token)
-            if expiration:
-                typer.echo(f"Token expires: {expiration.isoformat()}")
-
-                if is_token_expired(access_token):
-                    typer.echo(
-                        "⚠️ Token Status: EXPIRED (will auto-refresh on next use)"
-                    )
-                else:
-                    typer.echo("✅ Token Status: VALID")
-            else:
-                typer.echo("Token expiration: Unknown (no exp claim)")
-        except Exception:
-            typer.echo("Token expiration: Unable to determine")
-
+    # Check for environment token first
+    jobber_token = os.environ.get("JOBBER_TOKEN")
+    if jobber_token:
+        typer.echo("🔑 Authentication Mode: Environment Token")
+        typer.echo("✅ JOBBER_TOKEN environment variable is set")
         typer.echo()
-        typer.echo("OAuth2 authentication is ready for use!")
 
-    except RepositoryError as e:
-        typer.echo(f"Database Error: {e}", err=True)
-        sys.exit(4)
+        try:
+            # Test token with simple API call using HttpClient directly
+            http_client = HttpClient()
+            headers = {
+                "Authorization": f"Bearer {jobber_token}",
+                "Content-Type": "application/json",
+            }
 
-    except Exception as e:
-        typer.echo(f"Unexpected Error: {e}", err=True)
-        sys.exit(5)
+            # Test API call
+            test_query = {
+                "query": """
+                query TestConnection {
+                  __schema {
+                    queryType {
+                      name
+                    }
+                  }
+                }
+                """
+            }
+
+            response = http_client.post(
+                url="https://api.getjobber.com/api/graphql",
+                headers=headers,
+                json=test_query,
+            )
+
+            if response and "data" in response:
+                typer.echo("✅ Authentication token is valid and API is accessible")
+                typer.echo("🎉 Authentication setup is working correctly!")
+            else:
+                typer.echo("⚠️  API returned unexpected response format", err=True)
+
+        except Exception as e:
+            typer.echo("❌ Token validation failed:", err=True)
+            typer.echo(f"   {e}", err=True)
+        return
+
+    # Check OAuth2 configuration
+    try:
+        oauth_manager = _create_oauth2_manager()
+        repository = _create_repository()
+
+        # Check for stored tokens
+        stored_tokens = repository.get_oauth_tokens()
+
+        if stored_tokens:
+            typer.echo("🔑 Authentication Mode: OAuth2")
+            typer.echo("✅ OAuth2 tokens are stored")
+
+            # Test token validity
+            try:
+                auth_provider = AuthProvider(oauth_manager, repository)
+                auth_provider.get_token()  # Verify it works
+                typer.echo("✅ OAuth2 tokens are valid")
+                typer.echo("🎉 Authentication setup is working correctly!")
+            except Exception as e:
+                typer.echo("⚠️  OAuth2 token validation failed:", err=True)
+                typer.echo(f"   {e}", err=True)
+                typer.echo("💡 Try running 'tightbeam oauth init' to re-authorize")
+        else:
+            typer.echo("🔑 Authentication Mode: OAuth2 (Not Configured)")
+            typer.echo("⚠️  OAuth2 environment variables are set but no tokens stored")
+            typer.echo("💡 Run 'tightbeam oauth init' to complete OAuth2 setup")
+
+    except ConfigurationError:
+        typer.echo("🔑 Authentication Mode: Not Configured")
+        typer.echo("❌ No authentication configured")
+        typer.echo()
+        typer.echo("💡 To configure authentication:")
+        typer.echo("   Option 1: Set JOBBER_TOKEN environment variable")
+        typer.echo("   Option 2: Configure OAuth2 and run 'tightbeam oauth init'")
 
 
 @oauth_app.command("clear")
@@ -735,7 +669,7 @@ def migrate(
     Args:
         db: Path to SQLite database file (will be created if it doesn't exist)
         verbose: Enable verbose logging output for debugging
-    """
+    """  # noqa: E501
     connection = None
 
     try:
@@ -817,7 +751,9 @@ def migrate(
         # Configuration/environment issues
         typer.echo(f"Configuration Error: {e}", err=True)
         typer.echo("To configure authentication, you can either:", err=True)
-        typer.echo("  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True)
+        typer.echo(
+            "  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True
+        )  # noqa: E501
         typer.echo("  2. Manually set the following environment variables:", err=True)
         typer.echo("     - JOBBER_CLIENT_ID", err=True)
         typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
