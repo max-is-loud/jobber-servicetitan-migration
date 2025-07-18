@@ -1,7 +1,7 @@
 # TightBeam v2 MVP Development Plan
 
 *Created: 2025-07-15 15:15:03 (Vancouver)*
-*Last Updated: 2025-07-18 06:31:00 (Vancouver)*
+*Last Updated: 2025-07-18 12:37:07 (Vancouver)*
 
 ---
 
@@ -15,6 +15,206 @@
 - ✅ Comprehensive error handling, logging, and summary reporting are in place.
 - ✅ **PRODUCTION-VALIDATED**: Successfully migrated 9,771+ clients and invoices with ultra-conservative rate limiting.
 - ✅ **THROTTLING RESOLVED**: Robust GraphQL throttling detection and recovery implemented and tested.
+
+---
+
+## 🔄 PHASE 4: Enhanced Jobber Coverage (Feature Branch)
+
+**Status**: ⏳ PLANNED - Ready for implementation  
+**Branch**: `feature/enhanced-jobber-coverage`  
+**Target Completion**: ~13 days from start
+
+### Overview
+
+This feature branch extends TightBeam v2 to achieve parity with legacy Jobber export scripts, adding support for:
+
+- **Quotes/Estimates**: Complete extraction with line items, totals, and metadata
+- **Client Notes**: Full note extraction with client/job linkage
+- **Note Attachments**: Binary file download and local storage
+- **Expanded Invoice Support**: Due dates, line items, subtotals
+- **Multi-Contact Support**: All client emails and phone numbers
+
+### New Extractors (Following Existing OOP Patterns)
+
+1. **QuotesExtractor** (`src/extractors/quotes_extractor.py`)
+   - GraphQL queries for quotes with full field support
+   - Line item normalization (child table or JSONB)
+   - Quote number, title, timestamps, totals, disclaimer
+
+2. **NotesExtractor** (`src/extractors/notes_extractor.py`)
+   - Extract notes from multiple entities (clients, jobs, quotes, invoices)
+   - Maintain proper entity relationships
+   - Support for created_at timestamps and message content
+
+3. **AttachmentDownloader** (`src/extractors/attachment_downloader.py`)
+   - Download binary files from note attachments
+   - Handle file overwrites/conflicts
+   - Preserve original filenames
+   - Track metadata in attachments table
+
+4. **Enhanced Extractors** (Extend existing)
+   - `InvoiceExtractor`: Add due dates, subtotals, line items
+   - `ClientExtractor`: Add support for multiple emails/phones
+
+### Database Schema Enhancements
+
+```sql
+-- New Tables
+CREATE TABLE quotes (
+    id TEXT PRIMARY KEY,
+    client_id TEXT REFERENCES clients(id),
+    quote_number TEXT NOT NULL,
+    title TEXT,
+    total REAL,
+    subtotal REAL,
+    disclaimer TEXT,
+    line_items TEXT, -- JSONB
+    created_at TEXT,
+    transitioned_at TEXT,
+    updated_at TEXT
+);
+
+CREATE TABLE notes (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL, -- 'client', 'job', 'quote', 'invoice'
+    entity_id TEXT NOT NULL,
+    message TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
+
+CREATE TABLE attachments (
+    id TEXT PRIMARY KEY,
+    note_id TEXT REFERENCES notes(id),
+    file_name TEXT NOT NULL,
+    content_type TEXT,
+    original_url TEXT,
+    local_file_path TEXT,
+    file_size INTEGER,
+    created_at TEXT
+);
+
+-- Enhanced Tables
+-- invoices: Add due_date, subtotal, line_items columns
+-- clients: Add additional_emails, additional_phones columns
+```
+
+### CLI Commands Design (Optimized Structure)
+
+```bash
+# Primary migrate command (current behavior - all Jobber data)
+tightbeam migrate --db ./data.sqlite
+
+# Platform-specific migration commands
+tightbeam migrate jobber --db ./data.sqlite                    # All Jobber entities (default)
+tightbeam migrate jobber --db ./data.sqlite --entities clients # Only clients
+tightbeam migrate jobber --db ./data.sqlite --entities clients,invoices,quotes
+tightbeam migrate jobber --db ./data.sqlite --entities quotes,notes,attachments
+
+# Future platform support (extensible design)
+tightbeam migrate servicetitan --db ./data.sqlite              # Future: ServiceTitan
+tightbeam migrate housecallpro --db ./data.sqlite              # Future: HouseCall Pro
+
+# Available entity types for Jobber
+--entities clients,invoices,quotes,notes,attachments
+```
+
+**Command Structure Logic:**
+
+- `tightbeam migrate` → Defaults to all Jobber entities (backward compatibility)
+- `tightbeam migrate jobber` → All Jobber entities (explicit)
+- `tightbeam migrate jobber --entities <list>` → Specific Jobber entities
+- Future: `tightbeam migrate <platform>` → Support for other platforms
+
+### Implementation Milestones
+
+| Day | Deliverable | Details |
+|-----|-------------|---------|
+| 1-2 | Schema & Models | Design new tables, update models, create migrations |
+| 3-4 | CLI Architecture Refactor | Implement PlatformFactory, enhanced migrate command, entity filtering |
+| 5-6 | QuotesExtractor | Implement quotes extraction with line items |
+| 7-8 | NotesExtractor | Implement notes extraction across entities |
+| 9-10 | AttachmentDownloader | Binary file download and storage |
+| 11 | Enhanced Extractors | Update Invoice/Client extractors with additional fields |
+| 12 | Batch Operations & Integration | Implement batch operations and integrate all extractors |
+| 13 | Testing & Validation | End-to-end testing and backward compatibility validation |
+
+### Technical Requirements
+
+- **CLI Architecture Enhancement**:
+  - Implement `MigrationCoordinator` with platform abstraction
+  - Add `PlatformFactory` for extensible platform support
+  - Entity filtering via `--entities` flag with validation
+  - Backward compatibility for existing `migrate` command
+  
+- **GraphQL Query Optimization**: Fetch all available fields including nested objects
+
+- **File Storage Strategy**:
+  - Store attachments in `./attachments/{note_id}/{filename}`
+  - Handle filename conflicts with timestamp suffix
+  
+- **Error Handling**:
+  - Retry failed downloads with exponential backoff
+  - Continue processing on individual attachment failures
+  - Comprehensive error reporting
+  
+- **Performance**:
+  - Batch database operations
+  - Parallel attachment downloads (respecting rate limits)
+  - Progress reporting for large datasets
+
+### CLI Implementation Architecture
+
+```python
+# Enhanced CLI structure
+@app.command()
+def migrate(
+    db: str = typer.Option(..., "--db", help="Database file path"),
+    platform: str = typer.Argument("jobber", help="Platform to migrate from"),
+    entities: Optional[str] = typer.Option(None, "--entities", help="Comma-separated entity list"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging")
+):
+    """
+    Migrate data from specified platform to SQLite database.
+    
+    Examples:
+      tightbeam migrate --db ./data.sqlite                           # All Jobber entities
+      tightbeam migrate jobber --db ./data.sqlite                    # All Jobber entities 
+      tightbeam migrate jobber --entities clients,quotes --db ./data.sqlite
+    """
+    
+# Platform Factory Pattern
+class PlatformFactory:
+    @staticmethod
+    def create_coordinator(platform: str, entities: Optional[list[str]]) -> MigrationCoordinator:
+        if platform == "jobber":
+            return JobberMigrationCoordinator(entities)
+        elif platform == "servicetitan":
+            return ServiceTitanMigrationCoordinator(entities)  # Future
+        else:
+            raise ValueError(f"Unsupported platform: {platform}")
+
+# Enhanced Migration Coordinator
+class JobberMigrationCoordinator:
+    def __init__(self, entities: Optional[list[str]] = None):
+        self.entities = entities or ["clients", "invoices", "quotes", "notes", "attachments"]
+        self.validate_entities()
+    
+    def validate_entities(self):
+        valid_entities = {"clients", "invoices", "quotes", "notes", "attachments"}
+        invalid = set(self.entities) - valid_entities
+        if invalid:
+            raise ValueError(f"Invalid entities: {invalid}")
+```
+
+### Success Criteria
+
+- ✅ All quotes from Jobber present in SQLite with complete metadata
+- ✅ All notes extracted with correct entity relationships
+- ✅ All note attachments downloaded and tracked
+- ✅ Invoice and Client tables enhanced with additional fields
+- ✅ CLI reports accurate counts for each entity type
+- ✅ Zero data loss compared to legacy export scripts
 
 ---
 
