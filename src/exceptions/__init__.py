@@ -106,6 +106,37 @@ class OAuth2Error(TightBeamError):
     pass
 
 
+class RateLimitError(JobberApiError):
+    """Raised when API rate limiting is encountered.
+
+    This exception is raised when:
+    - API request rate exceeds configured limits (429 Too Many Requests)
+    - Token bucket is exhausted and requests must be throttled
+    - Server returns Retry-After headers indicating backoff required
+    - Rate limiting quotas are exceeded (daily, hourly limits)
+    - Burst capacity is exhausted and cooling down is needed
+
+    Attributes:
+        retry_after: Optional delay in seconds before next request should be attempted
+
+    Examples:
+        - HTTP 429 responses from Jobber API
+        - Token bucket rate limiter blocking requests
+        - Exponential backoff delays between retries
+        - API quota exhaustion requiring extended delays
+    """
+
+    def __init__(self, message: str, retry_after: float | None = None):
+        """Initialize RateLimitError with optional retry delay.
+
+        Args:
+            message: Error description
+            retry_after: Optional delay in seconds before retry should be attempted
+        """
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 __all__ = [
     "TightBeamError",
     "ConfigurationError",
@@ -113,4 +144,5 @@ __all__ = [
     "MappingError",
     "RepositoryError",
     "OAuth2Error",
+    "RateLimitError",
 ]
