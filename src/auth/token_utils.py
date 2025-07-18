@@ -165,3 +165,4 @@ def is_token_valid(token: str) -> bool:
         return True
     except jwt.DecodeError:
         return False
+
