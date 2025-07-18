@@ -8,7 +8,7 @@ and persisting it to SQLite database using object-oriented architecture.
 from .auth import AuthProvider
 from .clients import JobberClient
 from .mappers import EntityMapper
-from .models import Client, Invoice
+from .models import Client, Invoice, MigrationSummary
 from .repositories import Repository
 
 # Logging components
@@ -32,6 +32,7 @@ __all__ = [
     "EntityMapper",
     "Client",
     "Invoice",
+    "MigrationSummary",
     "Repository",
     # Logging components
     "Logger",
