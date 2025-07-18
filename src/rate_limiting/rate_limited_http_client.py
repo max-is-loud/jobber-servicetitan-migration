@@ -8,8 +8,8 @@ import re
 import time
 from typing import Any, Optional
 
-from ..clients.http_client import HttpClient
 from ..exceptions import RateLimitError
+from ..interfaces import IHttpClient
 from .backoff_strategy import ExponentialBackoffStrategy
 from .metrics_collector import MetricsCollector
 from .token_bucket import TokenBucketRateLimiter
@@ -18,14 +18,13 @@ from .token_bucket import TokenBucketRateLimiter
 class RateLimitedHttpClient:
     """Rate-limited HTTP client decorator.
 
-    This decorator wraps an HttpClient to add transparent rate limiting and
-    exponential backoff retry logic. It maintains the same interface
-    as HttpClient while intercepting post() calls to apply rate limiting
-    and retry policies.
+    This decorator wraps an HttpClient to add automatic rate limiting, retry logic,
+    and backoff strategies for handling API rate limits. It provides transparent
+    rate limiting without requiring changes to existing client code.
 
-    The decorator pattern allows seamless integration - any component using
-    Jobber API rate limits and implements exponential backoff with jitter
-    to handle temporary failures and rate limit errors gracefully.
+    The rate limiter uses a token bucket algorithm to control request rates,
+    and employs exponential backoff with jitter for retry logic when rate limits
+    are encountered.
 
     This design allows rate limiting to be added without modifying existing
     HttpClient or JobberClient code - just replace the HttpClient instance
@@ -33,50 +32,34 @@ class RateLimitedHttpClient:
     """
 
     # Default error patterns for rate limit detection
-<<<<<<< HEAD
-    DEFAULT_RATE_LIMIT_ERROR_PATTERNS = [
-=======
     DEFAULT_RATE_LIMIT_ERROR_PATTERNS = {
->>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
         "429",
         "too many requests",
         "rate limit",
         "throttled",
         "throttle",
         "graphql errors in response: throttled",
-<<<<<<< HEAD
-    ]
-=======
     }
->>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def __init__(
         self,
-        http_client: HttpClient,
+        http_client: IHttpClient,
         rate_limiter: TokenBucketRateLimiter,
         backoff_strategy: ExponentialBackoffStrategy,
         max_retries: int = 5,
         metrics_collector: Optional[MetricsCollector] = None,
-<<<<<<< HEAD
-        rate_limit_error_patterns: Optional[list[str]] = None,
-=======
         rate_limit_error_patterns: Optional[set[str]] = None,
->>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
     ):
         """Initialize the rate-limited HTTP client decorator.
 
         Args:
-            http_client: The HttpClient instance to wrap
+            http_client: The IHttpClient instance to wrap
             rate_limiter: TokenBucketRateLimiter for request rate limiting
             backoff_strategy: ExponentialBackoffStrategy for retry delays
             max_retries: Maximum number of retry attempts (default: 5)
             metrics_collector: Optional metrics collector for tracking statistics
-<<<<<<< HEAD
-            rate_limit_error_patterns: Optional list of error message patterns to detect
-=======
             rate_limit_error_patterns: Optional set of error message patterns to detect
->>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
-                                     rate limiting. If not provided, uses default patterns.
+                        rate limiting. If not provided, uses default patterns.
         """
         self.http_client = http_client
         self.rate_limiter = rate_limiter
@@ -195,7 +178,8 @@ class RateLimitedHttpClient:
             exception: Exception to check
 
         Returns:
-            bool: True if the exception represents a rate limit error (HTTP 429 or GraphQL throttled)
+            bool: True if the exception represents a rate limit error (HTTP 429
+             or GraphQL throttled)
         """
         # Check if the exception message matches any of the configured error patterns
         error_message = str(exception).lower()
@@ -217,7 +201,8 @@ class RateLimitedHttpClient:
             Optional[float]: Retry-After delay in seconds, or None if not found
         """
         # Attempt to parse a 'Retry-After' value from the error string.
-        # This is a best-effort approach since the raw response headers are not available.
+        # This is a best-effort approach since the raw response headers are not
+        # available.
         error_message = str(exception)
         match = re.search(r"retry-after[\"':=\s]*(\d+)", error_message, re.IGNORECASE)
         if match:
@@ -259,11 +244,7 @@ class RateLimitedHttpClient:
         Returns:
             list[str]: List of error message patterns used for rate limit detection
         """
-<<<<<<< HEAD
-        return self.rate_limit_error_patterns.copy()
-=======
         return list(self.rate_limit_error_patterns)
->>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def set_rate_limit_error_patterns(self, patterns: list[str]) -> None:
         """Set new rate limit error patterns.
@@ -275,11 +256,7 @@ class RateLimitedHttpClient:
         Args:
             patterns: List of error message patterns to use for rate limit detection
         """
-<<<<<<< HEAD
-        self.rate_limit_error_patterns = patterns.copy()
-=======
         self.rate_limit_error_patterns = set(patterns)
->>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def add_rate_limit_error_pattern(self, pattern: str) -> None:
         """Add a new rate limit error pattern.
@@ -287,12 +264,7 @@ class RateLimitedHttpClient:
         Args:
             pattern: Error message pattern to add to the detection list
         """
-<<<<<<< HEAD
-        if pattern not in self.rate_limit_error_patterns:
-            self.rate_limit_error_patterns.append(pattern)
-=======
         self.rate_limit_error_patterns.add(pattern)
->>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def remove_rate_limit_error_pattern(self, pattern: str) -> None:
         """Remove a rate limit error pattern.
@@ -300,12 +272,7 @@ class RateLimitedHttpClient:
         Args:
             pattern: Error message pattern to remove from the detection list
         """
-<<<<<<< HEAD
-        if pattern in self.rate_limit_error_patterns:
-            self.rate_limit_error_patterns.remove(pattern)
-=======
         self.rate_limit_error_patterns.discard(pattern)
->>>>>>> 3fec8f9 (Refactor rate limit error pattern handling in RateLimitedHttpClient)
 
     def __repr__(self) -> str:
         """Return string representation of the rate-limited client."""

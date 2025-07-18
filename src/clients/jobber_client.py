@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from ..auth.auth_provider import AuthProvider
 from ..exceptions import ConfigurationError, JobberApiError, OAuth2Error
+from ..interfaces import IHttpClient
 from .http_client import HttpClient
 
 
@@ -91,7 +92,7 @@ class JobberClient:
     """
 
     def __init__(
-        self, auth_provider: AuthProvider, http_client: Optional[HttpClient] = None
+        self, auth_provider: AuthProvider, http_client: Optional[IHttpClient] = None
     ) -> None:
         """
         Initialize the JobberClient with authentication provider.
@@ -100,13 +101,13 @@ class JobberClient:
             auth_provider: AuthProvider instance for API authentication.
                           Supports both environment token (JOBBER_TOKEN)
                           and OAuth2 authentication with automatic refresh.
-            http_client: Optional HttpClient instance. If not provided,
+            http_client: Optional IHttpClient instance. If not provided,
                         a new HttpClient instance will be created.
         """
         self.auth_provider = auth_provider
         self.http_client = http_client or HttpClient()
 
-    def set_http_client(self, http_client: HttpClient) -> None:
+    def set_http_client(self, http_client: IHttpClient) -> None:
         """
         Set the HTTP client for this JobberClient instance.
 
@@ -114,7 +115,7 @@ class JobberClient:
         HTTP client implementation (e.g., rate-limited client) after instantiation.
 
         Args:
-            http_client: HttpClient instance to use for API requests
+            http_client: IHttpClient instance to use for API requests
         """
         self.http_client = http_client
 
@@ -163,7 +164,8 @@ class JobberClient:
                 "Please verify your authentication configuration."
             ) from e
 
-        # Add required API version header - this is mandatory for all Jobber API requests
+        # Add required API version header - this is mandatory for all
+        # Jobber API requests
         headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
 
         # Prepare GraphQL payload
