@@ -1,6 +1,7 @@
 from typing import Any, Optional, Protocol
 
 from ..exceptions import ConfigurationError, JobberApiError
+from .base_extractor import BaseExtractor
 from .logger import Logger
 
 """
@@ -51,4 +52,4 @@ class IHttpClient(Protocol):
         ...
 
 
-__all__ = ["IHttpClient", "Logger"]
+__all__ = ["BaseExtractor", "IHttpClient", "Logger"]
