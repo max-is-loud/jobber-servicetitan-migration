@@ -260,8 +260,8 @@ class OAuth2Manager:
             )
 
         # Validate token type if present (optional for some providers like Jobber)
-        token_type = response_data.get("token_type", "bearer").lower()
-        if token_type and token_type != "bearer":
+        token_type = response_data.get("token_type", "bearer")
+        if token_type and token_type.casefold() != "bearer".casefold():
             raise OAuth2Error(
                 f"Unsupported token type: expected 'Bearer', got '{token_type}'"
             )
