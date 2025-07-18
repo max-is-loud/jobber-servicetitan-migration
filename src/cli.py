@@ -27,6 +27,46 @@ app = typer.Typer(
     add_completion=False,
 )
 
+# Create OAuth subcommand group
+oauth_app = typer.Typer(
+    name="oauth",
+    help="OAuth authentication setup commands",
+    add_completion=False,
+)
+app.add_typer(oauth_app, name="oauth")
+
+
+@oauth_app.command()
+def init() -> None:
+    """
+    Initialize OAuth authentication setup.
+    
+    Guides you through setting up the required environment variables
+    for Jobber API OAuth authentication.
+    """
+    typer.echo("🔧 TightBeam OAuth Setup")
+    typer.echo("========================")
+    typer.echo()
+    typer.echo("To authenticate with the Jobber API, you need to set up the following environment variables:")
+    typer.echo()
+    typer.echo("Required OAuth Environment Variables:")
+    typer.echo("  • JOBBER_CLIENT_ID - Your Jobber application's client ID")
+    typer.echo("  • JOBBER_CLIENT_SECRET - Your Jobber application's client secret")
+    typer.echo("  • JOBBER_REDIRECT_URI - OAuth redirect URI for your application")
+    typer.echo("  • JOBBER_TOKEN - Valid Jobber API access token")
+    typer.echo()
+    typer.echo("You can set these in your shell environment:")
+    typer.echo()
+    typer.echo("  export JOBBER_CLIENT_ID='your_client_id'")
+    typer.echo("  export JOBBER_CLIENT_SECRET='your_client_secret'")
+    typer.echo("  export JOBBER_REDIRECT_URI='your_redirect_uri'")
+    typer.echo("  export JOBBER_TOKEN='your_access_token'")
+    typer.echo()
+    typer.echo("Or create a .env file in your project directory with these values.")
+    typer.echo()
+    typer.echo("For more information on obtaining these credentials, visit:")
+    typer.echo("📖 https://developer.getjobber.com/docs/authentication")
+
 
 @app.command()
 def migrate(
@@ -107,7 +147,13 @@ def migrate(
     except ConfigurationError as e:
         # Configuration/environment issues
         typer.echo(f"Configuration Error: {e}", err=True)
-        typer.echo("Please ensure JOBBER_TOKEN environment variable is set.", err=True)
+        typer.echo("To configure authentication, you can either:", err=True)
+        typer.echo("  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True)
+        typer.echo("  2. Manually set the following environment variables:", err=True)
+        typer.echo("     - JOBBER_CLIENT_ID", err=True)
+        typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
+        typer.echo("     - JOBBER_REDIRECT_URI", err=True)
+        typer.echo("     - JOBBER_TOKEN", err=True)
         sys.exit(1)
 
     except JobberApiError as e:
