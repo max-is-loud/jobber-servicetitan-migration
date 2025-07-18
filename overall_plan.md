@@ -207,7 +207,7 @@ class JobberMigrationCoordinator:
             raise ValueError(f"Invalid entities: {invalid}")
 ```
 
-### Success Criteria
+### Success Criteria (Completed)
 
 - ✅ All quotes from Jobber present in SQLite with complete metadata
 - ✅ All notes extracted with correct entity relationships
