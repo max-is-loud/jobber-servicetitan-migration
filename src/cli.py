@@ -430,7 +430,9 @@ def oauth_callback(
         # Store tokens in database
         from datetime import datetime, timedelta, timezone
 
-        expires_in = token_data["expires_in"]
+        expires_in = token_data.get("expires_in")
+        if not isinstance(expires_in, int) or expires_in <= 0:
+            raise OAuth2Error("Invalid or missing 'expires_in' field in token data.")
         expires_at = (
             datetime.now(timezone.utc) + timedelta(seconds=expires_in)
         ).isoformat()
