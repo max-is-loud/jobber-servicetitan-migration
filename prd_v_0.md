@@ -1,5 +1,6 @@
-**Product Requirements Document (PRD) – v0.1 MVP (OO‑focused)**\
-*Last updated: July 14, 2025*
+# **Product Requirements Document (PRD) – v0.1 MVP (OO‑focused)**
+
+Last updated: July 14, 2025
 
 ---
 
@@ -66,6 +67,7 @@
   - Implementation:
     - Use `typer.Typer()` to define the main app and subcommands.
     - Commands:
+
       ```python
       app = typer.Typer()
 
@@ -79,6 +81,7 @@
           coordinator = MigrationCoordinator(...)
           coordinator.migrate()
       ```
+
     - Support subcommands via separate `Typer()` instances (e.g., `notes_app = typer.Typer()`).
     - Leverage Typer's automatic type conversion, help messages, and environment variable support (`typer.Option(..., envvar="JOBBER_TOKEN")`).
     - Entry point: `if __name__ == "__main__": app()`
@@ -189,6 +192,7 @@ class ClientRepository(Repository, CrudRepository[Client]):
 
 - **JobberClient** uses cursor paging, returns raw dicts.
 - Queries:
+
   ```graphql
   query FetchClients($cursor: String) { ... }
   query FetchInvoices($cursor: String) { ... }
@@ -331,4 +335,3 @@ To support development, onboarding, and future maintenance, include links and su
     - Syntax guide for diagrams, embedding in Markdown and PRDs.
 
 Include these in your project’s `/docs` directory, with Markdown files or pointers to external URLs, to ensure easy reference and consistent standards across the team.
-
