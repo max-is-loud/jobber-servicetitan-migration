@@ -19,11 +19,11 @@ class RateLimitedHttpClient:
     """Rate-limited HTTP client decorator.
 
     This decorator wraps an HttpClient to add transparent rate limiting and
-    exponential backoff retry logic. It maintains the exact same interface
+    exponential backoff retry logic. It maintains the same interface
     as HttpClient while intercepting post() calls to apply rate limiting
-    and handle HTTP 429 (Too Many Requests) responses.
+    and retry policies.
 
-    The decorator uses the token bucket algorithm to prevent exceeding
+    The decorator pattern allows seamless integration - any component using
     Jobber API rate limits and implements exponential backoff with jitter
     to handle temporary failures and rate limit errors gracefully.
 
@@ -32,6 +32,16 @@ class RateLimitedHttpClient:
     with a RateLimitedHttpClient that wraps it.
     """
 
+    # Default error patterns for rate limit detection
+    DEFAULT_RATE_LIMIT_ERROR_PATTERNS = [
+        "429",
+        "too many requests",
+        "rate limit",
+        "throttled",
+        "throttle",
+        "graphql errors in response: throttled",
+    ]
+
     def __init__(
         self,
         http_client: HttpClient,
@@ -39,6 +49,7 @@ class RateLimitedHttpClient:
         backoff_strategy: ExponentialBackoffStrategy,
         max_retries: int = 5,
         metrics_collector: Optional[MetricsCollector] = None,
+        rate_limit_error_patterns: Optional[list[str]] = None,
     ):
         """Initialize the rate-limited HTTP client decorator.
 
@@ -48,6 +59,8 @@ class RateLimitedHttpClient:
             backoff_strategy: ExponentialBackoffStrategy for retry delays
             max_retries: Maximum number of retry attempts (default: 5)
             metrics_collector: Optional metrics collector for tracking statistics
+            rate_limit_error_patterns: Optional list of error message patterns to detect
+                                     rate limiting. If not provided, uses default patterns.
         """
         self.http_client = http_client
         self.rate_limiter = rate_limiter
@@ -55,15 +68,10 @@ class RateLimitedHttpClient:
         self.max_retries = max_retries
         self.metrics_collector = metrics_collector
 
-        # Configurable error patterns for rate limit detection
-        self.rate_limit_error_patterns = [
-            "429",
-            "too many requests",
-            "rate limit",
-            "throttled",
-            "throttle",
-            "graphql errors in response: throttled",
-        ]
+        # Use provided patterns or fall back to defaults
+        self.rate_limit_error_patterns = (
+            rate_limit_error_patterns or self.DEFAULT_RATE_LIMIT_ERROR_PATTERNS.copy()
+        )
 
     def post(
         self,
@@ -228,6 +236,44 @@ class RateLimitedHttpClient:
             float: Number of tokens currently available
         """
         return self.rate_limiter.get_available_tokens()
+
+    def get_rate_limit_error_patterns(self) -> list[str]:
+        """Get current rate limit error patterns.
+
+        Returns:
+            list[str]: List of error message patterns used for rate limit detection
+        """
+        return self.rate_limit_error_patterns.copy()
+
+    def set_rate_limit_error_patterns(self, patterns: list[str]) -> None:
+        """Set new rate limit error patterns.
+
+        This method allows runtime configuration of error patterns for
+        rate limit detection, enabling adaptation to different API behaviors
+        or adding new patterns without restarting the application.
+
+        Args:
+            patterns: List of error message patterns to use for rate limit detection
+        """
+        self.rate_limit_error_patterns = patterns.copy()
+
+    def add_rate_limit_error_pattern(self, pattern: str) -> None:
+        """Add a new rate limit error pattern.
+
+        Args:
+            pattern: Error message pattern to add to the detection list
+        """
+        if pattern not in self.rate_limit_error_patterns:
+            self.rate_limit_error_patterns.append(pattern)
+
+    def remove_rate_limit_error_pattern(self, pattern: str) -> None:
+        """Remove a rate limit error pattern.
+
+        Args:
+            pattern: Error message pattern to remove from the detection list
+        """
+        if pattern in self.rate_limit_error_patterns:
+            self.rate_limit_error_patterns.remove(pattern)
 
     def __repr__(self) -> str:
         """Return string representation of the rate-limited client."""

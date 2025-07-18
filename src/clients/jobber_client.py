@@ -90,7 +90,9 @@ class JobberClient:
     }
     """
 
-    def __init__(self, auth_provider: AuthProvider) -> None:
+    def __init__(
+        self, auth_provider: AuthProvider, http_client: Optional[HttpClient] = None
+    ) -> None:
         """
         Initialize the JobberClient with authentication provider.
 
@@ -98,9 +100,23 @@ class JobberClient:
             auth_provider: AuthProvider instance for API authentication.
                           Supports both environment token (JOBBER_TOKEN)
                           and OAuth2 authentication with automatic refresh.
+            http_client: Optional HttpClient instance. If not provided,
+                        a new HttpClient instance will be created.
         """
         self.auth_provider = auth_provider
-        self.http_client = HttpClient()
+        self.http_client = http_client or HttpClient()
+
+    def set_http_client(self, http_client: HttpClient) -> None:
+        """
+        Set the HTTP client for this JobberClient instance.
+
+        This method provides proper encapsulation for injecting a different
+        HTTP client implementation (e.g., rate-limited client) after instantiation.
+
+        Args:
+            http_client: HttpClient instance to use for API requests
+        """
+        self.http_client = http_client
 
     def _execute_graphql_request(
         self, query: str, cursor: Optional[str] = None
