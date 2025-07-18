@@ -4,6 +4,7 @@ This module provides a decorator that wraps HttpClient to add transparent
 rate limiting and exponential backoff retry logic for Jobber API calls.
 """
 
+import re
 import time
 from typing import Any, Optional
 
@@ -186,15 +187,17 @@ class RateLimitedHttpClient:
         Returns:
             Optional[float]: Retry-After delay in seconds, or None if not found
         """
-        # This is a simplified implementation - in production you might want
-        # to access the actual HTTP response object if available
-        str(exception)
+        # Attempt to parse a 'Retry-After' value from the error string.
+        # This is a best-effort approach since the raw response headers are not available.
+        error_message = str(exception)
+        match = re.search(r"retry-after[\"':=\s]*(\d+)", error_message, re.IGNORECASE)
+        if match:
+            try:
+                return float(match.group(1))
+            except (ValueError, IndexError):
+                # If parsing fails, fall back to the default backoff strategy.
+                return None
 
-        # Look for common Retry-After patterns in error messages
-        # This could be enhanced to parse actual HTTP response headers
-        # if the HttpClient was modified to preserve them
-
-        # For now, return None - the backoff strategy will handle delays
         return None
 
     def get_rate_limiter(self) -> TokenBucketRateLimiter:
