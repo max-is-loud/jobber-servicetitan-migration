@@ -4,7 +4,7 @@ import sqlite3
 from typing import List, Optional, Union
 
 from ..exceptions import RepositoryError
-from ..models import Client, Invoice
+from ..models import Attachment, Client, Invoice, Note, Quote
 
 
 class Repository:
@@ -23,6 +23,57 @@ class Repository:
             connection: SQLite database connection for operations
         """
         self._connection = connection
+
+    def _migrate_existing_tables(self) -> None:
+        """Migrate existing tables to add new columns for enhanced models.
+
+        Adds additional_emails and additional_phones columns to clients table,
+        and due_date, subtotal, and line_items columns to invoices table.
+        Uses conditional ALTER TABLE statements to only add columns if they don't exist.
+
+        Raises:
+            RepositoryError: If migration fails
+        """
+        try:
+            cursor = self._connection.cursor()
+
+            # Check and add additional_emails column to clients table
+            cursor.execute("PRAGMA table_info(clients)")
+            clients_columns = {row[1] for row in cursor.fetchall()}
+
+            if "additional_emails" not in clients_columns:
+                cursor.execute(
+                    "ALTER TABLE clients ADD COLUMN additional_emails TEXT DEFAULT '[]'"
+                )
+
+            if "additional_phones" not in clients_columns:
+                cursor.execute(
+                    "ALTER TABLE clients ADD COLUMN additional_phones TEXT DEFAULT '[]'"
+                )
+
+            # Check and add new columns to invoices table
+            cursor.execute("PRAGMA table_info(invoices)")
+            invoices_columns = {row[1] for row in cursor.fetchall()}
+
+            if "due_date" not in invoices_columns:
+                cursor.execute(
+                    "ALTER TABLE invoices ADD COLUMN due_date TEXT DEFAULT ''"
+                )
+
+            if "subtotal" not in invoices_columns:
+                cursor.execute(
+                    "ALTER TABLE invoices ADD COLUMN subtotal INTEGER DEFAULT 0"
+                )
+
+            if "line_items" not in invoices_columns:
+                cursor.execute(
+                    "ALTER TABLE invoices ADD COLUMN line_items TEXT DEFAULT '[]'"
+                )
+
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to migrate existing tables: {e}") from e
 
     def init_schema(self) -> None:
         """Initialize database schema with clients and invoices tables.
@@ -74,6 +125,55 @@ class Repository:
             """
             cursor.execute(oauth_tokens_schema)
 
+            # Create quotes table for quote entities
+            quotes_schema = """
+                CREATE TABLE IF NOT EXISTS quotes (
+                    id TEXT PRIMARY KEY,
+                    client_id TEXT NOT NULL REFERENCES clients(id),
+                    quote_number TEXT,
+                    title TEXT,
+                    total INTEGER,
+                    subtotal INTEGER,
+                    disclaimer TEXT,
+                    line_items TEXT,
+                    created_at TEXT,
+                    transitioned_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(quotes_schema)
+
+            # Create notes table for polymorphic note entities
+            notes_schema = """
+                CREATE TABLE IF NOT EXISTS notes (
+                    id TEXT PRIMARY KEY,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL,
+                    message TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(notes_schema)
+
+            # Create attachments table for note file attachments
+            attachments_schema = """
+                CREATE TABLE IF NOT EXISTS attachments (
+                    id TEXT PRIMARY KEY,
+                    note_id TEXT NOT NULL REFERENCES notes(id),
+                    file_name TEXT,
+                    content_type TEXT,
+                    original_url TEXT,
+                    local_file_path TEXT,
+                    file_size INTEGER,
+                    created_at TEXT
+                )
+            """
+            cursor.execute(attachments_schema)
+
+            # Migrate existing tables to add new columns
+            self._migrate_existing_tables()
+
             self._connection.commit()
             cursor.close()
 
@@ -98,8 +198,8 @@ class Repository:
             if isinstance(entity, Client):
                 cursor.execute(
                     """INSERT OR REPLACE INTO clients
-                       (id, first_name, last_name, email, phone, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                       (id, first_name, last_name, email, phone, created_at, additional_emails, additional_phones)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                     (
                         entity.id,
                         entity.first_name,
@@ -107,13 +207,15 @@ class Repository:
                         entity.email,
                         entity.phone,
                         entity.created_at,
+                        entity.additional_emails,
+                        entity.additional_phones,
                     ),
                 )
             elif isinstance(entity, Invoice):
                 cursor.execute(
                     """INSERT OR REPLACE INTO invoices
-                       (id, client_id, number, total_cents, status, issued_at)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                       (id, client_id, number, total_cents, status, issued_at, due_date, subtotal, line_items)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                     (
                         entity.id,
                         entity.client_id,
@@ -121,6 +223,9 @@ class Repository:
                         entity.total_cents,
                         entity.status,
                         entity.issued_at,
+                        entity.due_date,
+                        entity.subtotal,
+                        entity.line_items,
                     ),
                 )
             else:
@@ -154,7 +259,7 @@ class Repository:
 
             if entity_type == Client:
                 cursor.execute(
-                    "SELECT id, first_name, last_name, email, phone, created_at FROM clients WHERE id = ?",  # noqa: E501
+                    "SELECT id, first_name, last_name, email, phone, created_at, additional_emails, additional_phones FROM clients WHERE id = ?",  # noqa: E501
                     (entity_id,),
                 )
                 row = cursor.fetchone()
@@ -168,11 +273,13 @@ class Repository:
                         email=row[3],
                         phone=row[4],
                         created_at=row[5],
+                        additional_emails=row[6] if row[6] is not None else "[]",
+                        additional_phones=row[7] if row[7] is not None else "[]",
                     )
 
             elif entity_type == Invoice:
                 cursor.execute(
-                    "SELECT id, client_id, number, total_cents, status, issued_at FROM invoices WHERE id = ?",  # noqa: E501
+                    "SELECT id, client_id, number, total_cents, status, issued_at, due_date, subtotal, line_items FROM invoices WHERE id = ?",  # noqa: E501
                     (entity_id,),
                 )
                 row = cursor.fetchone()
@@ -186,6 +293,9 @@ class Repository:
                         total_cents=row[3],
                         status=row[4],
                         issued_at=row[5],
+                        due_date=row[6] if row[6] is not None else "",
+                        subtotal=row[7] if row[7] is not None else 0,
+                        line_items=row[8] if row[8] is not None else "[]",
                     )
             else:
                 raise RepositoryError(f"Unsupported entity type: {entity_type}")
@@ -213,7 +323,7 @@ class Repository:
             if isinstance(entity, Client):
                 cursor.execute(
                     """UPDATE clients SET
-                       first_name = ?, last_name = ?, email = ?, phone = ?, created_at = ?
+                       first_name = ?, last_name = ?, email = ?, phone = ?, created_at = ?, additional_emails = ?, additional_phones = ?
                        WHERE id = ?""",  # noqa: E501
                     (
                         entity.first_name,
@@ -221,13 +331,15 @@ class Repository:
                         entity.email,
                         entity.phone,
                         entity.created_at,
+                        entity.additional_emails,
+                        entity.additional_phones,
                         entity.id,
                     ),
                 )
             elif isinstance(entity, Invoice):
                 cursor.execute(
                     """UPDATE invoices SET
-                       client_id = ?, number = ?, total_cents = ?, status = ?, issued_at = ?
+                       client_id = ?, number = ?, total_cents = ?, status = ?, issued_at = ?, due_date = ?, subtotal = ?, line_items = ?
                        WHERE id = ?""",  # noqa: E501
                     (
                         entity.client_id,
@@ -235,6 +347,9 @@ class Repository:
                         entity.total_cents,
                         entity.status,
                         entity.issued_at,
+                        entity.due_date,
+                        entity.subtotal,
+                        entity.line_items,
                         entity.id,
                     ),
                 )
@@ -308,14 +423,16 @@ class Repository:
                     client.email,
                     client.phone,
                     client.created_at,
+                    client.additional_emails,
+                    client.additional_phones,
                 )
                 for client in clients
             ]
 
             cursor.executemany(
                 """INSERT OR REPLACE INTO clients
-                   (id, first_name, last_name, email, phone, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (id, first_name, last_name, email, phone, created_at, additional_emails, additional_phones)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                 client_data,
             )
 
@@ -352,14 +469,17 @@ class Repository:
                     invoice.total_cents,
                     invoice.status,
                     invoice.issued_at,
+                    invoice.due_date,
+                    invoice.subtotal,
+                    invoice.line_items,
                 )
                 for invoice in invoices
             ]
 
             cursor.executemany(
                 """INSERT OR REPLACE INTO invoices
-                   (id, client_id, number, total_cents, status, issued_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (id, client_id, number, total_cents, status, issued_at, due_date, subtotal, line_items)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                 invoice_data,
             )
 
@@ -381,7 +501,7 @@ class Repository:
         try:
             cursor = self._connection.cursor()
             cursor.execute(
-                "SELECT id, first_name, last_name, email, phone, created_at FROM clients ORDER BY id"  # noqa: E501
+                "SELECT id, first_name, last_name, email, phone, created_at, additional_emails, additional_phones FROM clients ORDER BY id"  # noqa: E501
             )
             rows = cursor.fetchall()
             cursor.close()
@@ -394,6 +514,8 @@ class Repository:
                     email=row[3],
                     phone=row[4],
                     created_at=row[5],
+                    additional_emails=row[6] if row[6] is not None else "[]",
+                    additional_phones=row[7] if row[7] is not None else "[]",
                 )
                 for row in rows
             ]
@@ -413,7 +535,7 @@ class Repository:
         try:
             cursor = self._connection.cursor()
             cursor.execute(
-                "SELECT id, client_id, number, total_cents, status, issued_at FROM invoices ORDER BY id"  # noqa: E501
+                "SELECT id, client_id, number, total_cents, status, issued_at, due_date, subtotal, line_items FROM invoices ORDER BY id"  # noqa: E501
             )
             rows = cursor.fetchall()
             cursor.close()
@@ -426,6 +548,9 @@ class Repository:
                     total_cents=row[3],
                     status=row[4],
                     issued_at=row[5],
+                    due_date=row[6] if row[6] is not None else "",
+                    subtotal=row[7] if row[7] is not None else 0,
+                    line_items=row[8] if row[8] is not None else "[]",
                 )
                 for row in rows
             ]
