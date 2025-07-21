@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from ..exceptions import MappingError
 from ..models import Attachment, Client, Invoice, Note, Quote
+from .mapper_utils import MapperUtils
 
 
 class EntityMapper:
@@ -39,14 +40,14 @@ class EntityMapper:
 
             # Extract primary email from emails array
             emails = data.get("emails", [])
-            email = self._extract_primary_email(emails)
+            email = MapperUtils.extract_primary_field(emails, "value", "primary")
 
             # Extract primary phone from phones array
             phones = data.get("phones", [])
-            phone = self._extract_primary_phone(phones)
+            phone = MapperUtils.extract_primary_field(phones, "value", "primary")
 
             # Format ISO datetime
-            created_at = self._format_iso_datetime(data.get("createdAt"))
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
 
             return Client(
                 id=client_id,
@@ -95,7 +96,7 @@ class EntityMapper:
             total_amount = None
             if isinstance(amounts, dict):
                 total_amount = amounts.get("total")
-            total_cents = self._convert_to_cents(total_amount)
+            total_cents = MapperUtils.convert_to_cents(total_amount)
 
             # Extract invoice status
             status = data.get("invoiceStatus", "")
