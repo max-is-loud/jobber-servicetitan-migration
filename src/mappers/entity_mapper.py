@@ -4,7 +4,22 @@ import json
 from typing import Any, Optional
 
 from ..exceptions import MappingError
-from ..models import Attachment, Client, Invoice, Job, Note, Property, Quote, Request
+from ..models import (
+    Attachment,
+    Client,
+    Expense,
+    Invoice,
+    Job,
+    Note,
+    ProductService,
+    Property,
+    Quote,
+    Request,
+    TaxRate,
+    TimeSheetEntry,
+    User,
+    Visit,
+)
 from .mapper_utils import MapperUtils
 
 
@@ -526,6 +541,463 @@ class EntityMapper:
 
         except Exception as e:
             raise MappingError(f"Failed to map Request data: {e}") from e
+
+    def map_user(self, data: dict[str, Any]) -> User:
+        """
+        Map GraphQL User data to User domain model.
+
+        Args:
+            data: Raw GraphQL User node data
+
+        Returns:
+            User: Typed User dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            user_id = data.get("id")
+            if not user_id:
+                raise MappingError("User ID is required but missing")
+
+            # Extract name components
+            name = data.get("name", {})
+            first_name = MapperUtils.safe_get_nested(name, "first", default="")
+            last_name = MapperUtils.safe_get_nested(name, "last", default="")
+
+            # Extract email
+            email_obj = data.get("email", {})
+            email = MapperUtils.safe_get_nested(email_obj, "email", default="")
+
+            # Derive role from admin flags
+            is_account_admin = data.get("isAccountAdmin", False)
+            is_account_owner = data.get("isAccountOwner", False)
+            if is_account_owner:
+                role = "owner"
+            elif is_account_admin:
+                role = "admin"
+            else:
+                role = "employee"
+
+            # Extract other fields
+            is_account_admin_str = str(is_account_admin).lower()
+            is_account_owner_str = str(is_account_owner).lower()
+            status = data.get("status", "")
+
+            # Extract phone
+            phone_obj = data.get("phone", {})
+            phone = MapperUtils.safe_get_nested(phone_obj, "number", default="")
+
+            # Extract timezone
+            timezone_obj = data.get("timezone", {})
+            timezone = MapperUtils.safe_get_nested(
+                timezone_obj, "identifier", default=""
+            )
+
+            # Format ISO datetimes
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+            last_login_at = MapperUtils.format_iso_datetime(data.get("lastLoginAt"))
+
+            return User(
+                id=user_id,
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                role=role,
+                is_account_admin=is_account_admin_str,
+                is_account_owner=is_account_owner_str,
+                status=status,
+                phone=phone,
+                timezone=timezone,
+                created_at=created_at,
+                last_login_at=last_login_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map User data: {e}") from e
+
+    def map_expense(self, data: dict[str, Any]) -> Expense:
+        """
+        Map GraphQL Expense data to Expense domain model.
+
+        Args:
+            data: Raw GraphQL Expense node data
+
+        Returns:
+            Expense: Typed Expense dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            expense_id = data.get("id")
+            if not expense_id:
+                raise MappingError("Expense ID is required but missing")
+
+            # Extract job ID from linkedJob relationship
+            job_id = MapperUtils.extract_id_from_relationship(data.get("linkedJob"))
+            if not job_id:
+                raise MappingError("Expense job ID is required but missing")
+
+            # Extract expense details
+            title = data.get("title", "")
+            description = data.get("description", "")
+
+            # Extract and convert total amount to cents
+            total_amount = data.get("total")
+            amount_cents = MapperUtils.convert_to_cents(total_amount)
+
+            # For receipt URL and vendor, use title/description as fallback
+            receipt_url = ""  # Not available in current GraphQL schema
+            vendor = title  # Use title as vendor name
+
+            # Derive category from description or title
+            category = "general"  # Default category
+
+            # Extract expense date
+            expense_date = MapperUtils.format_iso_datetime(data.get("date"))
+
+            # Format ISO datetimes
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
+
+            return Expense(
+                id=expense_id,
+                job_id=job_id,
+                amount_cents=amount_cents,
+                description=description,
+                category=category,
+                receipt_url=receipt_url,
+                vendor=vendor,
+                expense_date=expense_date,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map Expense data: {e}") from e
+
+    def map_visit(self, data: dict[str, Any]) -> Visit:
+        """
+        Map GraphQL Visit data to Visit domain model.
+
+        Args:
+            data: Raw GraphQL Visit node data
+
+        Returns:
+            Visit: Typed Visit dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            visit_id = data.get("id")
+            if not visit_id:
+                raise MappingError("Visit ID is required but missing")
+
+            # Extract relationship IDs
+            job_id = MapperUtils.extract_id_from_relationship(data.get("job"))
+            if not job_id:
+                raise MappingError("Visit job ID is required but missing")
+
+            client_id = MapperUtils.extract_id_from_relationship(data.get("client"))
+            if not client_id:
+                raise MappingError("Visit client ID is required but missing")
+
+            property_id = MapperUtils.extract_id_from_relationship(data.get("property"))
+
+            # Extract assigned user ID (first user from assignedUsers)
+            assigned_users = data.get("assignedUsers", {})
+            assigned_user_id = ""
+            if isinstance(assigned_users, dict):
+                edges = assigned_users.get("edges", [])
+                if isinstance(edges, list) and len(edges) > 0:
+                    first_edge = edges[0]
+                    if isinstance(first_edge, dict):
+                        node = first_edge.get("node", {})
+                        if isinstance(node, dict):
+                            assigned_user_id = node.get("id", "")
+
+            # Extract visit details
+            title = data.get("title", "")
+            instructions = data.get("instructions", "")
+            status = data.get("visitStatus", "")
+            all_day = str(data.get("allDay", False)).lower()
+
+            # Extract duration
+            duration = data.get("duration", 0)
+            duration_minutes = (
+                int(duration) if isinstance(duration, (int, float)) else 0
+            )
+
+            # Format ISO datetimes
+            start_at = MapperUtils.format_iso_datetime(data.get("startAt"))
+            end_at = MapperUtils.format_iso_datetime(data.get("endAt"))
+            completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+            updated_at = MapperUtils.format_iso_datetime(
+                data.get("createdAt")
+            )  # Use createdAt for updated_at
+
+            return Visit(
+                id=visit_id,
+                job_id=job_id,
+                client_id=client_id,
+                property_id=property_id,
+                assigned_user_id=assigned_user_id,
+                title=title,
+                instructions=instructions,
+                status=status,
+                all_day=all_day,
+                duration_minutes=duration_minutes,
+                start_at=start_at,
+                end_at=end_at,
+                completed_at=completed_at,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map Visit data: {e}") from e
+
+    def map_timesheet_entry(self, data: dict[str, Any]) -> TimeSheetEntry:
+        """
+        Map GraphQL TimeSheetEntry data to TimeSheetEntry domain model.
+
+        Args:
+            data: Raw GraphQL TimeSheetEntry node data
+
+        Returns:
+            TimeSheetEntry: Typed TimeSheetEntry dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            timesheet_id = data.get("id")
+            if not timesheet_id:
+                raise MappingError("TimeSheetEntry ID is required but missing")
+
+            # Extract relationship IDs
+            user_id = MapperUtils.extract_id_from_relationship(data.get("user"))
+            if not user_id:
+                raise MappingError("TimeSheetEntry user ID is required but missing")
+
+            job_id = MapperUtils.extract_id_from_relationship(data.get("job"))
+            if not job_id:
+                raise MappingError("TimeSheetEntry job ID is required but missing")
+
+            # Extract optional relationship IDs
+            visit_id = MapperUtils.extract_id_from_relationship(data.get("visit"))
+            approved_by_id = MapperUtils.extract_id_from_relationship(
+                data.get("approvedBy")
+            )
+            paid_by_id = MapperUtils.extract_id_from_relationship(data.get("paidBy"))
+
+            # Extract timesheet details
+            label = data.get("label", "")
+            note = data.get("note", "")
+            labour_rate = str(data.get("labourRate", "0.00"))
+
+            # Extract duration information
+            final_duration = data.get("finalDuration", 0)
+            final_duration_seconds = (
+                int(final_duration) if isinstance(final_duration, (int, float)) else 0
+            )
+
+            visit_duration_total = data.get("visitDurationTotal", 0)
+            visit_duration_total_seconds = (
+                int(visit_duration_total)
+                if isinstance(visit_duration_total, (int, float))
+                else 0
+            )
+
+            # Extract status flags
+            approved = str(data.get("approved", False)).lower()
+            ticking = str(data.get("ticking", False)).lower()
+
+            # Format ISO datetimes
+            start_at = MapperUtils.format_iso_datetime(data.get("startAt"))
+            end_at = MapperUtils.format_iso_datetime(data.get("endAt"))
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
+
+            return TimeSheetEntry(
+                id=timesheet_id,
+                user_id=user_id,
+                job_id=job_id,
+                visit_id=visit_id,
+                approved_by_id=approved_by_id,
+                paid_by_id=paid_by_id,
+                label=label,
+                note=note,
+                labour_rate=labour_rate,
+                final_duration_seconds=final_duration_seconds,
+                visit_duration_total_seconds=visit_duration_total_seconds,
+                approved=approved,
+                ticking=ticking,
+                start_at=start_at,
+                end_at=end_at,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map TimeSheetEntry data: {e}") from e
+
+    def map_product_service(self, data: dict[str, Any]) -> ProductService:
+        """
+        Map GraphQL ProductOrService data to ProductService domain model.
+
+        Args:
+            data: Raw GraphQL ProductOrService node data
+
+        Returns:
+            ProductService: Typed ProductService dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            product_id = data.get("id")
+            if not product_id:
+                raise MappingError("ProductService ID is required but missing")
+
+            # Extract product/service details
+            name = data.get("name", "")
+            description = data.get("description", "")
+
+            # Extract category
+            category_obj = data.get("category", {})
+            category = MapperUtils.safe_get_nested(category_obj, "name", default="")
+
+            # Extract and convert pricing to cents
+            default_unit_cost = data.get("defaultUnitCost", 0)
+            default_unit_cost_cents = MapperUtils.convert_to_cents(default_unit_cost)
+
+            internal_unit_cost = data.get("internalUnitCost", 0)
+            internal_unit_cost_cents = MapperUtils.convert_to_cents(internal_unit_cost)
+
+            # Extract markup percentage
+            markup = data.get("markup", 0)
+            markup_percentage = str(markup)
+
+            # Extract service configuration
+            duration_minutes = data.get("durationMinutes", 0)
+            duration_minutes = (
+                int(duration_minutes)
+                if isinstance(duration_minutes, (int, float))
+                else 0
+            )
+
+            # Extract flags
+            taxable = str(data.get("taxable", False)).lower()
+            visible = str(data.get("visible", True)).lower()
+            online_booking_enabled = str(
+                data.get("onlineBookingEnabled", False)
+            ).lower()
+
+            # Extract ordering
+            online_booking_sort_order = data.get("onlineBookingSortOrder", 0)
+            online_booking_sort_order = (
+                int(online_booking_sort_order)
+                if isinstance(online_booking_sort_order, (int, float))
+                else 0
+            )
+
+            # Derive active status from visible flag
+            active = visible
+
+            # Use current timestamp for created/updated dates (not available in schema)
+            created_at = ""
+            updated_at = ""
+
+            return ProductService(
+                id=product_id,
+                name=name,
+                description=description,
+                category=category,
+                default_unit_cost_cents=default_unit_cost_cents,
+                internal_unit_cost_cents=internal_unit_cost_cents,
+                markup_percentage=markup_percentage,
+                duration_minutes=duration_minutes,
+                taxable=taxable,
+                visible=visible,
+                online_booking_enabled=online_booking_enabled,
+                online_booking_sort_order=online_booking_sort_order,
+                active=active,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map ProductService data: {e}") from e
+
+    def map_tax_rate(self, data: dict[str, Any]) -> TaxRate:
+        """
+        Map GraphQL TaxRate data to TaxRate domain model.
+
+        Args:
+            data: Raw GraphQL TaxRate node data
+
+        Returns:
+            TaxRate: Typed TaxRate dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            tax_rate_id = data.get("id")
+            if not tax_rate_id:
+                raise MappingError("TaxRate ID is required but missing")
+
+            # Extract tax rate details
+            name = data.get("name", "")
+            rate = data.get("rate", 0)
+            rate_percentage = str(rate)
+
+            # Extract geographic and configuration details
+            region = data.get("region", "")
+            compound = str(data.get("compound", False)).lower()
+            active = str(data.get("active", True)).lower()
+            description = data.get("description", "")
+            tax_number = data.get("taxNumber", "")
+
+            # Extract display configuration
+            display_order = data.get("displayOrder", 0)
+            display_order = (
+                int(display_order) if isinstance(display_order, (int, float)) else 0
+            )
+
+            default_for_region = str(data.get("defaultForRegion", False)).lower()
+
+            # Format ISO datetimes
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
+
+            return TaxRate(
+                id=tax_rate_id,
+                name=name,
+                rate_percentage=rate_percentage,
+                region=region,
+                compound=compound,
+                active=active,
+                description=description,
+                tax_number=tax_number,
+                display_order=display_order,
+                default_for_region=default_for_region,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map TaxRate data: {e}") from e
 
     def _extract_primary_email(self, emails: list[dict[str, Any]]) -> str:
         """
