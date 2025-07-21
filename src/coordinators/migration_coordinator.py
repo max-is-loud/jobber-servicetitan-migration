@@ -5,7 +5,12 @@ from typing import Optional
 
 from ..clients import JobberClient
 from ..exceptions import JobberApiError, MappingError, RepositoryError
-from ..extractors import AttachmentDownloader, QuotesExtractor
+from ..extractors import (
+    AttachmentDownloader,
+    NoteReferenceCollector,
+    NotesExtractor,
+    QuotesExtractor,
+)
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import MigrationSummary
@@ -29,6 +34,8 @@ class MigrationCoordinator:
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        note_reference_collector: Optional[NoteReferenceCollector] = None,
+        notes_extractor: Optional[NotesExtractor] = None,
         quotes_extractor: Optional[QuotesExtractor] = None,
         attachment_downloader: Optional[AttachmentDownloader] = None,
     ) -> None:
@@ -39,6 +46,8 @@ class MigrationCoordinator:
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            note_reference_collector: Optional collector for deferred note processing
+            notes_extractor: Optional extractor for Note entities with deferred processing
             quotes_extractor: Optional extractor for Quote entities
             attachment_downloader: Optional downloader for Attachment files
         """
@@ -47,7 +56,11 @@ class MigrationCoordinator:
         self._repository = repository
         self._logger = logger
 
+        # Note reference collector for deferred note processing
+        self._note_reference_collector = note_reference_collector
+
         # Optional extractors for enhanced entity coverage
+        self._notes_extractor = notes_extractor
         self._quotes_extractor = quotes_extractor
         self._attachment_downloader = attachment_downloader
 
@@ -84,6 +97,7 @@ class MigrationCoordinator:
             invoices_processed=0,
             quotes_processed=0,
             notes_processed=0,
+            note_references_collected=0,
             attachments_processed=0,
             files_downloaded=0,
             total_bytes_downloaded=0,
@@ -118,7 +132,14 @@ class MigrationCoordinator:
                         "Quote extraction skipped - no extractor provided"
                     )
 
-                # Notes are now extracted with their parent entities (clients, invoices, quotes)  # noqa: E501
+                # Process collected note references using deferred processing
+                if self._notes_extractor and self._note_reference_collector:
+                    self._logger.info("Starting deferred note migration")
+                    summary.notes_processed = self._migrate_deferred_notes(summary)
+                else:
+                    self._logger.debug(
+                        "Deferred note extraction skipped - no extractor or collector provided"
+                    )
 
                 if self._attachment_downloader:
                     self._logger.info(
@@ -155,6 +176,12 @@ class MigrationCoordinator:
                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime(end_time)
             )
             summary.duration_seconds = end_time - start_time
+
+            # Update note reference count if collector was used
+            if self._note_reference_collector:
+                summary.note_references_collected = (
+                    self._note_reference_collector.get_reference_count()
+                )
 
             # Log comprehensive completion summary
             self._logger.info("Migration workflow completed")
@@ -214,27 +241,18 @@ class MigrationCoordinator:
 
                 # Map GraphQL nodes to domain models
                 clients = []
-                notes = []  # Collect notes from clients
                 for edge in edges:
                     node = edge.get("node", {})
                     try:
                         client = self._entity_mapper.map_client(node)
                         clients.append(client)
 
-                        # Extract notes if present
-                        client_notes = node.get("notes", {}).get("edges", [])
-                        for note_edge in client_notes:
-                            note_node = note_edge.get("node", {})
-                            if note_node:
-                                # Add client relationship to note data
-                                note_node["client"] = {"id": client.id}
-                                try:
-                                    note = self._entity_mapper.map_note(note_node)
-                                    notes.append(note)
-                                except MappingError as e:
-                                    self._logger.debug(
-                                        f"Failed to map note for client {client.id}: {e}"  # noqa: E501
-                                    )
+                        # Collect note IDs for deferred processing if collector available
+                        if self._note_reference_collector:
+                            client_notes = node.get("notes", {}).get("edges", [])
+                            self._note_reference_collector.collect_note_ids_from_edges(
+                                client_notes, "client", client.id
+                            )
                     except MappingError as e:
                         error_msg = (
                             f"Failed to map client {node.get('id', 'unknown')}: {e}"
@@ -249,12 +267,6 @@ class MigrationCoordinator:
                     self._logger.info(
                         f"Processed {len(clients)} clients (total: {total_processed})"
                     )
-
-                # Save associated notes if any
-                if notes:
-                    self._repository.save_notes(notes)
-                    summary.notes_processed += len(notes)
-                    self._logger.info(f"Saved {len(notes)} notes for clients")
 
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
@@ -325,27 +337,18 @@ class MigrationCoordinator:
 
                 # Map GraphQL nodes to domain models
                 invoices = []
-                notes = []  # Collect notes from invoices
                 for edge in edges:
                     node = edge.get("node", {})
                     try:
                         invoice = self._entity_mapper.map_invoice(node)
                         invoices.append(invoice)
 
-                        # Extract notes if present
-                        invoice_notes = node.get("notes", {}).get("edges", [])
-                        for note_edge in invoice_notes:
-                            note_node = note_edge.get("node", {})
-                            if note_node:
-                                # Add invoice relationship to note data
-                                note_node["invoice"] = {"id": invoice.id}
-                                try:
-                                    note = self._entity_mapper.map_note(note_node)
-                                    notes.append(note)
-                                except MappingError as e:
-                                    self._logger.debug(
-                                        f"Failed to map note for invoice {invoice.id}: {e}"  # noqa: E501
-                                    )
+                        # Collect note IDs for deferred processing if collector available
+                        if self._note_reference_collector:
+                            invoice_notes = node.get("notes", {}).get("edges", [])
+                            self._note_reference_collector.collect_note_ids_from_edges(
+                                invoice_notes, "invoice", invoice.id
+                            )
                     except MappingError as e:
                         error_msg = (
                             f"Failed to map invoice {node.get('id', 'unknown')}: {e}"
@@ -360,12 +363,6 @@ class MigrationCoordinator:
                     self._logger.info(
                         f"Processed {len(invoices)} invoices (total: {total_processed})"
                     )
-
-                # Save associated notes if any
-                if notes:
-                    self._repository.save_notes(notes)
-                    summary.notes_processed += len(notes)
-                    self._logger.info(f"Saved {len(notes)} notes for invoices")
 
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
@@ -397,6 +394,60 @@ class MigrationCoordinator:
                 raise
 
         return total_processed
+
+    def _migrate_deferred_notes(self, summary: MigrationSummary) -> int:
+        """
+        Migrate notes using deferred processing from collected references.
+
+        Uses the injected NotesExtractor to process notes from the collected
+        note references, avoiding the nested GraphQL query complexity that
+        causes API throttling.
+
+        Args:
+            summary: Migration summary for error tracking
+
+        Returns:
+            Total number of notes processed
+
+        Raises:
+            JobberApiError: If API communication fails
+            MappingError: If note data transformation fails
+            RepositoryError: If database operations fail
+        """
+        if not self._notes_extractor or not self._note_reference_collector:
+            self._logger.info(
+                "Deferred note migration requested but extractor or collector not provided"
+            )
+            return 0
+
+        try:
+            # Get collected note references
+            note_references = self._note_reference_collector.get_references()
+
+            if not note_references:
+                self._logger.info(
+                    "No note references collected for deferred processing"
+                )
+                return 0
+
+            # Process notes using deferred processing
+            notes_processed = self._notes_extractor.extract_deferred_notes(
+                note_references
+            )
+
+            # Clear references after successful processing
+            self._note_reference_collector.clear_references()
+
+            self._logger.info(
+                f"Deferred note migration completed: {notes_processed} notes processed"
+            )
+            return notes_processed
+
+        except Exception as e:
+            error_msg = f"Deferred note migration failed: {e}"
+            self._logger.error(error_msg)
+            summary.add_error(error_msg)
+            raise
 
     def _migrate_quotes(self, summary: MigrationSummary) -> int:
         """

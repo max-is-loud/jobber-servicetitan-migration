@@ -186,6 +186,18 @@ class Repository:
             """
             cursor.execute(attachments_schema)
 
+            # Create note_references table for temporary storage during large migrations
+            note_references_schema = """
+                CREATE TABLE IF NOT EXISTS note_references (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    note_id TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+            """
+            cursor.execute(note_references_schema)
+
             # Create properties table for service locations
             properties_schema = """
                 CREATE TABLE IF NOT EXISTS properties (
@@ -408,6 +420,9 @@ class Repository:
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_attachments_note_id ON attachments(note_id)"  # noqa: E501
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_note_references_entity ON note_references(entity_type, entity_id)"  # noqa: E501
             )
 
             # Add indexes for new entity foreign keys
@@ -1853,6 +1868,125 @@ class Repository:
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve all attachments: {e}") from e
+
+    def save_note_references(self, references: List[dict[str, str]]) -> None:
+        """Batch save note references to temporary storage.
+
+        Stores note references for deferred processing during large migrations.
+        Uses batch insert for efficiency with large volumes.
+
+        Args:
+            references: List of dicts with note_id, entity_type, entity_id
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        if not references:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            reference_data = [
+                (ref.get("note_id"), ref.get("entity_type"), ref.get("entity_id"))
+                for ref in references
+                if all(
+                    [ref.get("note_id"), ref.get("entity_type"), ref.get("entity_id")]
+                )
+            ]
+
+            if reference_data:
+                cursor.executemany(
+                    """INSERT INTO note_references (note_id, entity_type, entity_id)
+                       VALUES (?, ?, ?)""",
+                    reference_data,
+                )
+
+                self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save note references: {e}") from e
+
+    def get_note_references(
+        self, limit: int = 1000, offset: int = 0
+    ) -> List[dict[str, str]]:
+        """Retrieve note references from temporary storage with pagination.
+
+        Supports batch processing of large reference collections by providing
+        pagination through limit and offset parameters.
+
+        Args:
+            limit: Maximum number of references to retrieve (default: 1000)
+            offset: Number of references to skip (default: 0)
+
+        Returns:
+            List of dictionaries with note_id, entity_type, entity_id
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                """SELECT note_id, entity_type, entity_id
+                   FROM note_references
+                   ORDER BY id
+                   LIMIT ? OFFSET ?""",
+                (limit, offset),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            return [
+                {
+                    "note_id": row[0],
+                    "entity_type": row[1],
+                    "entity_id": row[2],
+                }
+                for row in rows
+            ]
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve note references: {e}") from e
+
+    def get_note_references_count(self) -> int:
+        """Get total count of note references in temporary storage.
+
+        Returns:
+            Total number of note references stored
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute("SELECT COUNT(*) FROM note_references")
+            count = cursor.fetchone()[0]
+            cursor.close()
+            return count
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to count note references: {e}") from e
+
+    def clear_note_references(self) -> None:
+        """Clear all note references from temporary storage.
+
+        Removes all stored note references, typically called after successful
+        note processing completion.
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute("DELETE FROM note_references")
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to clear note references: {e}") from e
 
     def save_oauth_tokens(
         self, access_token: str, refresh_token: str, expires_at: str

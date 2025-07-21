@@ -12,6 +12,8 @@ from typing import Any, Optional
 from ..auth.auth_provider import AuthProvider
 from ..exceptions import ConfigurationError, JobberApiError, OAuth2Error
 from ..interfaces import IHttpClient
+from ..rate_limiting.metrics_collector import MetricsCollector
+from ..utils.debug import debug_print
 from .http_client import HttpClient
 
 
@@ -42,7 +44,7 @@ class JobberClient:
     # GraphQL query for fetching clients with cursor pagination
     CLIENTS_QUERY = """
     query GetClients($cursor: String) {
-      clients(first: 100, after: $cursor) {
+      clients(first: 30, after: $cursor) {
         edges {
           node {
             id
@@ -58,13 +60,11 @@ class JobberClient:
               edges {
                 node {
                   id
-                  message
-                  createdAt
-                  updatedAt
                 }
               }
             }
             createdAt
+            updatedAt
           }
         }
         pageInfo {
@@ -78,7 +78,7 @@ class JobberClient:
     # GraphQL query for fetching invoices with cursor pagination
     INVOICES_QUERY = """
     query GetInvoices($cursor: String) {
-      invoices(first: 100, after: $cursor) {
+      invoices(first: 30, after: $cursor) {
         edges {
           node {
             id
@@ -95,9 +95,6 @@ class JobberClient:
               edges {
                 node {
                   id
-                  message
-                  createdAt
-                  updatedAt
                 }
               }
             }
@@ -114,7 +111,7 @@ class JobberClient:
     # GraphQL query for fetching quotes with cursor pagination
     QUOTES_QUERY = """
     query GetQuotes($cursor: String) {
-      quotes(first: 100, after: $cursor) {
+      quotes(first: 30, after: $cursor) {
         edges {
           node {
             id
@@ -143,9 +140,6 @@ class JobberClient:
               edges {
                 node {
                   id
-                  message
-                  createdAt
-                  updatedAt
                 }
               }
             }
@@ -271,9 +265,6 @@ class JobberClient:
               edges {
                 node {
                   id
-                  message
-                  createdAt
-                  updatedAt
                 }
               }
             }
@@ -353,9 +344,6 @@ class JobberClient:
               edges {
                 node {
                   id
-                  message
-                  createdAt
-                  updatedAt
                 }
               }
             }
@@ -584,8 +572,64 @@ class JobberClient:
     }
     """
 
+    # GraphQL query for fetching individual note by ID
+    NOTE_BY_ID_QUERY = """
+    query GetNoteById($id: ID!) {
+      node(id: $id) {
+        ... on ClientNote {
+          id
+          message
+          createdAt
+          updatedAt
+          client {
+            id
+          }
+        }
+        ... on JobNote {
+          id
+          message
+          createdAt
+          updatedAt
+          job {
+            id
+          }
+        }
+        ... on QuoteNote {
+          id
+          message
+          createdAt
+          updatedAt
+          quote {
+            id
+          }
+        }
+        ... on InvoiceNote {
+          id
+          message
+          createdAt
+          updatedAt
+          invoice {
+            id
+          }
+        }
+        ... on RequestNote {
+          id
+          message
+          createdAt
+          updatedAt
+          request {
+            id
+          }
+        }
+      }
+    }
+    """
+
     def __init__(
-        self, auth_provider: AuthProvider, http_client: Optional[IHttpClient] = None
+        self,
+        auth_provider: AuthProvider,
+        http_client: Optional[IHttpClient] = None,
+        metrics_collector: Optional[MetricsCollector] = None,
     ) -> None:
         """
         Initialize the JobberClient with authentication provider.
@@ -596,9 +640,13 @@ class JobberClient:
                           and OAuth2 authentication with automatic refresh.
             http_client: Optional IHttpClient instance. If not provided,
                         a new HttpClient instance will be created.
+            metrics_collector: Optional MetricsCollector for GraphQL cost
+                             and rate limit monitoring. If not provided,
+                             monitoring features are disabled.
         """
         self.auth_provider = auth_provider
         self.http_client = http_client or HttpClient()
+        self.metrics_collector = metrics_collector
 
     def set_http_client(self, http_client: IHttpClient) -> None:
         """
@@ -611,6 +659,31 @@ class JobberClient:
             http_client: IHttpClient instance to use for API requests
         """
         self.http_client = http_client
+
+    def _record_graphql_cost(self, response_data: dict[str, Any]) -> None:
+        """
+        Extract and record GraphQL cost information from response extensions.
+
+        Args:
+            response_data: The GraphQL response containing potential cost data
+        """
+        if not self.metrics_collector:
+            return
+
+        try:
+            extensions = response_data.get("extensions", {})
+            cost_info = extensions.get("cost", {})
+
+            requested_cost = cost_info.get("requestedQueryCost")
+            actual_cost = cost_info.get("actualQueryCost")
+
+            if requested_cost is not None and actual_cost is not None:
+                self.metrics_collector.record_graphql_cost(
+                    int(requested_cost), int(actual_cost)
+                )
+        except (KeyError, ValueError, TypeError):
+            # Gracefully handle missing or invalid cost data
+            pass
 
     def _execute_graphql_request(
         self, query: str, cursor: Optional[str] = None
@@ -661,13 +734,69 @@ class JobberClient:
         # Jobber API requests
         headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
 
+        # Debug log headers (mask sensitive data)
+        debug_headers = headers.copy()
+        if "Authorization" in debug_headers:
+            auth_value = debug_headers["Authorization"]
+            if auth_value.startswith("Bearer "):
+                debug_headers["Authorization"] = f"Bearer {'*' * 10}..."
+        debug_print(f"[DEBUG] Request headers: {debug_headers}")
+
         # Prepare GraphQL payload
         payload = {"query": query, "variables": {"cursor": cursor}}
 
-        # Use shared HttpClient for HTTP communication
-        response_data = self.http_client.post(
-            url=self.API_URL, headers=headers, json=payload
-        )
+        debug_print(f"[DEBUG] GraphQL Query Length: {len(query)} characters")
+        debug_print(f"[DEBUG] GraphQL Query Preview: {query[:200]}...")
+        if cursor:
+            debug_print(f"[DEBUG] Using cursor: {cursor}")
+
+        # Use shared HttpClient for HTTP communication with optional header tracking
+        response_data: dict[str, Any]
+        if self.metrics_collector:
+            result = self.http_client.post(
+                url=self.API_URL, headers=headers, json=payload, return_headers=True
+            )
+
+            # Handle tuple unpacking for metrics-enabled path
+            # When return_headers=True, result is guaranteed to be a tuple
+            assert isinstance(result, tuple), "Expected tuple when return_headers=True"
+            response_data, rate_limit_headers = result
+
+            # Track rate limit headers if available
+            remaining = rate_limit_headers.get("x-ratelimit-remaining")
+            reset_time = rate_limit_headers.get("x-ratelimit-reset")
+            if remaining is not None:
+                try:
+                    remaining_int = int(remaining)
+                    reset_int = int(reset_time) if reset_time else None
+                    self.metrics_collector.record_rate_limit_headers(
+                        remaining_int, reset_int
+                    )
+                except (ValueError, TypeError):
+                    # Gracefully handle invalid header values
+                    pass
+
+            # Extract and record GraphQL cost information
+            self._record_graphql_cost(response_data)
+        else:
+            # When return_headers=False (default), result is guaranteed to be a dict
+            result = self.http_client.post(
+                url=self.API_URL, headers=headers, json=payload
+            )
+            assert isinstance(result, dict), "Expected dict when return_headers=False"
+            response_data = result
+
+        debug_print(f"[DEBUG] GraphQL Response Keys: {list(response_data.keys())}")
+        if "errors" in response_data:
+            debug_print(f"[DEBUG] GraphQL Errors: {response_data['errors']}")
+            for error in response_data.get("errors", []):
+                if "extensions" in error:
+                    debug_print(f"[DEBUG] Error extensions: {error['extensions']}")
+                    if "documentation" in error.get("extensions", {}):
+                        doc_url = error["extensions"]["documentation"]
+                        debug_print(f"[DEBUG] API Documentation: {doc_url}")
+        if "extensions" in response_data:
+            debug_print(f"[DEBUG] Response extensions: {response_data['extensions']}")
 
         # Validate response structure and check for GraphQL errors
         self._validate_graphql_response(response_data)
@@ -1168,9 +1297,10 @@ class JobberClient:
         """
         Fetch timesheet entries data from Jobber GraphQL API.
 
-        Retrieves timesheet entry information using cursor-based pagination with automatic
-        authentication handling. For OAuth2 users, expired tokens are automatically
-        refreshed during the request. Environment token users see no behavior changes.
+        Retrieves timesheet entry information using cursor-based pagination with
+        automatic authentication handling. For OAuth2 users, expired tokens are
+        automatically refreshed during the request. Environment token users see
+        no behavior changes.
 
         Args:
             cursor: Optional cursor for pagination (None for first page)
@@ -1194,7 +1324,7 @@ class JobberClient:
                 and "timesheetEntries" not in response_data["data"]
             ):
                 raise JobberApiError(
-                    "Invalid response structure: missing 'timesheetEntries' field in data"
+                    "Invalid response structure: missing 'timesheetEntries' field in data"  # noqa: E501
                 )
 
             return response_data
@@ -1214,7 +1344,8 @@ class JobberClient:
 
         Retrieves product and service catalog information using cursor-based pagination
         with automatic authentication handling. For OAuth2 users, expired tokens are
-        automatically refreshed during the request. Environment token users see no behavior changes.
+        automatically refreshed during the request. Environment token users see no
+        behavior changes.
 
         Args:
             cursor: Optional cursor for pagination (None for first page)
@@ -1238,7 +1369,7 @@ class JobberClient:
                 and "productsAndServices" not in response_data["data"]
             ):
                 raise JobberApiError(
-                    "Invalid response structure: missing 'productsAndServices' field in data"
+                    "Invalid response structure: missing 'productsAndServices' field in data"  # noqa: E501
                 )
 
             return response_data
@@ -1292,4 +1423,66 @@ class JobberClient:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(
                 f"Unexpected error while fetching tax rates: {e}"
+            ) from e
+
+    def fetch_note_by_id(self, note_id: str) -> dict[str, Any]:
+        """
+        Fetch individual note by ID from Jobber GraphQL API.
+
+        Retrieves a specific note with its full content and parent entity relationship
+        using the node interface. Supports all note types: ClientNote, JobNote,
+        QuoteNote, InvoiceNote, and RequestNote.
+
+        Args:
+            note_id: The unique identifier of the note to fetch
+
+        Returns:
+            Dictionary containing GraphQL response with note data
+
+        Raises:
+            JobberApiError: If API communication fails or note not found
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            # Prepare GraphQL payload with note ID variable
+            headers = self.auth_provider.get_headers()
+            headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
+
+            payload = {"query": self.NOTE_BY_ID_QUERY, "variables": {"id": note_id}}
+
+            # Use shared HttpClient for HTTP communication
+            # When return_headers=False (default), result is guaranteed to be a dict
+            result = self.http_client.post(
+                url=self.API_URL, headers=headers, json=payload
+            )
+            assert isinstance(result, dict), "Expected dict when return_headers=False"
+            response_data = result
+
+            # Validate response structure and check for GraphQL errors
+            self._validate_graphql_response(response_data)
+
+            # Validate that note data exists in response
+            if (
+                response_data.get("data") is not None
+                and "node" not in response_data["data"]
+            ):
+                raise JobberApiError(
+                    "Invalid response structure: missing 'node' field in data"
+                )
+
+            # Check if note was found
+            node_data = response_data.get("data", {}).get("node")
+            if node_data is None:
+                raise JobberApiError(f"Note with ID '{note_id}' not found")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(
+                f"Unexpected error while fetching note {note_id}: {e}"
             ) from e

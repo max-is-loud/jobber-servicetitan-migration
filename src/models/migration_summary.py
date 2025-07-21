@@ -19,6 +19,9 @@ class MigrationSummary:
     invoices_processed: int  # Number of invoice records successfully processed
     quotes_processed: int  # Number of quote records successfully processed
     notes_processed: int  # Number of note records successfully processed
+    note_references_collected: (
+        int  # Number of note references collected for deferred processing
+    )
     attachments_processed: int  # Number of attachment records successfully processed
     files_downloaded: int  # Number of attachment files successfully downloaded
     total_bytes_downloaded: int  # Total bytes of attachment files downloaded
@@ -76,6 +79,7 @@ class MigrationSummary:
             f"  • {self.invoices_processed:,} invoices processed",
             f"  • {self.quotes_processed:,} quotes processed",
             f"  • {self.notes_processed:,} notes processed",
+            f"  • {self.note_references_collected:,} note references collected",
             f"  • {self.attachments_processed:,} attachments processed",
             f"  • {self.files_downloaded:,} files downloaded ({self.total_bytes_downloaded:,} bytes)",  # noqa: E501
             f"  • {total_entities:,} total entities processed",

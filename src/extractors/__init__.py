@@ -18,6 +18,7 @@ from .attachment_downloader import AttachmentDownloader
 from .base_extractor import BaseExtractor
 from .expenses_extractor import ExpensesExtractor
 from .jobs_extractor import JobsExtractor
+from .note_reference_collector import NoteReferenceCollector
 from .notes_extractor import NotesExtractor
 from .product_services_extractor import ProductServicesExtractor
 from .properties_extractor import PropertiesExtractor
@@ -33,6 +34,7 @@ __all__ = [
     "BaseExtractor",
     "ExpensesExtractor",
     "JobsExtractor",
+    "NoteReferenceCollector",
     "NotesExtractor",
     "ProductServicesExtractor",
     "PropertiesExtractor",

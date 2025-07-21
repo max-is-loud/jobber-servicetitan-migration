@@ -4,13 +4,11 @@ Tests the complete PRD implementation including all entity types, file downloads
 CLI commands, and data validation to ensure production readiness.
 """
 
-import os
 import sqlite3
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -19,7 +17,7 @@ from src.coordinators import MigrationCoordinator
 from src.extractors import AttachmentDownloader, NotesExtractor, QuotesExtractor
 from src.loggers import ConsoleLogger
 from src.mappers import EntityMapper
-from src.models import Attachment, Client, Invoice, MigrationSummary, Note, Quote
+from src.models import MigrationSummary
 from src.repositories import Repository
 
 
@@ -259,7 +257,7 @@ class TestCompleteWorkflow:
         )
 
         # Validate dependency validation
-        assert quotes_extractor.validate_dependencies() == True
+        assert quotes_extractor.validate_dependencies() is True
 
         # Execute extraction
         result = quotes_extractor.extract()
@@ -267,7 +265,7 @@ class TestCompleteWorkflow:
         # Validate results
         assert result["entities_processed"] == 1
         assert result["pages_processed"] == 1
-        assert result["has_next_page"] == False
+        assert result["has_next_page"] is False
         assert result["extraction_time"] > 0
 
         # Validate data persistence
@@ -372,6 +370,7 @@ class TestCompleteWorkflow:
                 invoices_processed=0,
                 quotes_processed=0,
                 notes_processed=0,
+                note_references_collected=0,
                 attachments_processed=0,
                 files_downloaded=0,
                 total_bytes_downloaded=0,
@@ -405,7 +404,7 @@ class TestCompleteWorkflow:
         coordinator = self._create_full_coordinator()
 
         # Execute migration
-        summary = coordinator.migrate(include_extended_entities=True)
+        coordinator.migrate(include_extended_entities=True)
 
         # Comprehensive data validation
         self._validate_complete_data_integrity()
@@ -420,7 +419,7 @@ class TestCompleteWorkflow:
         # Validate foreign key relationships
         assert invoices[0].client_id == clients[0].id
         assert quotes[0].client_id == clients[0].id
-        assert notes[0].client_id == clients[0].id
+        assert notes[0].entity_id == clients[0].id
         assert attachments[0].note_id == notes[0].id
 
         # Validate data types and constraints
@@ -428,6 +427,233 @@ class TestCompleteWorkflow:
         assert isinstance(invoices[0].total_cents, int)
         assert isinstance(quotes[0].total, int)
         assert isinstance(attachments[0].file_size, int)
+
+    def test_deferred_notes_workflow(self):
+        """Test deferred notes loading workflow to prevent GraphQL throttling."""
+        from src.extractors import NoteReferenceCollector, NotesExtractor
+
+        # Create sample client data with note references (IDs only)
+        client_with_note_refs = {
+            **self.sample_client_data,
+            "notes": {
+                "edges": [
+                    {"node": {"id": "note_101"}},
+                    {"node": {"id": "note_102"}},
+                    {"node": {"id": "note_103"}},
+                ]
+            },
+        }
+
+        # Create sample invoice data with note references
+        invoice_with_note_refs = {
+            **self.sample_invoice_data,
+            "notes": {
+                "edges": [
+                    {"node": {"id": "note_201"}},
+                    {"node": {"id": "note_202"}},
+                ]
+            },
+        }
+
+        # Mock GraphQL responses with simplified note queries
+        self.mock_jobber_client.fetch_clients.return_value = {
+            "data": {
+                "clients": {
+                    "edges": [{"node": client_with_note_refs}],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        }
+
+        self.mock_jobber_client.fetch_invoices.return_value = {
+            "data": {
+                "invoices": {
+                    "edges": [{"node": invoice_with_note_refs}],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        }
+
+        # Mock individual note fetches for deferred processing
+        def mock_fetch_note_by_id(note_id):
+            note_data = {
+                "data": {
+                    "node": {
+                        "id": note_id,
+                        "message": f"Content for {note_id}",
+                        "createdAt": "2023-01-04T10:00:00Z",
+                        "updatedAt": "2023-01-04T11:00:00Z",
+                        # Parent relationship will be overridden by collector
+                        "client": {"id": "client_123"} if "note_1" in note_id else None,
+                        "invoice": (
+                            {"id": "invoice_456"} if "note_2" in note_id else None
+                        ),
+                    }
+                }
+            }
+            return note_data
+
+        self.mock_jobber_client.fetch_note_by_id.side_effect = mock_fetch_note_by_id
+
+        # Create NoteReferenceCollector
+        note_reference_collector = NoteReferenceCollector(
+            repository=self.repository,
+            logger=self.logger,
+            enable_persistence=False,  # Use in-memory for testing
+            batch_size=1000,
+        )
+
+        # Create NotesExtractor for deferred processing
+        notes_extractor = NotesExtractor(
+            self.mock_jobber_client, self.entity_mapper, self.repository, self.logger
+        )
+
+        # Create MigrationCoordinator with deferred notes components
+        coordinator = MigrationCoordinator(
+            jobber_client=self.mock_jobber_client,
+            entity_mapper=self.entity_mapper,
+            repository=self.repository,
+            logger=self.logger,
+            note_reference_collector=note_reference_collector,
+            notes_extractor=notes_extractor,
+        )
+
+        # Execute migration with deferred notes
+        summary = coordinator.migrate(include_extended_entities=True)
+
+        # Validate deferred notes workflow
+        assert summary.clients_processed == 1
+        assert summary.invoices_processed == 1
+        assert summary.note_references_collected == 5  # 3 from client + 2 from invoice
+        assert summary.notes_processed == 5  # All notes processed individually
+
+        # Validate that note references were collected and cleared
+        assert (
+            note_reference_collector.get_reference_count() == 0
+        )  # Should be cleared after processing
+
+        # Validate individual note fetches were called correctly
+        assert self.mock_jobber_client.fetch_note_by_id.call_count == 5
+
+        # Validate notes were saved with correct parent relationships
+        saved_notes = self.repository.get_all_notes()
+        assert len(saved_notes) == 5
+
+        # Verify parent relationships were maintained
+        client_notes = [n for n in saved_notes if n.entity_type == "client"]
+        invoice_notes = [n for n in saved_notes if n.entity_type == "invoice"]
+
+        assert len(client_notes) == 3
+        assert len(invoice_notes) == 2
+
+        for note in client_notes:
+            assert note.entity_id == "client_123"
+
+        for note in invoice_notes:
+            assert note.entity_id == "invoice_456"
+
+    def test_deferred_notes_with_persistence(self):
+        """Test deferred notes with temporary storage for large volumes."""
+        from src.extractors import NoteReferenceCollector
+
+        # Create NoteReferenceCollector with persistence enabled
+        note_reference_collector = NoteReferenceCollector(
+            repository=self.repository,
+            logger=self.logger,
+            enable_persistence=True,  # Enable database storage
+            batch_size=2,  # Small batch size to trigger storage
+        )
+
+        # Manually add note references to test persistence
+        for i in range(5):
+            note_reference_collector.collect_note_id(
+                note_id=f"note_{i}", entity_type="client", entity_id="client_123"
+            )
+
+        # Verify automatic flushing occurred (batch_size=2)
+        assert note_reference_collector.get_reference_count() == 5
+
+        # Verify storage contains references
+        stored_refs = self.repository.get_note_references()
+        in_memory_refs = note_reference_collector.get_references()
+
+        # Should have references distributed between storage and memory
+        total_refs = len(stored_refs) + len(
+            [r for r in in_memory_refs if r not in stored_refs]
+        )
+        assert total_refs == 5
+
+        # Test clearing both storage and memory
+        note_reference_collector.clear_references()
+        assert note_reference_collector.get_reference_count() == 0
+        assert self.repository.get_note_references_count() == 0
+
+    def test_graphql_throttling_prevention(self):
+        """Test that deferred notes loading prevents GraphQL query complexity."""
+        from src.extractors import NoteReferenceCollector
+
+        # Create large dataset simulation
+        large_client_data = {
+            **self.sample_client_data,
+            "notes": {"edges": [{"node": {"id": f"note_{i}"}} for i in range(100)]},
+        }
+
+        # Mock response with many note references (but only IDs)
+        self.mock_jobber_client.fetch_clients.return_value = {
+            "data": {
+                "clients": {
+                    "edges": [{"node": large_client_data}],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        }
+
+        note_reference_collector = NoteReferenceCollector(
+            repository=self.repository,
+            logger=self.logger,
+            enable_persistence=False,
+            batch_size=1000,
+        )
+
+        coordinator = MigrationCoordinator(
+            jobber_client=self.mock_jobber_client,
+            entity_mapper=self.entity_mapper,
+            repository=self.repository,
+            logger=self.logger,
+            note_reference_collector=note_reference_collector,
+        )
+
+        # Execute only client migration to test reference collection
+        summary = MigrationSummary(
+            clients_processed=0,
+            invoices_processed=0,
+            quotes_processed=0,
+            notes_processed=0,
+            note_references_collected=0,
+            attachments_processed=0,
+            files_downloaded=0,
+            total_bytes_downloaded=0,
+            download_failures=0,
+            start_time="",
+            end_time="",
+            duration_seconds=0.0,
+            errors=[],
+        )
+
+        clients_processed = coordinator._migrate_clients(summary)
+
+        # Validate that note references were collected but notes weren't processed inline  # noqa: E501
+        assert clients_processed == 1
+        assert note_reference_collector.get_reference_count() == 100
+
+        # Verify that fetch_clients was called only once (no complex nested queries)
+        assert self.mock_jobber_client.fetch_clients.call_count == 1
+
+        # Verify that individual note queries would be much simpler than nested queries
+        collected_refs = note_reference_collector.get_references()
+        assert len(collected_refs) == 100
+        assert all(ref["entity_type"] == "client" for ref in collected_refs)
+        assert all(ref["entity_id"] == "client_123" for ref in collected_refs)
 
     def _setup_mock_responses(self):
         """Setup mock GraphQL responses for all entity types."""
@@ -534,7 +760,7 @@ class TestCompleteWorkflow:
         assert client.id == "client_123"
         assert client.first_name == "John"
         assert client.last_name == "Doe"
-        assert client.primary_email == "john@test.com"
+        assert client.email == "john@test.com"
 
         invoices = self.repository.get_all_invoices()
         invoice = invoices[0]
@@ -547,13 +773,13 @@ class TestCompleteWorkflow:
         quote = quotes[0]
         assert quote.id == "quote_789"
         assert quote.client_id == "client_123"
-        assert quote.number == "Q-001"
+        assert quote.quote_number == "Q-001"
         assert quote.title == "Test Quote"
 
         notes = self.repository.get_all_notes()
         note = notes[0]
         assert note.id == "note_101"
-        assert note.client_id == "client_123"
+        assert note.entity_id == "client_123"
         assert note.message == "Test note content"
 
         attachments = self.repository.get_all_attachments()
