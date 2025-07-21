@@ -6,7 +6,7 @@ in PRD Section 3.1.
 """
 
 from .attachment_downloader import AttachmentDownloader
-from .notes_extractor import NotesExtractor
+
 from .quotes_extractor import QuotesExtractor
 
-__all__ = ["AttachmentDownloader", "NotesExtractor", "QuotesExtractor"]
+__all__ = ["AttachmentDownloader", "QuotesExtractor"]

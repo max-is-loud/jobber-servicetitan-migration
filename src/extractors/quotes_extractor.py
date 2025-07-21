@@ -118,11 +118,27 @@ class QuotesExtractor:
 
                 # Map GraphQL nodes to domain models
                 quotes = []
+                notes = []  # Collect notes from quotes
                 for edge in edges:
                     node = edge.get("node", {})
                     try:
                         quote = self._entity_mapper.map_quote(node)
                         quotes.append(quote)
+
+                        # Extract notes if present
+                        quote_notes = node.get("notes", {}).get("edges", [])
+                        for note_edge in quote_notes:
+                            note_node = note_edge.get("node", {})
+                            if note_node:
+                                # Add quote relationship to note data
+                                note_node["quote"] = {"id": quote.id}
+                                try:
+                                    note = self._entity_mapper.map_note(note_node)
+                                    notes.append(note)
+                                except MappingError as e:
+                                    self._logger.debug(
+                                        f"Failed to map note for quote {quote.id}: {e}"
+                                    )
                     except MappingError as e:
                         error_msg = (
                             f"Failed to map quote {node.get('id', 'unknown')}: {e}"
@@ -138,6 +154,11 @@ class QuotesExtractor:
                         f"Processed {len(quotes)} quotes "
                         f"(total: {entities_processed})"
                     )
+
+                # Save associated notes if any
+                if notes:
+                    self._repository.save_notes(notes)
+                    self._logger.info(f"Saved {len(notes)} notes for quotes")
 
                 pages_processed += 1
 

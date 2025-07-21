@@ -52,6 +52,35 @@ oauth_app = typer.Typer(
 )
 app.add_typer(oauth_app, name="oauth")
 
+# Create migrate subcommand group
+migrate_app = typer.Typer(
+    name="migrate",
+    help="Data migration commands",
+    add_completion=False,
+    invoke_without_command=True,
+)
+app.add_typer(migrate_app, name="migrate")
+
+
+@migrate_app.callback()
+def migrate_callback(
+    ctx: typer.Context,
+    db: Annotated[Optional[Path], typer.Option(help="SQLite database path")] = None,
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+) -> None:
+    """
+    Data migration commands for TightBeam.
+
+    If no subcommand is provided, runs the 'all' command by default.
+    """
+    if ctx.invoked_subcommand is None:
+        # Default to 'all' command when no subcommand is specified
+        if db is None:
+            db = Path("tightbeam.db")
+        migrate_all(db=db, verbose=verbose)
+
 
 @oauth_app.command()
 def init() -> None:
@@ -666,9 +695,11 @@ def oauth_clear(
         sys.exit(5)
 
 
-@app.command()
-def migrate(
-    db: Annotated[Path, typer.Option(help="SQLite database path")],
+@migrate_app.command("all")
+def migrate_all(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
     verbose: Annotated[
         bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
     ] = False,
@@ -687,7 +718,7 @@ def migrate(
        and run 'tightbeam oauth init'
 
     Args:
-        db: Path to SQLite database file (will be created if it doesn't exist)
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
         verbose: Enable verbose logging output for debugging
     """  # noqa: E501
     connection = None
@@ -763,12 +794,9 @@ def migrate(
         entity_mapper = EntityMapper()
 
         # Create optional extractors for enhanced entity coverage
-        from .extractors import AttachmentDownloader, NotesExtractor, QuotesExtractor
+        from .extractors import AttachmentDownloader, QuotesExtractor
 
         quotes_extractor = QuotesExtractor(
-            jobber_client, entity_mapper, repository, logger
-        )
-        notes_extractor = NotesExtractor(
             jobber_client, entity_mapper, repository, logger
         )
         attachment_downloader = AttachmentDownloader(
@@ -779,14 +807,13 @@ def migrate(
             base_download_path="./attachments",
         )
 
-        # Create migration coordinator with all dependencies including optional extractors
+        # Create migration coordinator with all dependencies including optional extractors  # noqa: E501
         migration_coordinator = MigrationCoordinator(
             jobber_client=jobber_client,
             entity_mapper=entity_mapper,
             repository=repository,
             logger=logger,
             quotes_extractor=quotes_extractor,
-            notes_extractor=notes_extractor,
             attachment_downloader=attachment_downloader,
         )
 
@@ -891,9 +918,11 @@ def migrate(
             connection.close()
 
 
-@app.command("fetch-quotes")
-def fetch_quotes(
-    db: Annotated[Path, typer.Option(help="SQLite database path")],
+@migrate_app.command("quotes")
+def migrate_quotes(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
     verbose: Annotated[
         bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
     ] = False,
@@ -909,10 +938,10 @@ def fetch_quotes(
     via JOBBER_TOKEN environment variable or OAuth2 configuration.
 
     Args:
-        db: Path to SQLite database file (will be created if it doesn't exist)
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist) noqa: E501
         verbose: Enable verbose logging output for debugging
         page_limit: Optional limit on number of pages to process (for testing)
-    """
+    """  # noqa: E501
     _execute_entity_extraction(
         entity_type="quotes",
         db=db,
@@ -921,39 +950,11 @@ def fetch_quotes(
     )
 
 
-@app.command("fetch-notes")
-def fetch_notes(
-    db: Annotated[Path, typer.Option(help="SQLite database path")],
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
-) -> None:
-    """
-    Extract note data from Jobber API to SQLite database.
-
-    Fetches all notes from the Jobber GraphQL API using cursor-based pagination
-    and stores them in the specified SQLite database. Requires authentication
-    via JOBBER_TOKEN environment variable or OAuth2 configuration.
-
-    Args:
-        db: Path to SQLite database file (will be created if it doesn't exist)
-        verbose: Enable verbose logging output for debugging
-        page_limit: Optional limit on number of pages to process (for testing)
-    """
-    _execute_entity_extraction(
-        entity_type="notes",
-        db=db,
-        verbose=verbose,
-        page_limit=page_limit,
-    )
-
-
-@app.command("fetch-attachments")
-def fetch_attachments(
-    db: Annotated[Path, typer.Option(help="SQLite database path")],
+@migrate_app.command("attachments")
+def migrate_attachments(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
     verbose: Annotated[
         bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
     ] = False,
@@ -973,11 +974,11 @@ def fetch_attachments(
     variable or OAuth2 configuration.
 
     Args:
-        db: Path to SQLite database file (will be created if it doesn't exist)
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
         verbose: Enable verbose logging output for debugging
         page_limit: Optional limit on number of pages to process (for testing)
         download_path: Base directory for attachment file downloads
-    """
+    """  # noqa: E501
     _execute_entity_extraction(
         entity_type="attachments",
         db=db,
@@ -1067,10 +1068,7 @@ def _execute_entity_extraction(
             extractor = QuotesExtractor(
                 jobber_client, entity_mapper, repository, logger
             )
-        elif entity_type == "notes":
-            from .extractors import NotesExtractor
 
-            extractor = NotesExtractor(jobber_client, entity_mapper, repository, logger)
         elif entity_type == "attachments":
             from .extractors import AttachmentDownloader
 
