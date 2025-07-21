@@ -198,6 +198,21 @@ class Repository:
             """
             cursor.execute(note_references_schema)
 
+            # Create graphql_costs table for GraphQL query complexity points tracking
+            graphql_costs_schema = """
+                CREATE TABLE IF NOT EXISTS graphql_costs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    query_type TEXT NOT NULL,
+                    batch_size INTEGER NOT NULL,
+                    requested_cost INTEGER NOT NULL,
+                    actual_cost INTEGER NOT NULL,
+                    cost_difference INTEGER NOT NULL,
+                    timestamp REAL NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+            """
+            cursor.execute(graphql_costs_schema)
+
             # Create properties table for service locations
             properties_schema = """
                 CREATE TABLE IF NOT EXISTS properties (

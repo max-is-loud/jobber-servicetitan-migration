@@ -138,12 +138,24 @@ def migrate_callback(
         )
         raise typer.Exit(1)
 
+    # Store shared configuration in context for subcommands
+    ctx.ensure_object(dict)
+    ctx.obj.update(
+        {
+            "db": db or Path("tightbeam.db"),
+            "verbose": verbose,
+            "deferred_notes": deferred_notes,
+            "enable_notes_persistence": enable_notes_persistence,
+            "optimization_level": optimization_level,
+            "enable_cost_monitoring": enable_cost_monitoring,
+            "cost_monitoring_verbose": cost_monitoring_verbose,
+        }
+    )
+
     if ctx.invoked_subcommand is None:
         # Default to 'all' command when no subcommand is specified
-        if db is None:
-            db = Path("tightbeam.db")
         migrate_all(
-            db=db,
+            db=ctx.obj["db"],
             verbose=verbose,
             deferred_notes=deferred_notes,
             enable_notes_persistence=enable_notes_persistence,
@@ -1185,12 +1197,7 @@ def migrate_all(
 
 @migrate_app.command("quotes")
 def migrate_quotes(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
+    ctx: typer.Context,
     page_limit: Annotated[
         Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
     ] = None,
@@ -1199,30 +1206,27 @@ def migrate_quotes(
     Extract quote data from Jobber API to SQLite database.
 
     Fetches all quotes from the Jobber GraphQL API using cursor-based pagination
-    and stores them in the specified SQLite database. Requires authentication
-    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+    and stores them in the specified SQLite database. Uses centralized rate limiting
+    configuration from parent command options (--optimization-level).
 
     Args:
-        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist) noqa: E501
-        verbose: Enable verbose logging output for debugging
         page_limit: Optional limit on number of pages to process (for testing)
     """  # noqa: E501
+    # Get shared configuration from context
+    config = ctx.obj or {}
+
     _execute_entity_extraction(
         entity_type="quotes",
-        db=db,
-        verbose=verbose,
+        db=config.get("db", Path("tightbeam.db")),
+        verbose=config.get("verbose", False),
         page_limit=page_limit,
+        optimization_level=config.get("optimization_level", "moderate"),
     )
 
 
 @migrate_app.command("attachments")
 def migrate_attachments(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
+    ctx: typer.Context,
     page_limit: Annotated[
         Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
     ] = None,
@@ -1235,32 +1239,29 @@ def migrate_attachments(
 
     Fetches all attachments from the Jobber GraphQL API using cursor-based pagination,
     downloads the binary files to organized local storage, and stores metadata in the
-    specified SQLite database. Requires authentication via JOBBER_TOKEN environment
-    variable or OAuth2 configuration.
+    specified SQLite database. Uses centralized rate limiting configuration from parent
+    command options (--optimization-level).
 
     Args:
-        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
-        verbose: Enable verbose logging output for debugging
         page_limit: Optional limit on number of pages to process (for testing)
         download_path: Base directory for attachment file downloads
     """  # noqa: E501
+    # Get shared configuration from context
+    config = ctx.obj or {}
+
     _execute_entity_extraction(
         entity_type="attachments",
-        db=db,
-        verbose=verbose,
+        db=config.get("db", Path("tightbeam.db")),
+        verbose=config.get("verbose", False),
         page_limit=page_limit,
         download_path=download_path,
+        optimization_level=config.get("optimization_level", "moderate"),
     )
 
 
 @migrate_app.command("users")
 def migrate_users(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
+    ctx: typer.Context,
     page_limit: Annotated[
         Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
     ] = None,
@@ -1270,20 +1271,21 @@ def migrate_users(
 
     Fetches all users from the Jobber GraphQL API using cursor-based pagination
     and stores them in the specified SQLite database. Includes user notes extraction
-    for performance tracking and administrative information. Requires authentication
-    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+    for performance tracking and administrative information. Uses centralized rate
+    limiting configuration from parent command options (--optimization-level).
 
     Args:
-        db: Path to SQLite database file (defaults to tightbeam.db, will be created
-            if it doesn't exist)
-        verbose: Enable verbose logging output for debugging
         page_limit: Optional limit on number of pages to process (for testing)
     """
+    # Get shared configuration from context
+    config = ctx.obj or {}
+
     _execute_entity_extraction(
         entity_type="users",
-        db=db,
-        verbose=verbose,
+        db=config.get("db", Path("tightbeam.db")),
+        verbose=config.get("verbose", False),
         page_limit=page_limit,
+        optimization_level=config.get("optimization_level", "moderate"),
     )
 
 

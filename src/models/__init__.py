@@ -3,6 +3,7 @@
 from .attachment import Attachment
 from .client import Client
 from .expense import Expense
+from .graphql_cost import GraphQLCost
 from .invoice import Invoice
 from .job import Job
 from .migration_summary import MigrationSummary
@@ -20,6 +21,7 @@ __all__ = [
     "Attachment",
     "Client",
     "Expense",
+    "GraphQLCost",
     "Invoice",
     "Job",
     "MigrationSummary",
