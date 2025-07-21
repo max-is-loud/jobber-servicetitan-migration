@@ -5,7 +5,7 @@ from typing import Optional
 
 from ..clients import JobberClient
 from ..exceptions import JobberApiError, MappingError, RepositoryError
-from ..extractors import AttachmentDownloader, NotesExtractor, QuotesExtractor
+from ..extractors import AttachmentDownloader, QuotesExtractor
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import MigrationSummary
@@ -30,7 +30,6 @@ class MigrationCoordinator:
         repository: Repository,
         logger: Logger,
         quotes_extractor: Optional[QuotesExtractor] = None,
-        notes_extractor: Optional[NotesExtractor] = None,
         attachment_downloader: Optional[AttachmentDownloader] = None,
     ) -> None:
         """Initialize MigrationCoordinator with required dependencies.
@@ -41,7 +40,6 @@ class MigrationCoordinator:
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
             quotes_extractor: Optional extractor for Quote entities
-            notes_extractor: Optional extractor for Note entities
             attachment_downloader: Optional downloader for Attachment files
         """
         self._jobber_client = jobber_client
@@ -51,7 +49,6 @@ class MigrationCoordinator:
 
         # Optional extractors for enhanced entity coverage
         self._quotes_extractor = quotes_extractor
-        self._notes_extractor = notes_extractor
         self._attachment_downloader = attachment_downloader
 
     def migrate(self, include_extended_entities: bool = True) -> MigrationSummary:
@@ -121,13 +118,7 @@ class MigrationCoordinator:
                         "Quote extraction skipped - no extractor provided"
                     )
 
-                if self._notes_extractor:
-                    self._logger.info("Starting note migration")
-                    summary.notes_processed = self._migrate_notes(summary)
-                else:
-                    self._logger.debug(
-                        "Note extraction skipped - no extractor provided"
-                    )
+                # Notes are now extracted with their parent entities (clients, invoices, quotes)  # noqa: E501
 
                 if self._attachment_downloader:
                     self._logger.info(
@@ -146,7 +137,7 @@ class MigrationCoordinator:
                     )
             else:
                 self._logger.info(
-                    "Extended entity migration disabled - using legacy Client/Invoice only mode"
+                    "Extended entity migration disabled - using legacy Client/Invoice only mode"  # noqa: E501
                 )
 
         except (RepositoryError, JobberApiError, MappingError) as e:
@@ -223,11 +214,27 @@ class MigrationCoordinator:
 
                 # Map GraphQL nodes to domain models
                 clients = []
+                notes = []  # Collect notes from clients
                 for edge in edges:
                     node = edge.get("node", {})
                     try:
                         client = self._entity_mapper.map_client(node)
                         clients.append(client)
+
+                        # Extract notes if present
+                        client_notes = node.get("notes", {}).get("edges", [])
+                        for note_edge in client_notes:
+                            note_node = note_edge.get("node", {})
+                            if note_node:
+                                # Add client relationship to note data
+                                note_node["client"] = {"id": client.id}
+                                try:
+                                    note = self._entity_mapper.map_note(note_node)
+                                    notes.append(note)
+                                except MappingError as e:
+                                    self._logger.debug(
+                                        f"Failed to map note for client {client.id}: {e}"  # noqa: E501
+                                    )
                     except MappingError as e:
                         error_msg = (
                             f"Failed to map client {node.get('id', 'unknown')}: {e}"
@@ -242,6 +249,12 @@ class MigrationCoordinator:
                     self._logger.info(
                         f"Processed {len(clients)} clients (total: {total_processed})"
                     )
+
+                # Save associated notes if any
+                if notes:
+                    self._repository.save_notes(notes)
+                    summary.notes_processed += len(notes)
+                    self._logger.info(f"Saved {len(notes)} notes for clients")
 
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
@@ -312,11 +325,27 @@ class MigrationCoordinator:
 
                 # Map GraphQL nodes to domain models
                 invoices = []
+                notes = []  # Collect notes from invoices
                 for edge in edges:
                     node = edge.get("node", {})
                     try:
                         invoice = self._entity_mapper.map_invoice(node)
                         invoices.append(invoice)
+
+                        # Extract notes if present
+                        invoice_notes = node.get("notes", {}).get("edges", [])
+                        for note_edge in invoice_notes:
+                            note_node = note_edge.get("node", {})
+                            if note_node:
+                                # Add invoice relationship to note data
+                                note_node["invoice"] = {"id": invoice.id}
+                                try:
+                                    note = self._entity_mapper.map_note(note_node)
+                                    notes.append(note)
+                                except MappingError as e:
+                                    self._logger.debug(
+                                        f"Failed to map note for invoice {invoice.id}: {e}"  # noqa: E501
+                                    )
                     except MappingError as e:
                         error_msg = (
                             f"Failed to map invoice {node.get('id', 'unknown')}: {e}"
@@ -331,6 +360,12 @@ class MigrationCoordinator:
                     self._logger.info(
                         f"Processed {len(invoices)} invoices (total: {total_processed})"
                     )
+
+                # Save associated notes if any
+                if notes:
+                    self._repository.save_notes(notes)
+                    summary.notes_processed += len(notes)
+                    self._logger.info(f"Saved {len(notes)} notes for invoices")
 
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
@@ -395,60 +430,16 @@ class MigrationCoordinator:
             extractor_summary = self._quotes_extractor.get_extraction_summary()
             if extractor_summary["error_count"] > 0:
                 summary.add_error(
-                    f"Quote extraction completed with {extractor_summary['error_count']} recoverable errors"
+                    f"Quote extraction completed with {extractor_summary['error_count']} recoverable errors"  # noqa: E501
                 )
 
             self._logger.info(
-                f"Quote migration completed: {result['entities_processed']} quotes processed"
+                f"Quote migration completed: {result['entities_processed']} quotes processed"  # noqa: E501
             )
             return result["entities_processed"]
 
         except Exception as e:
             error_msg = f"Quote migration failed: {e}"
-            self._logger.error(error_msg)
-            summary.add_error(error_msg)
-            raise
-
-    def _migrate_notes(self, summary: MigrationSummary) -> int:
-        """
-        Migrate all notes using the dedicated NotesExtractor.
-
-        Uses the injected NotesExtractor to handle cursor-based pagination,
-        data transformation, and persistence with comprehensive error handling.
-
-        Args:
-            summary: Migration summary for error tracking
-
-        Returns:
-            Total number of notes processed
-
-        Raises:
-            JobberApiError: If API communication fails
-            MappingError: If note data transformation fails
-            RepositoryError: If database operations fail
-        """
-        if not self._notes_extractor:
-            self._logger.info("Note migration requested but no NotesExtractor provided")
-            return 0
-
-        try:
-            # Execute note extraction using dedicated extractor
-            result = self._notes_extractor.extract()
-
-            # Track any errors from extractor summary
-            extractor_summary = self._notes_extractor.get_extraction_summary()
-            if extractor_summary["error_count"] > 0:
-                summary.add_error(
-                    f"Note extraction completed with {extractor_summary['error_count']} recoverable errors"
-                )
-
-            self._logger.info(
-                f"Note migration completed: {result['entities_processed']} notes processed"
-            )
-            return result["entities_processed"]
-
-        except Exception as e:
-            error_msg = f"Note migration failed: {e}"
             self._logger.error(error_msg)
             summary.add_error(error_msg)
             raise
@@ -495,7 +486,7 @@ class MigrationCoordinator:
             downloader_summary = self._attachment_downloader.get_extraction_summary()
             if downloader_summary["error_count"] > 0:
                 summary.add_error(
-                    f"Attachment extraction completed with {downloader_summary['error_count']} recoverable errors"
+                    f"Attachment extraction completed with {downloader_summary['error_count']} recoverable errors"  # noqa: E501
                 )
 
             files_downloaded = result.get("files_downloaded", 0)
@@ -503,7 +494,7 @@ class MigrationCoordinator:
             download_failures = result.get("download_failures", 0)
 
             self._logger.info(
-                f"Attachment migration completed: {result['entities_processed']} attachments processed, "
+                f"Attachment migration completed: {result['entities_processed']} attachments processed, "  # noqa: E501
                 f"{files_downloaded} files downloaded ({bytes_downloaded} bytes)"
             )
 

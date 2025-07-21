@@ -54,6 +54,16 @@ class JobberClient:
             phones {
               number
             }
+            notes {
+              edges {
+                node {
+                  id
+                  message
+                  createdAt
+                  updatedAt
+                }
+              }
+            }
             createdAt
           }
         }
@@ -81,6 +91,16 @@ class JobberClient:
             }
             invoiceStatus
             issuedDate
+            notes {
+              edges {
+                node {
+                  id
+                  message
+                  createdAt
+                  updatedAt
+                }
+              }
+            }
           }
         }
         pageInfo {
@@ -119,6 +139,16 @@ class JobberClient:
                 }
               }
             }
+            notes {
+              edges {
+                node {
+                  id
+                  message
+                  createdAt
+                  updatedAt
+                }
+              }
+            }
             createdAt
             transitionedAt
             updatedAt
@@ -132,59 +162,58 @@ class JobberClient:
     }
     """
 
-    # GraphQL query for fetching notes with cursor pagination
-    # Notes are polymorphic and attached to various entities
+    # NOTE: This query is deprecated - notes are now fetched with their parent entities
     # (clients, jobs, quotes, invoices)
-    NOTES_QUERY = """
-    query GetNotes($cursor: String) {
-      nodes(first: 100, after: $cursor) {
-        edges {
-          node {
-            ... on ClientNote {
-              id
-              message
-              client {
-                id
-              }
-              createdAt
-              updatedAt
-            }
-            ... on JobNote {
-              id
-              message
-              job {
-                id
-              }
-              createdAt
-              updatedAt
-            }
-            ... on QuoteNote {
-              id
-              message
-              quote {
-                id
-              }
-              createdAt
-              updatedAt
-            }
-            ... on InvoiceNote {
-              id
-              message
-              invoice {
-                id
-              }
-              createdAt
-              updatedAt
-            }
-          }
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-      }
-    }
-    """
+    # NOTES_QUERY = """
+    # query GetNotes($cursor: String) {
+    #   nodes(first: 100, after: $cursor) {
+    #     edges {
+    #       node {
+    #         ... on ClientNote {
+    #           id
+    #           message
+    #           client {
+    #             id
+    #           }
+    #           createdAt
+    #           updatedAt
+    #         }
+    #         ... on JobNote {
+    #           id
+    #           message
+    #           job {
+    #             id
+    #           }
+    #           createdAt
+    #           updatedAt
+    #         }
+    #         ... on QuoteNote {
+    #           id
+    #           message
+    #           quote {
+    #             id
+    #           }
+    #           createdAt
+    #           updatedAt
+    #         }
+    #         ... on InvoiceNote {
+    #           id
+    #           message
+    #           invoice {
+    #             id
+    #           }
+    #           createdAt
+    #           updatedAt
+    #         }
+    #       }
+    #     }
+    #     pageInfo {
+    #       hasNextPage
+    #       endCursor
+    #     }
+    #   }
+    # }
+    # """
 
     # GraphQL query for fetching attachments with cursor pagination
     # Attachments are file attachments linked to notes
@@ -461,46 +490,45 @@ class JobberClient:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(f"Unexpected error while fetching quotes: {e}") from e
 
-    def fetch_notes(self, cursor: Optional[str] = None) -> dict[str, Any]:
-        """
-        Fetch notes data from Jobber GraphQL API.
-
-        Retrieves note information using cursor-based pagination with automatic
-        authentication handling. Notes are polymorphic entities attached to various
-        objects (clients, jobs, quotes, invoices). For OAuth2 users, expired tokens
-        are automatically refreshed during the request.
-
-        Args:
-            cursor: Optional cursor for pagination (None for first page)
-
-        Returns:
-            Dictionary containing GraphQL response with notes data
-
-        Raises:
-            JobberApiError: If API communication fails
-            ConfigurationError: If authentication configuration is invalid
-                               or OAuth2 token refresh fails
-        """
-        try:
-            response_data = self._execute_graphql_request(self.NOTES_QUERY, cursor)
-
-            # Validate that notes data exists in response
-            if (
-                response_data.get("data") is not None
-                and "nodes" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'nodes' field in data"
-                )
-
-            return response_data
-
-        except (ConfigurationError, JobberApiError):
-            # Re-raise our domain exceptions as-is
-            raise
-        except Exception as e:
-            # Catch any unexpected errors and wrap them
-            raise JobberApiError(f"Unexpected error while fetching notes: {e}") from e
+    # NOTE: This method is deprecated - notes are now fetched with their parent entities
+    # def fetch_notes(self, cursor: Optional[str] = None) -> dict[str, Any]:
+    #     """Fetch notes from Jobber API with cursor pagination.
+    #
+    #     Notes in Jobber are polymorphic and can be attached to clients, jobs,
+    #     quotes, or invoices. This method fetches all types of notes.
+    #
+    #     Args:
+    #         cursor: Optional pagination cursor for fetching next page
+    #
+    #     Returns:
+    #         dict[str, Any]: Raw GraphQL response containing notes data
+    #
+    #     Raises:
+    #         JobberApiError: If API request fails with HTTP error or
+    #                        invalid response structure
+    #         ConfigurationError: If authentication configuration is invalid
+    #                            or OAuth2 token refresh fails
+    #     """
+    #     try:
+    #         response_data = self._execute_graphql_request(self.NOTES_QUERY, cursor)
+    #
+    #         # Validate that notes data exists in response
+    #         if (
+    #             response_data.get("data") is not None
+    #             and "nodes" not in response_data["data"]
+    #         ):
+    #             raise JobberApiError(
+    #                 "Invalid response structure: missing 'nodes' field in data"
+    #             )
+    #
+    #         return response_data
+    #
+    #     except (ConfigurationError, JobberApiError):
+    #         # Re-raise our domain exceptions as-is
+    #         raise
+    #     except Exception as e:
+    #         # Wrap unexpected exceptions in JobberApiError
+    #         raise JobberApiError(f"Unexpected error fetching notes: {str(e)}") from e
 
     def fetch_attachments(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
