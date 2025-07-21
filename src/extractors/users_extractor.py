@@ -6,7 +6,7 @@ from ..clients import JobberClient
 from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import Note, User
+from ..models import User
 from ..repositories import Repository
 from .base_extractor import BaseExtractor
 

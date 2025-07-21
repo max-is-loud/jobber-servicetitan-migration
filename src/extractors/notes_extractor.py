@@ -3,6 +3,7 @@
 from typing import Any, List, Optional
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import Note
@@ -24,6 +25,7 @@ class NotesExtractor(BaseExtractor[Note]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        config_manager: Optional[ConfigManagerImpl] = None,
     ) -> None:
         """Initialize NotesExtractor with required dependencies."""
         super().__init__(
@@ -33,6 +35,7 @@ class NotesExtractor(BaseExtractor[Note]):
             logger=logger,
             entity_type=Note,
             entity_name="note",
+            config_manager=config_manager,
         )
         self._last_batch_entities: List[Note] = []
 

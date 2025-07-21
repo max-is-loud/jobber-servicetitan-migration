@@ -23,6 +23,7 @@ def validate_imports():
         from src.clients import JobberClient
         from src.coordinators import MigrationCoordinator
         from src.extractors import AttachmentDownloader, NotesExtractor, QuotesExtractor
+        from src.interfaces import BaseExtractor
         from src.loggers import ConsoleLogger
         from src.mappers import EntityMapper
         from src.models import (
@@ -34,7 +35,6 @@ def validate_imports():
             Quote,
         )
         from src.repositories import Repository
-        from src.interfaces import BaseExtractor
 
         print("  ✅ Core components import successfully")
 
@@ -56,7 +56,6 @@ def validate_architecture():
 
     try:
         from src.coordinators import MigrationCoordinator
-        from src.extractors import QuotesExtractor
         from src.models import MigrationSummary
 
         # Check MigrationCoordinator supports all entity types
@@ -173,8 +172,8 @@ def validate_prd_milestones():
 
 def validate_basic_entities():
     """Validate basic Client and Invoice entity support."""
-    from src.repositories import Repository
     from src.mappers import EntityMapper
+    from src.repositories import Repository
 
     # Check Repository methods
     repo_methods = dir(Repository)
@@ -202,9 +201,9 @@ def validate_basic_entities():
 
 def validate_extended_entities():
     """Validate Quote and Note entity support."""
-    from src.repositories import Repository
+    from src.extractors import NotesExtractor, QuotesExtractor
     from src.mappers import EntityMapper
-    from src.extractors import QuotesExtractor, NotesExtractor
+    from src.repositories import Repository
 
     # Check Repository methods for extended entities
     repo_methods = dir(Repository)
@@ -243,9 +242,9 @@ def validate_extended_entities():
 
 def validate_file_management():
     """Validate attachment file management capabilities."""
-    from src.repositories import Repository
-    from src.mappers import EntityMapper
     from src.extractors import AttachmentDownloader
+    from src.mappers import EntityMapper
+    from src.repositories import Repository
 
     # Check Repository methods for attachments
     repo_methods = dir(Repository)
@@ -292,8 +291,9 @@ def validate_cli_interface():
 
 def validate_unified_workflow():
     """Validate unified workflow orchestration."""
-    from src.coordinators import MigrationCoordinator
     import inspect
+
+    from src.coordinators import MigrationCoordinator
 
     # Check MigrationCoordinator constructor supports all extractors
     init_signature = inspect.signature(MigrationCoordinator.__init__)
@@ -391,7 +391,7 @@ def validate_integration_tests():
         "test_prd_validation.py",
     ]:
         file_path = f"tests/integration/{test_file}"
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             content = f.read()
 
         tree = ast.parse(content)

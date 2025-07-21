@@ -10,6 +10,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..exceptions import (
     ConfigurationError,
     MappingError,
@@ -45,6 +46,7 @@ class AttachmentDownloader:
         base_download_path: str = "./attachments",
         max_retries: int = 3,
         chunk_size: int = 8192,
+        config_manager: ConfigManagerImpl | None = None,
     ) -> None:
         """Initialize AttachmentDownloader with required dependencies.
 
@@ -56,6 +58,7 @@ class AttachmentDownloader:
             base_download_path: Base directory for attachment storage
             max_retries: Maximum retry attempts for failed downloads
             chunk_size: Chunk size in bytes for streaming downloads
+            config_manager: Optional ConfigManager for delays and pagination settings
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
@@ -64,6 +67,7 @@ class AttachmentDownloader:
         self._base_download_path = base_download_path
         self._max_retries = max_retries
         self._chunk_size = chunk_size
+        self._config_manager = config_manager or ConfigManagerImpl()
 
         # Setup HTTP session with retry logic
         self._session = requests.Session()
@@ -220,9 +224,12 @@ class AttachmentDownloader:
                 # Update cursor for next iteration
                 current_cursor = end_cursor
 
-                # Add delay between pages to prevent API overload
-                time.sleep(1.0)
-                self._logger.debug(f"Added 1s delay before page {pages_processed + 1}")
+                # Add configurable delay between pages to prevent API overload
+                page_delay = self._config_manager.get_delay_config("page_delay")
+                time.sleep(page_delay)
+                self._logger.debug(
+                    f"Added {page_delay}s delay before page {pages_processed + 1}"
+                )
 
             extraction_time = time.time() - start_time
 

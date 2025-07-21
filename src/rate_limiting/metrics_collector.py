@@ -8,6 +8,11 @@ observability in TightBeam v2 Jobber API operations.
 import threading
 import time
 from collections import deque
+from typing import TYPE_CHECKING, Optional
+
+# Import Repository for type hints and dependency injection
+if TYPE_CHECKING:
+    from ..repositories.repository import Repository
 
 
 class MetricsCollector:
@@ -27,7 +32,12 @@ class MetricsCollector:
     most recent 100 entries to prevent unbounded growth during long operations.
     """
 
-    def __init__(self, max_response_times: int = 100, max_cost_history: int = 100):
+    def __init__(
+        self,
+        max_response_times: int = 100,
+        max_cost_history: int = 100,
+        repository: Optional["Repository"] = None,
+    ):
         """Initialize the metrics collector.
 
         Args:
@@ -35,8 +45,13 @@ class MetricsCollector:
                                average calculations (default: 100)
             max_cost_history: Maximum number of GraphQL cost entries to keep
                              for analysis (default: 100)
+            repository: Optional Repository instance for persistent storage
+                       of GraphQL cost data (default: None)
         """
         self._lock = threading.Lock()
+
+        # Repository dependency for persistent storage (optional)
+        self._repository = repository
 
         # Request tracking
         self._total_requests = 0
@@ -106,22 +121,62 @@ class MetricsCollector:
             if successful:
                 self._successful_retries += 1
 
-    def record_graphql_cost(self, requested_cost: int, actual_cost: int) -> None:
+    def record_graphql_cost(
+        self,
+        requested_cost: int,
+        actual_cost: int,
+        query_type: str = "unknown",
+        batch_size: int = 0,
+    ) -> None:
         """Record GraphQL query cost information.
 
         Args:
             requested_cost: The cost requested/estimated for the query
             actual_cost: The actual cost returned in response extensions
+            query_type: Type of GraphQL query (e.g., 'fetch_clients', 'fetch_invoices')
+            batch_size: Number of records requested in the batch
         """
         with self._lock:
+            timestamp = time.time()
+            cost_difference = actual_cost - requested_cost
+
+            # Maintain existing in-memory deque storage for immediate access
             self._graphql_costs.append(
                 {
                     "requested": requested_cost,
                     "actual": actual_cost,
-                    "timestamp": time.time(),
-                    "difference": actual_cost - requested_cost,
+                    "timestamp": timestamp,
+                    "difference": cost_difference,
+                    "query_type": query_type,
+                    "batch_size": batch_size,
                 }
             )
+
+            # Persist to database when Repository is available
+            if self._repository is not None:
+                try:
+                    # Create ISO format timestamp for database storage
+                    from datetime import datetime
+
+                    created_at = datetime.fromtimestamp(timestamp).isoformat() + "Z"
+
+                    cost_data = {
+                        "query_type": query_type,
+                        "batch_size": batch_size,
+                        "requested_cost": requested_cost,
+                        "actual_cost": actual_cost,
+                        "cost_difference": cost_difference,
+                        "timestamp": timestamp,
+                        "created_at": created_at,
+                    }
+
+                    # Save to database using repository
+                    self._repository.save_graphql_costs([cost_data])
+
+                except Exception:
+                    # Log error but don't interrupt the metrics collection flow
+                    # This ensures that database issues don't break the application
+                    pass  # Silent failure to maintain application stability
 
     def record_rate_limit_headers(
         self, remaining: int | None = None, reset_time: int | None = None

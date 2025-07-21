@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 from .auth import AuthProvider, OAuth2Manager
 from .clients import HttpClient, JobberClient
+from .config import ConfigManagerImpl
 from .coordinators import MigrationCoordinator
 from .exceptions import (
     ConfigurationError,
@@ -36,14 +37,6 @@ from .repositories import Repository
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Rate limiting optimization configurations
-# Format: (capacity, refill_rate, initial_tokens) -> requests_per_second
-OPTIMIZATION_CONFIGS = {
-    "conservative": (250, 240, 40),  # 4 req/sec - 52% safety margin
-    "moderate": (400, 360, 60),  # 6 req/sec - 28% safety margin (default)
-    "aggressive": (500, 480, 100),  # 8 req/sec - 4% safety margin
-}
 
 # Create Typer application
 app = typer.Typer(
@@ -130,11 +123,21 @@ def migrate_callback(
 
     If no subcommand is provided, runs the 'all' command by default.
     """
-    # Validate optimization level
-    if optimization_level not in OPTIMIZATION_CONFIGS:
+    # Initialize configuration manager
+    try:
+        config_manager = ConfigManagerImpl()
+    except ConfigurationError as e:
+        typer.echo(f"Error: Configuration loading failed: {e}")
+        raise typer.Exit(1)
+
+    # Validate optimization level using ConfigManager
+    try:
+        config_manager.get_rate_limit_config(optimization_level)
+    except ConfigurationError:
+        available_levels = ["conservative", "moderate", "aggressive"]
         typer.echo(
             f"Error: Invalid optimization level '{optimization_level}'. "
-            f"Choose from: {', '.join(OPTIMIZATION_CONFIGS.keys())}"
+            f"Choose from: {', '.join(available_levels)}"
         )
         raise typer.Exit(1)
 
@@ -865,12 +868,24 @@ def migrate_all(
             ) from None
 
         # Core dependencies with rate limiting integration
+        # Initialize configuration manager for consistent settings
+        config_manager = ConfigManagerImpl()
+
         # Initialize metrics collector for cost monitoring if enabled
-        metrics_collector = MetricsCollector() if enable_cost_monitoring else None
-        jobber_client = JobberClient(auth_provider, metrics_collector=metrics_collector)
+        metrics_collector = (
+            MetricsCollector(repository=repository) if enable_cost_monitoring else None
+        )
+        jobber_client = JobberClient(
+            auth_provider,
+            metrics_collector=metrics_collector,
+            config_manager=config_manager,
+        )
 
         # Initialize rate limiting components with dynamic optimization settings
-        capacity, refill_rate, initial_tokens = OPTIMIZATION_CONFIGS[optimization_level]
+        rate_config = config_manager.get_rate_limit_config(optimization_level)
+        capacity = rate_config["capacity"]
+        refill_rate = rate_config["refill_rate"]
+        initial_tokens = rate_config["initial_tokens"]
         requests_per_second = refill_rate / 60
         logger.info(
             f"Setting up {optimization_level.upper()} rate limiting "
@@ -880,9 +895,13 @@ def migrate_all(
         rate_limiter = TokenBucketRateLimiter(
             capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens
         )
-        # Use maximum backoff delays for GraphQL throttling
+        # Use backoff strategy from configuration for GraphQL throttling
+        backoff_config = config_manager.get_backoff_config()
         backoff_strategy = ExponentialBackoffStrategy(
-            initial_delay=5.0, max_delay=300.0, multiplier=2.0
+            initial_delay=backoff_config["initial_delay"],
+            max_delay=backoff_config["max_delay"],
+            multiplier=backoff_config["multiplier"],
+            jitter_factor=backoff_config["jitter_factor"],
         )
 
         # Wrap HTTP client with rate limiting - maximum retries for Jobber GraphQL API
@@ -893,6 +912,7 @@ def migrate_all(
             backoff_strategy,
             max_retries=15,  # Maximum retries for GraphQL throttling
             metrics_collector=metrics_collector,
+            auth_provider=auth_provider,  # Enable reactive OAuth token refresh on 401 errors
         )
         jobber_client.set_http_client(rate_limited_client)
 
@@ -932,7 +952,11 @@ def migrate_all(
                 batch_size=1000,
             )
             notes_extractor = NotesExtractor(
-                jobber_client, entity_mapper, repository, logger
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
+                config_manager=config_manager,
             )
 
             if enable_notes_persistence:
@@ -941,7 +965,11 @@ def migrate_all(
             logger.info("⚡ Immediate notes processing enabled (legacy mode)")
 
         quotes_extractor = QuotesExtractor(
-            jobber_client, entity_mapper, repository, logger
+            jobber_client,
+            entity_mapper,
+            repository,
+            logger,
+            config_manager=config_manager,
         )
         attachment_downloader = AttachmentDownloader(
             jobber_client,
@@ -949,6 +977,7 @@ def migrate_all(
             repository,
             logger,
             base_download_path="./attachments",
+            config_manager=config_manager,
         )
 
         # Create migration coordinator with all dependencies including optional extractors  # noqa: E501
@@ -961,6 +990,7 @@ def migrate_all(
             notes_extractor=notes_extractor,
             quotes_extractor=quotes_extractor,
             attachment_downloader=attachment_downloader,
+            config_manager=config_manager,
         )
 
         # Execute migration workflow
@@ -1513,11 +1543,17 @@ def _execute_entity_extraction(
                 "are set and run 'tightbeam oauth init' to authorize."
             ) from None
 
+        # Initialize configuration manager for consistent settings
+        config_manager = ConfigManagerImpl()
+
         # Setup JobberClient with rate limiting
-        jobber_client = JobberClient(auth_provider)
+        jobber_client = JobberClient(auth_provider, config_manager=config_manager)
 
         # Initialize rate limiting components with dynamic optimization settings
-        capacity, refill_rate, initial_tokens = OPTIMIZATION_CONFIGS[optimization_level]
+        rate_config = config_manager.get_rate_limit_config(optimization_level)
+        capacity = rate_config["capacity"]
+        refill_rate = rate_config["refill_rate"]
+        initial_tokens = rate_config["initial_tokens"]
         requests_per_second = refill_rate / 60
         logger.info(
             f"Setting up {optimization_level.upper()} rate limiting for entity extraction "
@@ -1526,10 +1562,14 @@ def _execute_entity_extraction(
         rate_limiter = TokenBucketRateLimiter(
             capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens
         )
+        backoff_config = config_manager.get_backoff_config()
         backoff_strategy = ExponentialBackoffStrategy(
-            initial_delay=5.0, max_delay=300.0, multiplier=2.0
+            initial_delay=backoff_config["initial_delay"],
+            max_delay=backoff_config["max_delay"],
+            multiplier=backoff_config["multiplier"],
+            jitter_factor=backoff_config["jitter_factor"],
         )
-        metrics_collector = MetricsCollector()
+        metrics_collector = MetricsCollector(repository=repository)
 
         rate_limited_client = RateLimitedHttpClient(
             HttpClient(),
@@ -1548,7 +1588,11 @@ def _execute_entity_extraction(
             from .extractors import QuotesExtractor
 
             extractor = QuotesExtractor(
-                jobber_client, entity_mapper, repository, logger
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
+                config_manager=config_manager,
             )
 
         elif entity_type == "attachments":
@@ -1560,6 +1604,7 @@ def _execute_entity_extraction(
                 repository,
                 logger,
                 base_download_path=download_path,
+                config_manager=config_manager,
             )
 
         elif entity_type == "users":

@@ -150,6 +150,60 @@ class AuthProvider:
         """
         self.repository.clear_oauth_tokens()
 
+    def force_refresh_token(self) -> str:
+        """
+        Force refresh the OAuth2 access token regardless of expiration status.
+
+        This method bypasses the normal expiration check and forces a token refresh.
+        Useful for reactive token refresh when receiving 401 Unauthorized responses.
+
+        Returns:
+            str: New access token after refresh
+
+        Raises:
+            ConfigurationError: If no OAuth2 tokens are found or refresh fails
+            OAuth2Error: If OAuth token operations fail
+        """
+        # Get stored OAuth tokens
+        token_data = self.repository.get_oauth_tokens()
+        if not token_data:
+            raise ConfigurationError(
+                "No OAuth2 tokens found. Please complete OAuth2 authorization "
+                "using the CLI command 'tightbeam oauth init'."
+            )
+
+        refresh_token = token_data["refresh_token"]
+
+        try:
+            # Force refresh the access token
+            new_tokens = self.oauth_manager.refresh_access_token(refresh_token)
+
+            # Convert expires_in to ISO 8601 timestamp
+            expires_in = new_tokens.get("expires_in")
+            if expires_in is None:
+                raise OAuth2Error(
+                    "The 'expires_in' field is missing in the token response."
+                )
+            expires_at = (
+                datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+            ).isoformat()
+
+            # Store the new tokens
+            self.repository.save_oauth_tokens(
+                access_token=new_tokens["access_token"],
+                refresh_token=new_tokens["refresh_token"],
+                expires_at=expires_at,
+            )
+
+            return new_tokens["access_token"]
+        except OAuth2Error:
+            # Token refresh failed, clear stored tokens
+            self.repository.clear_oauth_tokens()
+            raise ConfigurationError(
+                "OAuth2 tokens are invalid and refresh failed. Please re-authorize "
+                "using the CLI command 'tightbeam oauth init'."
+            ) from None
+
     @staticmethod
     def get_oauth2_config() -> tuple[str, str, str]:
         """
