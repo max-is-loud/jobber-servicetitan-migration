@@ -4,7 +4,6 @@ Tests all CLI commands including migrate, fetch-quotes, fetch-notes, and
 fetch-attachments to ensure complete command-line interface functionality.
 """
 
-import os
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -13,9 +12,6 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.cli import _execute_entity_extraction
-from src.clients import JobberClient
-from src.loggers import ConsoleLogger
-from src.mappers import EntityMapper
 from src.repositories import Repository
 
 

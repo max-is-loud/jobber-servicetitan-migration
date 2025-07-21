@@ -4,6 +4,7 @@ import time
 from typing import Optional
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..exceptions import JobberApiError, MappingError, RepositoryError
 from ..extractors import (
     AttachmentDownloader,
@@ -38,6 +39,7 @@ class MigrationCoordinator:
         notes_extractor: Optional[NotesExtractor] = None,
         quotes_extractor: Optional[QuotesExtractor] = None,
         attachment_downloader: Optional[AttachmentDownloader] = None,
+        config_manager: Optional[ConfigManagerImpl] = None,
     ) -> None:
         """Initialize MigrationCoordinator with required dependencies.
 
@@ -50,11 +52,13 @@ class MigrationCoordinator:
             notes_extractor: Optional extractor for Note entities with deferred processing
             quotes_extractor: Optional extractor for Quote entities
             attachment_downloader: Optional downloader for Attachment files
+            config_manager: Optional ConfigManager for delays and pagination settings
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
         self._repository = repository
         self._logger = logger
+        self._config_manager = config_manager or ConfigManagerImpl()
 
         # Note reference collector for deferred note processing
         self._note_reference_collector = note_reference_collector
@@ -278,9 +282,12 @@ class MigrationCoordinator:
                 cursor = page_info.get("endCursor")
                 page_number += 1
 
-                # Add mandatory delay between pages to prevent API overload
-                time.sleep(1.0)  # 1 second delay between pages
-                self._logger.debug(f"Added 1s delay before page {page_number}")
+                # Add configurable delay between pages to prevent API overload
+                page_delay = self._config_manager.get_delay_config("page_delay")
+                time.sleep(page_delay)
+                self._logger.debug(
+                    f"Added {page_delay}s delay before page {page_number}"
+                )
 
             except JobberApiError as e:
                 error_msg = f"API error during client migration page {page_number}: {e}"
@@ -374,9 +381,12 @@ class MigrationCoordinator:
                 cursor = page_info.get("endCursor")
                 page_number += 1
 
-                # Add mandatory delay between pages to prevent API overload
-                time.sleep(1.0)  # 1 second delay between pages
-                self._logger.debug(f"Added 1s delay before invoice page {page_number}")
+                # Add configurable delay between pages to prevent API overload
+                page_delay = self._config_manager.get_delay_config("page_delay")
+                time.sleep(page_delay)
+                self._logger.debug(
+                    f"Added {page_delay}s delay before invoice page {page_number}"
+                )
 
             except JobberApiError as e:
                 error_msg = (

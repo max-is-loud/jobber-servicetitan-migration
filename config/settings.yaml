@@ -1,0 +1,79 @@
+# TightBeam v2 Configuration Settings
+# Main configuration file for centralized settings management
+# See docs/CONFIGURATION.md for detailed documentation and examples
+
+# Rate limiting configuration
+# Controls API request throttling to prevent hitting Jobber's GraphQL API limits
+# Higher values = faster migration but higher risk of throttling
+rate_limits:
+  # Conservative: Safe, reliable settings for unstable connections
+  conservative:
+    capacity: 250          # Token bucket capacity (max burst)
+    refill_rate: 240       # Tokens per minute (4 req/sec effective)
+    initial_tokens: 40     # Starting tokens
+    safety_margin: 0.52    # 52% safety margin for stability
+  
+  # Moderate: Default balanced settings (recommended)  
+  moderate:
+    capacity: 400          # Balanced capacity
+    refill_rate: 360       # 6 req/sec effective rate
+    initial_tokens: 60     # Good startup burst
+    safety_margin: 0.28    # 28% safety margin
+  
+  # Aggressive: Maximum performance (requires valid OAuth & stable connection)
+  aggressive:
+    capacity: 500          # High capacity for fast bursts
+    refill_rate: 480       # 8 req/sec effective rate
+    initial_tokens: 100    # Large startup burst
+    safety_margin: 0.04    # Minimal safety margin
+
+# GraphQL pagination configuration
+# Controls how many items are fetched per API request
+# Higher values = fewer requests but higher memory usage and timeout risk
+# Lower values = more requests but more reliable
+# Recommended range: 20-50 items per page
+pagination:
+  clients: 30              # Client entities per page
+  invoices: 30             # Invoice entities per page  
+  quotes: 30               # Quote entities per page (increased from hardcoded 5)
+  jobs: 30                 # Job entities per page
+  properties: 30           # Property entities per page
+  requests: 30             # Request entities per page
+  users: 30                # User entities per page
+  expenses: 30             # Expense entities per page
+  visits: 30               # Visit entities per page
+  timesheet_entries: 30    # Timesheet entry entities per page
+  product_services: 30     # Product/service entities per page
+  tax_rates: 30            # Tax rate entities per page
+  default: 30              # Default for new entity types
+
+# Timing and delay configuration
+# Controls delays between operations to prevent API overload
+delays:
+  page_delay: 1.0          # Delay between pagination requests (seconds)
+  request_timeout: 30.0    # HTTP request timeout (seconds)
+  retry_base_delay: 2.0    # Base delay for retry attempts (seconds)
+
+# Exponential backoff strategy configuration
+# Controls retry behavior for failed API requests
+# Algorithm: delay = min(initial_delay * multiplier^attempt, max_delay) ± jitter
+backoff:
+  initial_delay: 5.0       # First retry delay (seconds)
+  max_delay: 300.0         # Maximum retry delay (seconds)
+  multiplier: 2.0          # Delay multiplier for each retry
+  jitter_factor: 0.2       # Randomization factor (0.0-1.0)
+
+# Logging configuration
+# Controls application logging behavior and verbosity
+logging:
+  verbose_cost_monitoring: false  # Enable detailed cost tracking
+  performance_logging: true       # Enable performance metrics
+  level: "INFO"                   # Log level: DEBUG, INFO, WARNING, ERROR
+
+# Database configuration  
+# Controls SQLite database settings and behavior
+database:
+  default_path: "tightbeam.db"    # Default database file location
+  timeout: 30.0                   # Connection timeout (seconds)
+  # Enable WAL mode for better concurrency
+  wal_mode: true 

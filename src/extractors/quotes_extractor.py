@@ -3,10 +3,11 @@
 from typing import Any, List, Optional
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import Note, Quote
+from ..models import Quote
 from ..repositories import Repository
 from .base_extractor import BaseExtractor
 
@@ -26,6 +27,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        config_manager: Optional[ConfigManagerImpl] = None,
     ) -> None:
         """Initialize QuotesExtractor with required dependencies.
 
@@ -34,6 +36,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            config_manager: Optional ConfigManager for delays and pagination settings
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -42,6 +45,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
             logger=logger,
             entity_type=Quote,
             entity_name="quote",
+            config_manager=config_manager,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Quote] = []

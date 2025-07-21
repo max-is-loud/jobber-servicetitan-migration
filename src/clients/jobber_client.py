@@ -10,6 +10,7 @@ OAuth2 authentication with automatic token refresh.
 from typing import Any, Optional
 
 from ..auth.auth_provider import AuthProvider
+from ..config import ConfigManagerImpl
 from ..exceptions import ConfigurationError, JobberApiError, OAuth2Error
 from ..interfaces import IHttpClient
 from ..rate_limiting.metrics_collector import MetricsCollector
@@ -41,111 +42,117 @@ class JobberClient:
     # Jobber API version - required for all requests
     API_VERSION = "2023-11-15"
 
-    # GraphQL query for fetching clients with cursor pagination
-    CLIENTS_QUERY = """
-    query GetClients($cursor: String) {
-      clients(first: 30, after: $cursor) {
-        edges {
-          node {
+    def _get_clients_query(self) -> str:
+        """Get GraphQL query for fetching clients with configurable pagination."""
+        page_size = self._get_pagination_size("clients")
+        return f"""
+    query GetClients($cursor: String) {{
+      clients(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
             firstName
             lastName
-            emails {
+            emails {{
               address
-            }
-            phones {
+            }}
+            phones {{
               number
-            }
-            notes {
-              edges {
-                node {
-                  ... on ClientNote {
+            }}
+            notes {{
+              edges {{
+                node {{
+                  ... on ClientNote {{
                     id
-                  }
-                }
-              }
-            }
+                  }}
+                }}
+              }}
+            }}
             createdAt
             updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
-    # GraphQL query for fetching invoices with cursor pagination
-    INVOICES_QUERY = """
-    query GetInvoices($cursor: String) {
-      invoices(first: 30, after: $cursor) {
-        edges {
-          node {
+    def _get_invoices_query(self) -> str:
+        """Get GraphQL query for fetching invoices with configurable pagination."""
+        page_size = self._get_pagination_size("invoices")
+        return f"""
+    query GetInvoices($cursor: String) {{
+      invoices(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
-            client {
+            client {{
               id
-            }
+            }}
             invoiceNumber
-            amounts {
+            amounts {{
               total
-            }
+            }}
             invoiceStatus
             issuedDate
-            notes {
-              edges {
-                node {
-                  ... on InvoiceNote {
+            notes {{
+              edges {{
+                node {{
+                  ... on InvoiceNote {{
                     id
-                  }
-                }
-              }
-            }
-          }
-        }
-        pageInfo {
+                  }}
+                }}
+              }}
+            }}
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
-    # GraphQL query for fetching quotes with cursor pagination
-    QUOTES_QUERY = """
-    query GetQuotes($cursor: String) {
-      quotes(first: 5, after: $cursor) {
-        edges {
-          node {
+    def _get_quotes_query(self) -> str:
+        """Get GraphQL query for fetching quotes with configurable pagination."""
+        page_size = self._get_pagination_size("quotes")
+        return f"""
+    query GetQuotes($cursor: String) {{
+      quotes(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
-            client {
+            client {{
               id
-            }
+            }}
             quoteNumber
             title
-            amounts {
+            amounts {{
               total
               subtotal
-            }
+            }}
             message
-            lineItems {
+            lineItems {{
               totalCount
-            }
-            notes {
+            }}
+            notes {{
               totalCount
-            }
+            }}
             createdAt
             transitionedAt
             updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
     # NOTE: This query is deprecated - notes are now fetched with their parent entities
@@ -626,6 +633,7 @@ class JobberClient:
         auth_provider: AuthProvider,
         http_client: Optional[IHttpClient] = None,
         metrics_collector: Optional[MetricsCollector] = None,
+        config_manager: Optional[ConfigManagerImpl] = None,
     ) -> None:
         """
         Initialize the JobberClient with authentication provider.
@@ -639,10 +647,28 @@ class JobberClient:
             metrics_collector: Optional MetricsCollector for GraphQL cost
                              and rate limit monitoring. If not provided,
                              monitoring features are disabled.
+            config_manager: Optional ConfigManagerImpl for pagination settings.
+                          If not provided, a new instance will be created.
         """
         self.auth_provider = auth_provider
         self.http_client = http_client or HttpClient()
         self.metrics_collector = metrics_collector
+        self.config_manager = config_manager or ConfigManagerImpl()
+
+    def _get_pagination_size(self, entity_type: str) -> int:
+        """Get pagination size for the specified entity type from configuration.
+
+        Args:
+            entity_type: The entity type (clients, invoices, quotes, etc.)
+
+        Returns:
+            Pagination size for the entity type
+        """
+        try:
+            return self.config_manager.get_pagination_config(entity_type)
+        except ConfigurationError:
+            # Fallback to default if entity type not found
+            return self.config_manager.get_pagination_config()
 
     def set_http_client(self, http_client: IHttpClient) -> None:
         """
@@ -656,12 +682,19 @@ class JobberClient:
         """
         self.http_client = http_client
 
-    def _record_graphql_cost(self, response_data: dict[str, Any]) -> None:
+    def _record_graphql_cost(
+        self,
+        response_data: dict[str, Any],
+        query: str = "",
+        query_type: str = "unknown",
+    ) -> None:
         """
         Extract and record GraphQL cost information from response extensions.
 
         Args:
             response_data: The GraphQL response containing potential cost data
+            query: The GraphQL query string to extract batch size from
+            query_type: The type of query being executed (e.g., 'clients', 'invoices')
         """
         if not self.metrics_collector:
             return
@@ -674,12 +707,65 @@ class JobberClient:
             actual_cost = cost_info.get("actualQueryCost")
 
             if requested_cost is not None and actual_cost is not None:
+                # Extract batch size from GraphQL query using regex
+                import re
+
+                batch_size = 30  # Default batch size
+                batch_match = re.search(r"first:\s*(\d+)", query)
+                if batch_match:
+                    batch_size = int(batch_match.group(1))
+
                 self.metrics_collector.record_graphql_cost(
-                    int(requested_cost), int(actual_cost)
+                    int(requested_cost),
+                    int(actual_cost),
+                    query_type=query_type,
+                    batch_size=batch_size,
                 )
         except (KeyError, ValueError, TypeError):
             # Gracefully handle missing or invalid cost data
             pass
+
+    def _extract_query_type(self, query: str) -> str:
+        """
+        Extract the entity type from a GraphQL query string.
+
+        Args:
+            query: GraphQL query string
+
+        Returns:
+            str: Entity type (e.g., 'clients', 'invoices', 'quotes') or 'unknown'
+        """
+        import re
+
+        # Look for the main query field in the GraphQL query
+        # Pattern matches: clients(, invoices(, quotes(, etc.
+        match = re.search(r"(\w+)\s*\([^)]*first:", query)
+        if match:
+            return match.group(1)
+
+        # Fallback patterns for other query types
+        entity_patterns = [
+            "clients",
+            "invoices",
+            "quotes",
+            "jobs",
+            "properties",
+            "requests",
+            "users",
+            "expenses",
+            "visits",
+            "timesheetEntries",
+            "products",
+            "taxRates",
+            "attachments",
+            "notes",
+        ]
+
+        for entity in entity_patterns:
+            if entity in query:
+                return entity
+
+        return "unknown"
 
     def _execute_graphql_request(
         self, query: str, cursor: Optional[str] = None
@@ -773,7 +859,9 @@ class JobberClient:
                     pass
 
             # Extract and record GraphQL cost information
-            self._record_graphql_cost(response_data)
+            self._record_graphql_cost(
+                response_data, query, self._extract_query_type(query)
+            )
         else:
             # When return_headers=False (default), result is guaranteed to be a dict
             result = self.http_client.post(
@@ -856,7 +944,9 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.CLIENTS_QUERY, cursor)
+            response_data = self._execute_graphql_request(
+                self._get_clients_query(), cursor
+            )
 
             # Validate that clients data exists in response
             if (
@@ -896,7 +986,9 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.INVOICES_QUERY, cursor)
+            response_data = self._execute_graphql_request(
+                self._get_invoices_query(), cursor
+            )
 
             # Validate that invoices data exists in response
             if (
@@ -938,7 +1030,9 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.QUOTES_QUERY, cursor)
+            response_data = self._execute_graphql_request(
+                self._get_quotes_query(), cursor
+            )
 
             # Validate that quotes data exists in response
             if (

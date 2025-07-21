@@ -8,6 +8,7 @@ from ..models import (
     Attachment,
     Client,
     Expense,
+    GraphQLCost,
     Invoice,
     Job,
     Note,
@@ -699,27 +700,6 @@ class Repository:
                         created_at=row[5],
                         additional_emails=row[6] if row[6] is not None else "[]",
                         additional_phones=row[7] if row[7] is not None else "[]",
-                    )
-
-            elif entity_type == Invoice:
-                cursor.execute(
-                    "SELECT id, client_id, number, total_cents, status, issued_at, due_date, subtotal, line_items FROM invoices WHERE id = ?",  # noqa: E501
-                    (entity_id,),
-                )
-                row = cursor.fetchone()
-                cursor.close()
-
-                if row:
-                    return Invoice(
-                        id=row[0],
-                        client_id=row[1],
-                        number=row[2],
-                        total_cents=row[3],
-                        status=row[4],
-                        issued_at=row[5],
-                        due_date=row[6] if row[6] is not None else "",
-                        subtotal=row[7] if row[7] is not None else 0,
-                        line_items=row[8] if row[8] is not None else "[]",
                     )
 
             elif entity_type == Quote:
@@ -2099,3 +2079,95 @@ class Repository:
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to clear OAuth tokens: {e}") from e
+
+    def save_graphql_costs(self, costs: List[dict]) -> None:
+        """Batch save GraphQL cost data to the database.
+
+        Stores GraphQL query complexity cost measurements for analysis and optimization.
+        Uses batch insert for efficiency with large volumes of cost tracking data.
+
+        Args:
+            costs: List of dicts with query_type, batch_size, requested_cost,
+                   actual_cost, cost_difference, timestamp, created_at
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        if not costs:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            cost_data = [
+                (
+                    cost.get("query_type"),
+                    cost.get("batch_size"),
+                    cost.get("requested_cost"),
+                    cost.get("actual_cost"),
+                    cost.get("cost_difference"),
+                    cost.get("timestamp"),
+                    cost.get("created_at"),
+                )
+                for cost in costs
+                if all(
+                    [
+                        cost.get("query_type"),
+                        cost.get("batch_size") is not None,
+                        cost.get("requested_cost") is not None,
+                        cost.get("actual_cost") is not None,
+                        cost.get("cost_difference") is not None,
+                        cost.get("timestamp") is not None,
+                        cost.get("created_at"),
+                    ]
+                )
+            ]
+
+            if cost_data:
+                cursor.executemany(
+                    """INSERT INTO graphql_costs
+                       (query_type, batch_size, requested_cost, actual_cost, cost_difference, timestamp, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                    cost_data,
+                )
+
+                self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save GraphQL costs: {e}") from e
+
+    def get_all_graphql_costs(self) -> List[GraphQLCost]:
+        """Retrieve all GraphQL cost records from the database.
+
+        Returns:
+            List of all GraphQLCost entities
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                "SELECT id, query_type, batch_size, requested_cost, actual_cost, cost_difference, timestamp, created_at FROM graphql_costs ORDER BY timestamp"  # noqa: E501
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            return [
+                GraphQLCost(
+                    id=row[0],
+                    query_type=row[1],
+                    batch_size=row[2],
+                    requested_cost=row[3],
+                    actual_cost=row[4],
+                    cost_difference=row[5],
+                    timestamp=row[6],
+                    created_at=row[7],
+                )
+                for row in rows
+            ]
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve all GraphQL costs: {e}") from e

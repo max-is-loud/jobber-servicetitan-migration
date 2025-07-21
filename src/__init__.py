@@ -15,6 +15,9 @@ from .auth import (
 )
 from .clients import HttpClient, JobberClient
 
+# Configuration management
+from .config import ConfigManagerImpl
+
 # Coordination components
 from .coordinators import MigrationCoordinator
 
@@ -28,7 +31,7 @@ from .exceptions import (
 )
 
 # Logging components
-from .interfaces import Logger
+from .interfaces import ConfigManager, Logger
 from .loggers import ConsoleLogger
 from .mappers import EntityMapper
 from .models import Client, Invoice, MigrationSummary
@@ -51,6 +54,9 @@ __all__ = [
     "Invoice",
     "MigrationSummary",
     "Repository",
+    # Configuration management
+    "ConfigManager",
+    "ConfigManagerImpl",
     # Logging components
     "Logger",
     "ConsoleLogger",

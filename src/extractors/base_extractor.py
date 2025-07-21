@@ -2,9 +2,10 @@
 
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Generic, List, Optional, Type, TypeVar, Union
+from typing import Any, Generic, List, Optional, Type, TypeVar
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..exceptions import (
     ConfigurationError,
     JobberApiError,
@@ -73,6 +74,7 @@ class BaseExtractor(ABC, Generic[T]):
         logger: Logger,
         entity_type: Type[T],
         entity_name: str,
+        config_manager: Optional[ConfigManagerImpl] = None,
     ) -> None:
         """Initialize BaseExtractor with required dependencies.
 
@@ -83,6 +85,7 @@ class BaseExtractor(ABC, Generic[T]):
             logger: Logger for structured output and progress tracking
             entity_type: Type of entity being extracted (for type safety)
             entity_name: Human-readable name of entity for logging
+            config_manager: Optional ConfigManager for delays and pagination settings
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
@@ -90,6 +93,7 @@ class BaseExtractor(ABC, Generic[T]):
         self._logger = logger
         self._entity_type = entity_type
         self._entity_name = entity_name
+        self._config_manager = config_manager or ConfigManagerImpl()
 
         # Extraction state tracking
         self._last_extraction_summary = {
@@ -293,9 +297,12 @@ class BaseExtractor(ABC, Generic[T]):
                 # Update cursor for next iteration
                 current_cursor = end_cursor
 
-                # Add delay between pages to prevent API overload
-                time.sleep(1.0)
-                self._logger.debug(f"Added 1s delay before page {pages_processed + 1}")
+                # Add configurable delay between pages to prevent API overload
+                page_delay = self._config_manager.get_delay_config("page_delay")
+                time.sleep(page_delay)
+                self._logger.debug(
+                    f"Added {page_delay}s delay before page {pages_processed + 1}"
+                )
 
             extraction_time = time.time() - start_time
 

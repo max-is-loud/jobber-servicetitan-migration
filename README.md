@@ -84,6 +84,45 @@ JOBBER_CLIENT_SECRET=your_oauth2_client_secret
 JOBBER_REDIRECT_URI=your_redirect_uri
 ```
 
+## Configuration
+
+TightBeam v2 uses a centralized YAML configuration system that allows you to customize rate limiting, pagination, delays, and other performance settings without modifying code.
+
+### Configuration Files
+
+- `config/settings.yaml` - Main configuration with default values
+- `config/settings_dev.yaml` - Development environment overrides  
+- `config/settings_prod.yaml` - Production environment overrides
+
+### Key Settings
+
+```yaml
+# Rate limiting (prevents API throttling)
+rate_limits:
+  moderate:              # Recommended default
+    capacity: 400        # Token bucket capacity
+    refill_rate: 360     # ~6 requests/second
+    safety_margin: 0.28  # 28% safety buffer
+
+# Pagination (items per GraphQL request)
+pagination:
+  quotes: 30             # Increased from hardcoded 5
+  clients: 30            # Balanced for performance
+  invoices: 30           # Configurable per entity
+
+# Delays (prevent API overload)
+delays:
+  page_delay: 1.0        # Seconds between requests
+```
+
+### Performance Tuning
+
+- **Conservative**: Use for unstable connections, slower but reliable
+- **Moderate**: Default balanced settings (recommended)
+- **Aggressive**: Maximum speed, requires valid OAuth and stable connection
+
+For detailed configuration options, see [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+
 ## Quick Start
 
 ### Method 1: Environment Token

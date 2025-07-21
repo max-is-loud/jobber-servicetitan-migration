@@ -140,26 +140,44 @@ class NoteReferenceCollector:
         """
         with self._lock:
             references = self._note_references.copy()
+            self._logger.debug(f"Retrieved {len(references)} references from memory")
 
             # If persistence is enabled, also get references from storage
             if self._enable_persistence:
                 try:
+                    self._logger.info("Loading note references from storage...")
                     # Get all references from storage in batches
                     offset = 0
                     batch_size = 1000
+                    total_from_storage = 0
+                    batch_count = 0
                     while True:
+                        batch_count += 1
+                        self._logger.info(
+                            f"Loading batch {batch_count} (offset {offset})..."
+                        )
                         storage_refs = self._repository.get_note_references(
                             limit=batch_size, offset=offset
                         )
                         if not storage_refs:
                             break
                         references.extend(storage_refs)
+                        total_from_storage += len(storage_refs)
                         offset += batch_size
+                        self._logger.info(
+                            f"Loaded {len(storage_refs)} references from batch {batch_count} (total from storage: {total_from_storage})"
+                        )
+
+                    self._logger.info(
+                        f"Completed loading {total_from_storage} references from storage in {batch_count - 1} batches"
+                    )
                 except Exception as e:
                     self._logger.error(
                         f"Failed to retrieve references from storage: {e}"
                     )
 
+            total_references = len(references)
+            self._logger.info(f"Total references loaded: {total_references}")
             return references
 
     def get_reference_count(self) -> int:
