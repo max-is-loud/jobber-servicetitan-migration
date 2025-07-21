@@ -13,11 +13,11 @@ from ..exceptions import (
 )
 from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import Attachment, Client, Invoice, Note, Quote
+from ..models import Attachment, Client, Invoice, Job, Note, Property, Quote, Request
 from ..repositories import Repository
 
 # Type variable for entity types
-T = TypeVar("T", Client, Invoice, Quote, Note, Attachment)
+T = TypeVar("T", Client, Invoice, Quote, Note, Attachment, Job, Property, Request)
 
 
 class BaseExtractor(ABC, Generic[T]):
