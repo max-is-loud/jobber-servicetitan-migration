@@ -115,7 +115,7 @@ class JobberClient:
     # GraphQL query for fetching quotes with cursor pagination
     QUOTES_QUERY = """
     query GetQuotes($cursor: String) {
-      quotes(first: 30, after: $cursor) {
+      quotes(first: 5, after: $cursor) {
         edges {
           node {
             id
@@ -130,24 +130,10 @@ class JobberClient:
             }
             message
             lineItems {
-              edges {
-                node {
-                  id
-                  name
-                  quantity
-                  unitCost
-                  totalCost
-                }
-              }
+              totalCount
             }
             notes {
-              edges {
-                node {
-                  ... on QuoteNote {
-                    id
-                  }
-                }
-              }
+              totalCount
             }
             createdAt
             transitionedAt
