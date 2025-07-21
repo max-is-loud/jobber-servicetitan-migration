@@ -4,7 +4,7 @@ import json
 from typing import Any, Optional
 
 from ..exceptions import MappingError
-from ..models import Attachment, Client, Invoice, Note, Quote
+from ..models import Attachment, Client, Invoice, Job, Note, Property, Quote, Request
 from .mapper_utils import MapperUtils
 
 
@@ -316,6 +316,216 @@ class EntityMapper:
 
         except Exception as e:
             raise MappingError(f"Failed to map Attachment data: {e}") from e
+
+    def map_job(self, data: dict[str, Any]) -> Job:
+        """
+        Map GraphQL Job data to Job domain model.
+
+        Args:
+            data: Raw GraphQL Job node data
+
+        Returns:
+            Job: Typed Job dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            job_id = data.get("id")
+            if not job_id:
+                raise MappingError("Job ID is required but missing")
+
+            # Extract client ID from client relationship
+            client_id = MapperUtils.extract_id_from_relationship(data.get("client"))
+            if not client_id:
+                raise MappingError("Job client ID is required but missing")
+
+            # Extract optional property ID from property relationship
+            property_id = MapperUtils.extract_id_from_relationship(data.get("property"))
+
+            # Extract optional quote ID from quote relationship
+            quote_id = MapperUtils.extract_id_from_relationship(data.get("quote"))
+
+            # Extract job details
+            job_number = data.get("jobNumber", "")
+            title = data.get("title", "")
+            description = data.get("description", "")
+            status = data.get("status", "")
+
+            # Extract scheduling information
+            scheduled_start_at = MapperUtils.format_iso_datetime(
+                data.get("scheduledStartAt")
+            )
+            scheduled_end_at = MapperUtils.format_iso_datetime(
+                data.get("scheduledEndAt")
+            )
+            completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
+
+            # Extract and convert total amount to cents
+            amounts = data.get("amounts", {})
+            total_amount = MapperUtils.safe_get_nested(amounts, "total")
+            total = MapperUtils.convert_to_cents(total_amount)
+
+            # Format ISO datetimes
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
+
+            return Job(
+                id=job_id,
+                client_id=client_id,
+                property_id=property_id,
+                quote_id=quote_id,
+                job_number=job_number,
+                title=title,
+                description=description,
+                status=status,
+                scheduled_start_at=scheduled_start_at,
+                scheduled_end_at=scheduled_end_at,
+                completed_at=completed_at,
+                total=total,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map Job data: {e}") from e
+
+    def map_property(self, data: dict[str, Any]) -> Property:
+        """
+        Map GraphQL Property data to Property domain model.
+
+        Args:
+            data: Raw GraphQL Property node data
+
+        Returns:
+            Property: Typed Property dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            property_id = data.get("id")
+            if not property_id:
+                raise MappingError("Property ID is required but missing")
+
+            # Extract client ID from client relationship
+            client_id = MapperUtils.extract_id_from_relationship(data.get("client"))
+            if not client_id:
+                raise MappingError("Property client ID is required but missing")
+
+            # Extract property name
+            name = data.get("name", "")
+
+            # Extract address information
+            address = data.get("address", {})
+            address_line1 = MapperUtils.safe_get_nested(address, "line1", default="")
+            address_line2 = MapperUtils.safe_get_nested(address, "line2", default="")
+            city = MapperUtils.safe_get_nested(address, "city", default="")
+            state_province = MapperUtils.safe_get_nested(
+                address, "stateProvince", default=""
+            )
+            postal_code = MapperUtils.safe_get_nested(address, "postalCode", default="")
+            country = MapperUtils.safe_get_nested(address, "country", default="")
+
+            # Extract GPS coordinates
+            coordinates = data.get("coordinates", {})
+            latitude = str(
+                MapperUtils.safe_get_nested(coordinates, "latitude", default="")
+            )
+            longitude = str(
+                MapperUtils.safe_get_nested(coordinates, "longitude", default="")
+            )
+
+            # Format ISO datetimes
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
+
+            return Property(
+                id=property_id,
+                client_id=client_id,
+                name=name,
+                address_line1=address_line1,
+                address_line2=address_line2,
+                city=city,
+                state_province=state_province,
+                postal_code=postal_code,
+                country=country,
+                latitude=latitude,
+                longitude=longitude,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map Property data: {e}") from e
+
+    def map_request(self, data: dict[str, Any]) -> Request:
+        """
+        Map GraphQL Request data to Request domain model.
+
+        Args:
+            data: Raw GraphQL Request node data
+
+        Returns:
+            Request: Typed Request dataclass instance
+
+        Raises:
+            MappingError: If required fields are missing or invalid
+        """
+        try:
+            # Extract required fields with validation
+            request_id = data.get("id")
+            if not request_id:
+                raise MappingError("Request ID is required but missing")
+
+            # Extract client ID from client relationship
+            client_id = MapperUtils.extract_id_from_relationship(data.get("client"))
+            if not client_id:
+                raise MappingError("Request client ID is required but missing")
+
+            # Extract optional property ID from property relationship
+            property_id = MapperUtils.extract_id_from_relationship(data.get("property"))
+
+            # Extract request details
+            title = data.get("title", "")
+            description = data.get("description", "")
+            status = data.get("status", "")
+            priority = data.get("priority", "")
+            source = data.get("source", "")
+            assigned_to = data.get("assignedTo", "")
+
+            # Extract conversion relationships
+            converted_to_quote_id = MapperUtils.extract_id_from_relationship(
+                data.get("convertedToQuote")
+            )
+            converted_to_job_id = MapperUtils.extract_id_from_relationship(
+                data.get("convertedToJob")
+            )
+
+            # Format ISO datetimes
+            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
+
+            return Request(
+                id=request_id,
+                client_id=client_id,
+                property_id=property_id,
+                title=title,
+                description=description,
+                status=status,
+                priority=priority,
+                source=source,
+                assigned_to=assigned_to,
+                converted_to_quote_id=converted_to_quote_id,
+                converted_to_job_id=converted_to_job_id,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+
+        except Exception as e:
+            raise MappingError(f"Failed to map Request data: {e}") from e
 
     def _extract_primary_email(self, emails: list[dict[str, Any]]) -> str:
         """
