@@ -234,7 +234,7 @@ class Repository:
 
             # Create indexes for foreign keys to improve query performance
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_properties_client_id ON properties(client_id)"
+                "CREATE INDEX IF NOT EXISTS idx_properties_client_id ON properties(client_id)"  # noqa: E501
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_jobs_client_id ON jobs(client_id)"
@@ -246,30 +246,30 @@ class Repository:
                 "CREATE INDEX IF NOT EXISTS idx_jobs_quote_id ON jobs(quote_id)"
             )
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_requests_client_id ON requests(client_id)"
+                "CREATE INDEX IF NOT EXISTS idx_requests_client_id ON requests(client_id)"  # noqa: E501
             )
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_requests_property_id ON requests(property_id)"
+                "CREATE INDEX IF NOT EXISTS idx_requests_property_id ON requests(property_id)"  # noqa: E501
             )
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_requests_converted_to_quote_id ON requests(converted_to_quote_id)"
+                "CREATE INDEX IF NOT EXISTS idx_requests_converted_to_quote_id ON requests(converted_to_quote_id)"  # noqa: E501
             )
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_requests_converted_to_job_id ON requests(converted_to_job_id)"
+                "CREATE INDEX IF NOT EXISTS idx_requests_converted_to_job_id ON requests(converted_to_job_id)"  # noqa: E501
             )
 
             # Also add indexes for existing foreign keys if not already present
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id)"
+                "CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id)"  # noqa: E501
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_quotes_client_id ON quotes(client_id)"
             )
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_notes_entity ON notes(entity_type, entity_id)"
+                "CREATE INDEX IF NOT EXISTS idx_notes_entity ON notes(entity_type, entity_id)"  # noqa: E501
             )
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_attachments_note_id ON attachments(note_id)"
+                "CREATE INDEX IF NOT EXISTS idx_attachments_note_id ON attachments(note_id)"  # noqa: E501
             )
 
             # Migrate existing tables to add new columns
@@ -291,7 +291,8 @@ class Repository:
         Uses INSERT OR REPLACE for upsert behavior.
 
         Args:
-            entity: Entity to create (Client, Invoice, Quote, Note, Attachment, Job, Property, or Request)
+            entity: Entity to create (Client, Invoice, Quote, Note, Attachment, Job,
+                    Property, or Request)
 
         Raises:
             RepositoryError: If database operation fails
@@ -384,7 +385,7 @@ class Repository:
             elif isinstance(entity, Job):
                 cursor.execute(
                     """INSERT OR REPLACE INTO jobs
-                       (id, client_id, property_id, quote_id, job_number, title, description, status, 
+                       (id, client_id, property_id, quote_id, job_number, title, description, status,
                         scheduled_start_at, scheduled_end_at, completed_at, total, created_at, updated_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                     (
@@ -407,7 +408,7 @@ class Repository:
             elif isinstance(entity, Property):
                 cursor.execute(
                     """INSERT OR REPLACE INTO properties
-                       (id, client_id, name, address_line1, address_line2, city, state_province, 
+                       (id, client_id, name, address_line1, address_line2, city, state_province,
                         postal_code, country, latitude, longitude, created_at, updated_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                     (
@@ -429,7 +430,7 @@ class Repository:
             elif isinstance(entity, Request):
                 cursor.execute(
                     """INSERT OR REPLACE INTO requests
-                       (id, client_id, property_id, title, description, status, priority, source, 
+                       (id, client_id, property_id, title, description, status, priority, source,
                         assigned_to, converted_to_quote_id, converted_to_job_id, created_at, updated_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                     (
@@ -467,7 +468,8 @@ class Repository:
         Generic method supporting all entity types.
 
         Args:
-            entity_type: Entity class type (Client, Invoice, Quote, Note, Attachment, Job, Property, or Request)
+            entity_type: Entity class type (Client, Invoice, Quote, Note, Attachment,
+                         Job, Property, or Request)
             entity_id: Entity ID to retrieve
 
         Returns:
@@ -700,7 +702,8 @@ class Repository:
         Generic method supporting all entity types.
 
         Args:
-            entity_type: Entity class type (Client, Invoice, Quote, Note, Attachment, Job, Property, or Request)
+            entity_type: Entity class type (Client, Invoice, Quote, Note, Attachment,
+                         Job, Property, or Request)
             entity_id: Entity ID to delete
 
         Returns:
