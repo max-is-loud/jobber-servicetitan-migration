@@ -16,6 +16,7 @@ class Note:
     Supported entity_type values:
     - 'client': Notes attached to Client entities
     - 'job': Notes attached to Job entities
+    - 'property': Notes attached to Property entities
     - 'quote': Notes attached to Quote entities
     - 'invoice': Notes attached to Invoice entities
     - 'request': Notes attached to Request entities

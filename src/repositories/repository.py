@@ -4,7 +4,7 @@ import sqlite3
 from typing import List, Optional, Union
 
 from ..exceptions import RepositoryError
-from ..models import Attachment, Client, Invoice, Note, Quote
+from ..models import Attachment, Client, Invoice, Job, Note, Property, Quote, Request
 
 
 class Repository:
@@ -171,6 +171,107 @@ class Repository:
             """
             cursor.execute(attachments_schema)
 
+            # Create properties table for service locations
+            properties_schema = """
+                CREATE TABLE IF NOT EXISTS properties (
+                    id TEXT PRIMARY KEY,
+                    client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+                    name TEXT,
+                    address_line1 TEXT,
+                    address_line2 TEXT,
+                    city TEXT,
+                    state_province TEXT,
+                    postal_code TEXT,
+                    country TEXT,
+                    latitude TEXT,
+                    longitude TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(properties_schema)
+
+            # Create jobs table for work units
+            jobs_schema = """
+                CREATE TABLE IF NOT EXISTS jobs (
+                    id TEXT PRIMARY KEY,
+                    client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+                    property_id TEXT REFERENCES properties(id) ON DELETE SET NULL,
+                    quote_id TEXT REFERENCES quotes(id) ON DELETE SET NULL,
+                    job_number TEXT,
+                    title TEXT,
+                    description TEXT,
+                    status TEXT,
+                    scheduled_start_at TEXT,
+                    scheduled_end_at TEXT,
+                    completed_at TEXT,
+                    total INTEGER,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(jobs_schema)
+
+            # Create requests table for service requests
+            requests_schema = """
+                CREATE TABLE IF NOT EXISTS requests (
+                    id TEXT PRIMARY KEY,
+                    client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+                    property_id TEXT REFERENCES properties(id) ON DELETE SET NULL,
+                    title TEXT,
+                    description TEXT,
+                    status TEXT,
+                    priority TEXT,
+                    source TEXT,
+                    assigned_to TEXT,
+                    converted_to_quote_id TEXT REFERENCES quotes(id) ON DELETE SET NULL,
+                    converted_to_job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(requests_schema)
+
+            # Create indexes for foreign keys to improve query performance
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_properties_client_id ON properties(client_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_jobs_client_id ON jobs(client_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_jobs_property_id ON jobs(property_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_jobs_quote_id ON jobs(quote_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_requests_client_id ON requests(client_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_requests_property_id ON requests(property_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_requests_converted_to_quote_id ON requests(converted_to_quote_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_requests_converted_to_job_id ON requests(converted_to_job_id)"
+            )
+
+            # Also add indexes for existing foreign keys if not already present
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_quotes_client_id ON quotes(client_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_notes_entity ON notes(entity_type, entity_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_attachments_note_id ON attachments(note_id)"
+            )
+
             # Migrate existing tables to add new columns
             self._migrate_existing_tables()
 
@@ -180,14 +281,17 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to initialize database schema: {e}") from e
 
-    def create(self, entity: Union[Client, Invoice, Quote, Note, Attachment]) -> None:
+    def create(
+        self,
+        entity: Union[Client, Invoice, Quote, Note, Attachment, Job, Property, Request],
+    ) -> None:
         """Create a new entity in the database.
 
-        Generic method supporting Client, Invoice, Quote, Note, and Attachment entities.
+        Generic method supporting all entity types.
         Uses INSERT OR REPLACE for upsert behavior.
 
         Args:
-            entity: Client, Invoice, Quote, Note, or Attachment entity to create
+            entity: Entity to create (Client, Invoice, Quote, Note, Attachment, Job, Property, or Request)
 
         Raises:
             RepositoryError: If database operation fails
@@ -277,6 +381,73 @@ class Repository:
                         entity.created_at,
                     ),
                 )
+            elif isinstance(entity, Job):
+                cursor.execute(
+                    """INSERT OR REPLACE INTO jobs
+                       (id, client_id, property_id, quote_id, job_number, title, description, status, 
+                        scheduled_start_at, scheduled_end_at, completed_at, total, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                    (
+                        entity.id,
+                        entity.client_id,
+                        entity.property_id,
+                        entity.quote_id,
+                        entity.job_number,
+                        entity.title,
+                        entity.description,
+                        entity.status,
+                        entity.scheduled_start_at,
+                        entity.scheduled_end_at,
+                        entity.completed_at,
+                        entity.total,
+                        entity.created_at,
+                        entity.updated_at,
+                    ),
+                )
+            elif isinstance(entity, Property):
+                cursor.execute(
+                    """INSERT OR REPLACE INTO properties
+                       (id, client_id, name, address_line1, address_line2, city, state_province, 
+                        postal_code, country, latitude, longitude, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                    (
+                        entity.id,
+                        entity.client_id,
+                        entity.name,
+                        entity.address_line1,
+                        entity.address_line2,
+                        entity.city,
+                        entity.state_province,
+                        entity.postal_code,
+                        entity.country,
+                        entity.latitude,
+                        entity.longitude,
+                        entity.created_at,
+                        entity.updated_at,
+                    ),
+                )
+            elif isinstance(entity, Request):
+                cursor.execute(
+                    """INSERT OR REPLACE INTO requests
+                       (id, client_id, property_id, title, description, status, priority, source, 
+                        assigned_to, converted_to_quote_id, converted_to_job_id, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                    (
+                        entity.id,
+                        entity.client_id,
+                        entity.property_id,
+                        entity.title,
+                        entity.description,
+                        entity.status,
+                        entity.priority,
+                        entity.source,
+                        entity.assigned_to,
+                        entity.converted_to_quote_id,
+                        entity.converted_to_job_id,
+                        entity.created_at,
+                        entity.updated_at,
+                    ),
+                )
             else:
                 raise RepositoryError(f"Unsupported entity type: {type(entity)}")
 
@@ -288,13 +459,15 @@ class Repository:
 
     def read(
         self, entity_type: type, entity_id: str
-    ) -> Optional[Union[Client, Invoice, Quote, Note, Attachment]]:
+    ) -> Optional[
+        Union[Client, Invoice, Quote, Note, Attachment, Job, Property, Request]
+    ]:
         """Read a single entity by ID.
 
-        Generic method supporting Client, Invoice, Quote, Note, and Attachment entities.
+        Generic method supporting all entity types.
 
         Args:
-            entity_type: Client, Invoice, Quote, Note, or Attachment class type
+            entity_type: Entity class type (Client, Invoice, Quote, Note, Attachment, Job, Property, or Request)
             entity_id: Entity ID to retrieve
 
         Returns:
@@ -524,10 +697,10 @@ class Repository:
     def delete(self, entity_type: type, entity_id: str) -> bool:
         """Delete an entity by ID.
 
-        Generic method supporting Client, Invoice, Quote, Note, and Attachment entities.
+        Generic method supporting all entity types.
 
         Args:
-            entity_type: Client, Invoice, Quote, Note, or Attachment class type
+            entity_type: Entity class type (Client, Invoice, Quote, Note, Attachment, Job, Property, or Request)
             entity_id: Entity ID to delete
 
         Returns:
@@ -549,6 +722,12 @@ class Repository:
                 cursor.execute("DELETE FROM notes WHERE id = ?", (entity_id,))
             elif entity_type == Attachment:
                 cursor.execute("DELETE FROM attachments WHERE id = ?", (entity_id,))
+            elif entity_type == Job:
+                cursor.execute("DELETE FROM jobs WHERE id = ?", (entity_id,))
+            elif entity_type == Property:
+                cursor.execute("DELETE FROM properties WHERE id = ?", (entity_id,))
+            elif entity_type == Request:
+                cursor.execute("DELETE FROM requests WHERE id = ?", (entity_id,))
             else:
                 raise RepositoryError(f"Unsupported entity type: {entity_type}")
 
@@ -793,9 +972,168 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to save attachments batch: {e}") from e
 
+    def save_jobs(self, jobs: List[Job]) -> None:
+        """Batch save multiple jobs to the database.
+
+        Efficiently handles List[Job] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            jobs: List of Job entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not jobs:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            job_data = [
+                (
+                    job.id,
+                    job.client_id,
+                    job.property_id,
+                    job.quote_id,
+                    job.job_number,
+                    job.title,
+                    job.description,
+                    job.status,
+                    job.scheduled_start_at,
+                    job.scheduled_end_at,
+                    job.completed_at,
+                    job.total,
+                    job.created_at,
+                    job.updated_at,
+                )
+                for job in jobs
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO jobs
+                   (id, client_id, property_id, quote_id, job_number, title, description, status,
+                    scheduled_start_at, scheduled_end_at, completed_at, total, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                job_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save jobs batch: {e}") from e
+
+    def save_properties(self, properties: List[Property]) -> None:
+        """Batch save multiple properties to the database.
+
+        Efficiently handles List[Property] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            properties: List of Property entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not properties:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            property_data = [
+                (
+                    prop.id,
+                    prop.client_id,
+                    prop.name,
+                    prop.address_line1,
+                    prop.address_line2,
+                    prop.city,
+                    prop.state_province,
+                    prop.postal_code,
+                    prop.country,
+                    prop.latitude,
+                    prop.longitude,
+                    prop.created_at,
+                    prop.updated_at,
+                )
+                for prop in properties
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO properties
+                   (id, client_id, name, address_line1, address_line2, city, state_province,
+                    postal_code, country, latitude, longitude, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                property_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save properties batch: {e}") from e
+
+    def save_requests(self, requests: List[Request]) -> None:
+        """Batch save multiple requests to the database.
+
+        Efficiently handles List[Request] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            requests: List of Request entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not requests:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            request_data = [
+                (
+                    request.id,
+                    request.client_id,
+                    request.property_id,
+                    request.title,
+                    request.description,
+                    request.status,
+                    request.priority,
+                    request.source,
+                    request.assigned_to,
+                    request.converted_to_quote_id,
+                    request.converted_to_job_id,
+                    request.created_at,
+                    request.updated_at,
+                )
+                for request in requests
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO requests
+                   (id, client_id, property_id, title, description, status, priority, source,
+                    assigned_to, converted_to_quote_id, converted_to_job_id, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                request_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save requests batch: {e}") from e
+
     def save_entities(
         self,
-        entities: List[Union[Client, Invoice, Quote, Note, Attachment]],
+        entities: List[
+            Union[Client, Invoice, Quote, Note, Attachment, Job, Property, Request]
+        ],
         entity_type: type,
     ) -> None:
         """Generic batch save method for any supported entity type.
@@ -820,6 +1158,9 @@ class Repository:
             Quote: self.save_quotes,
             Note: self.save_notes,
             Attachment: self.save_attachments,
+            Job: self.save_jobs,
+            Property: self.save_properties,
+            Request: self.save_requests,
         }
 
         save_method = save_methods.get(entity_type)
