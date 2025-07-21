@@ -63,6 +63,85 @@ class NotesExtractor(BaseExtractor[Note]):
         """Get notes from the last extraction batch."""
         return self._last_batch_entities
 
+    def extract_deferred_notes(self, note_references: List[dict[str, str]]) -> int:
+        """
+        Process notes from collected note references (deferred processing).
+
+        This method processes notes that were collected as ID references during
+        parent entity processing, avoiding the nested query complexity that
+        causes GraphQL throttling.
+
+        Args:
+            note_references: List of dicts with note_id, entity_type, entity_id
+
+        Returns:
+            Number of notes successfully processed
+
+        Raises:
+            JobberApiError: If API communication fails
+            RepositoryError: If database operations fail
+        """
+        if not note_references:
+            self._logger.info("No note references to process")
+            return 0
+
+        processed_count = 0
+        errors = []
+
+        self._logger.info(
+            f"Starting deferred processing of {len(note_references)} note references"
+        )
+
+        for ref in note_references:
+            note_id = ref.get("note_id")
+            entity_type = ref.get("entity_type")
+            entity_id = ref.get("entity_id")
+
+            if not all([note_id, entity_type, entity_id]):
+                self._logger.debug(f"Skipping invalid note reference: {ref}")
+                continue
+
+            try:
+                # Fetch individual note by ID (note_id is guaranteed to be non-None here)  # noqa: E501
+                note_response = self._jobber_client.fetch_note_by_id(note_id)  # type: ignore
+                note_data = note_response.get("data", {}).get("node", {})
+
+                if not note_data:
+                    self._logger.debug(f"Note {note_id} not found or empty")
+                    continue
+
+                # Ensure parent relationship is set based on collected reference
+                # This overrides whatever parent relationship comes from the API
+                note_data[entity_type] = {"id": entity_id}
+
+                # Map and save the note
+                note = self._entity_mapper.map_note(note_data)
+                self._repository.save_notes([note])
+                processed_count += 1
+
+                if processed_count % 100 == 0:
+                    self._logger.info(f"Processed {processed_count} notes")
+
+            except Exception as e:
+                error_msg = f"Failed to process note {note_id}: {e}"
+                self._logger.debug(error_msg)
+                errors.append(error_msg)
+
+        # Log summary
+        if errors:
+            self._logger.info(
+                f"Deferred note processing completed with {len(errors)} errors"
+            )
+            for error in errors[:5]:  # Log first 5 errors
+                self._logger.debug(error)
+            if len(errors) > 5:
+                self._logger.debug(f"... and {len(errors) - 5} more errors")
+
+        self._logger.info(
+            f"Deferred note processing completed: {processed_count} notes processed"
+        )
+        return processed_count
+
     def get_entity_count(self) -> int:
         """Get total count of notes available for extraction."""
         self._logger.debug("Fetching total note count from API")

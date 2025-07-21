@@ -365,9 +365,9 @@ TightBeam v2 includes intelligent rate limiting to respect Jobber API limits whi
 
 ### Overview
 
-- **Token Bucket Algorithm**: 100 token capacity with 60 tokens/minute refill rate
+- **Token Bucket Algorithm**: 300 token capacity with 180 tokens/minute refill rate (~3 req/sec)
 - **Exponential Backoff**: Automatic retry with jitter for rate limit errors (HTTP 429 and GraphQL throttling)
-- **Burst Protection**: Starts with only 10 tokens to prevent initial throttling
+- **Jobber-Optimized**: Designed specifically for Jobber GraphQL API cost patterns with deferred notes
 - **Page Delays**: Mandatory 2-second delay between pagination requests
 - **Sustained Rate**: Targets 50-60 requests/minute for maximum reliability
 - **Extended Retries**: Up to 15 retry attempts with longer backoff delays (5-300 seconds)
@@ -427,6 +427,118 @@ Rate limiting is automatically configured and requires no user configuration. Th
 - Minimal throttling for typical dataset sizes
 - Graceful handling of both HTTP 429 and GraphQL throttling responses
 - Robust error detection and automatic retry with exponential backoff
+
+## Performance Optimization
+
+TightBeam v2 offers configurable performance optimization levels to balance speed with API safety based on your specific requirements.
+
+### Optimization Levels
+
+#### Conservative (4 req/sec)
+
+```bash
+tightbeam migrate --optimization-level conservative
+```
+
+- **Best for**: Production environments, large-scale migrations, unattended operations
+- **Safety margin**: 52% below Jobber API limits
+- **Performance**: ~4 requests/second sustained
+- **Risk**: Very low
+- **Recommended when**: Maximum reliability is priority over speed
+
+#### Moderate (6 req/sec) - **Default**
+
+```bash
+tightbeam migrate --optimization-level moderate
+# or simply:
+tightbeam migrate
+```
+
+- **Best for**: Most use cases, balanced performance and safety
+- **Safety margin**: 28% below Jobber API limits  
+- **Performance**: ~6 requests/second sustained (2x improvement over v1)
+- **Risk**: Low
+- **Recommended when**: Standard migration with good balance of speed and safety
+
+#### Aggressive (8 req/sec)
+
+```bash
+tightbeam migrate --optimization-level aggressive
+```
+
+- **Best for**: Speed-critical migrations, small datasets, active monitoring
+- **Safety margin**: 4% below Jobber API limits
+- **Performance**: ~8 requests/second sustained (maximum throughput)
+- **Risk**: Medium (close to API limits)
+- **Recommended when**: Maximum speed needed with active monitoring
+
+### GraphQL Cost Monitoring
+
+Enable detailed performance monitoring and cost analysis:
+
+```bash
+# Enable cost monitoring (default: enabled)
+tightbeam migrate --enable-cost-monitoring
+
+# Disable cost monitoring for minimal overhead
+tightbeam migrate --disable-cost-monitoring
+
+# Enable verbose cost analysis
+tightbeam migrate --cost-monitoring-verbose
+```
+
+#### Cost Monitoring Features
+
+- **GraphQL Query Cost Tracking**: Monitor actual vs requested costs
+- **Rate Limit Status**: Real-time remaining requests and reset timing
+- **Performance Metrics**: Entities/minute, cost accuracy, API efficiency
+- **Optimization Insights**: Data-driven recommendations for tuning
+
+#### Example Output with Verbose Monitoring
+
+```bash
+🚀 Performance Configuration:
+   • Optimization level: MODERATE
+   • Target rate: 6 requests/sec
+   • Safety margin: 28% below API limits
+   • GraphQL cost monitoring: ENABLED
+   • Verbose cost monitoring: ENABLED
+
+📊 Migration Performance Analysis:
+   • Migration speed: 247.3 entities/minute
+   • Total entities: 1,450 in 5m 52.1s
+
+🧮 GraphQL Cost Analysis:
+   • Total queries: 145
+   • Avg requested cost: 6365
+   • Avg actual cost: 6127
+   • Cost accuracy: 96.3%
+
+🔄 Rate Limit Status:
+   • Remaining requests: 423
+   • Reset in: 127s
+```
+
+### Performance Guidelines
+
+#### Choosing the Right Optimization Level
+
+| Dataset Size | Environment | Monitoring | Recommended Level |
+|--------------|-------------|------------|-------------------|
+| < 1,000 entities | Development | Active | **Aggressive** |
+| 1,000-10,000 entities | Production | Periodic | **Moderate** |
+| > 10,000 entities | Production | Minimal | **Conservative** |
+| Any size | Unattended | None | **Conservative** |
+
+#### Best Practices
+
+1. **Start with Moderate**: Default provides excellent balance for most scenarios
+2. **Monitor First Run**: Use `--cost-monitoring-verbose` to understand your API usage patterns
+3. **Production Safety**: Use Conservative for critical production migrations
+4. **Speed When Needed**: Use Aggressive for time-sensitive migrations with active monitoring
+5. **Test Performance**: Measure actual migration speed for your specific data patterns
+
+For detailed technical analysis and rationale, see `docs/JOBBER_API_OPTIMIZATION.md`.
 
 ## Development
 

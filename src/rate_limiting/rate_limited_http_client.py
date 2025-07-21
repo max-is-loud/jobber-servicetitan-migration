@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from ..exceptions import RateLimitError
 from ..interfaces import IHttpClient
+from ..utils.debug import debug_print
 from .backoff_strategy import ExponentialBackoffStrategy
 from .metrics_collector import MetricsCollector
 from .token_bucket import TokenBucketRateLimiter
@@ -78,7 +79,8 @@ class RateLimitedHttpClient:
         headers: dict[str, str],
         json: Optional[dict[str, Any]] = None,
         data: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
+        return_headers: bool = False,
+    ) -> dict[str, Any] | tuple[dict[str, Any], dict[str, str | None]]:
         """Execute HTTP POST request with rate limiting and retry logic.
 
         This method maintains the exact same signature as HttpClient.post()
@@ -98,9 +100,11 @@ class RateLimitedHttpClient:
             headers: HTTP headers to include in the request
             json: Optional JSON payload for the request body
             data: Optional form data for the request body
+            return_headers: Whether to return response headers along with JSON data
 
         Returns:
-            Dictionary containing parsed JSON response
+            Dictionary containing parsed JSON response, or tuple of (response, headers)
+            if return_headers is True
 
         Raises:
             RateLimitError: If rate limiting fails after max retries
@@ -110,23 +114,41 @@ class RateLimitedHttpClient:
 
         while attempt <= self.max_retries:
             # Check rate limiter before making request
+            debug_print(
+                f"[DEBUG] Rate limiter check - Available tokens: {self.rate_limiter.get_available_tokens():.1f}/{self.rate_limiter.get_capacity()}"
+            )
             if not self.rate_limiter.consume(1):
                 # No tokens available, wait for next token
                 wait_time = self.rate_limiter.get_wait_time()
+                debug_print(
+                    f"[DEBUG] No tokens available, waiting {wait_time:.2f} seconds"
+                )
                 if wait_time > 0:
                     # Record throttling event
                     if self.metrics_collector:
                         self.metrics_collector.record_throttled(wait_time)
                     time.sleep(wait_time)
                     continue  # Try again after waiting
+            else:
+                debug_print(
+                    f"[DEBUG] Token consumed, remaining: {self.rate_limiter.get_available_tokens():.1f}"
+                )
 
             try:
                 # Execute request through wrapped HttpClient
+                debug_print(f"[DEBUG] Making POST request to {url}")
                 start_time = time.time()
                 result = self.http_client.post(
-                    url=url, headers=headers, json=json, data=data
+                    url=url,
+                    headers=headers,
+                    json=json,
+                    data=data,
+                    return_headers=return_headers,
                 )
                 response_time = time.time() - start_time
+                debug_print(
+                    f"[DEBUG] Request successful, response time: {response_time:.2f}s"
+                )
 
                 # Record successful request
                 if self.metrics_collector:
@@ -135,8 +157,14 @@ class RateLimitedHttpClient:
                 return result
 
             except Exception as e:
+                debug_print(
+                    f"[DEBUG] Request failed with error: {type(e).__name__}: {str(e)}"
+                )
                 # Check if this is a rate limit error (HTTP 429)
                 if self._is_rate_limit_error(e):
+                    debug_print(
+                        f"[DEBUG] Detected rate limit error, attempt {attempt + 1}/{self.max_retries}"
+                    )
                     # Record rate limit error
                     if self.metrics_collector:
                         self.metrics_collector.record_rate_limit_error()

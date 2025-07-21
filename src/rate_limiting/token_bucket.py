@@ -8,13 +8,16 @@ import threading
 import time
 from typing import Optional
 
+from ..utils.debug import debug_print
+
 
 class TokenBucketRateLimiter:
-    """Thread-safe token bucket rate limiter.
+    """Thread-safe token bucket rate limiter optimized for Jobber GraphQL API.
 
     Implements the token bucket algorithm with configurable capacity and refill rate.
     Allows burst requests up to the bucket capacity while maintaining a steady
-    refill rate over time.
+    refill rate over time. Designed specifically for TightBeam v2 performance
+    optimization with three optimization levels (conservative, moderate, aggressive).
 
     The token bucket algorithm works by:
     1. Maintaining a bucket with a maximum capacity of tokens
@@ -25,52 +28,74 @@ class TokenBucketRateLimiter:
 
     This implementation is thread-safe and can handle concurrent access from
     multiple threads safely using a threading lock.
+
+    Optimization levels (see docs/JOBBER_API_OPTIMIZATION.md for detailed analysis):
+    - Conservative: 250 capacity, 240/min (4 req/sec) - 52% safety margin
+    - Moderate: 400 capacity, 360/min (6 req/sec) - 28% safety margin (default)
+    - Aggressive: 500 capacity, 480/min (8 req/sec) - 4% safety margin
     """
 
     def __init__(
         self,
-        capacity: int = 100,
-        refill_rate: float = 400,
+        capacity: int = 300,
+        refill_rate: float = 180,
         initial_tokens: Optional[float] = None,
     ):
         """Initialize the token bucket rate limiter.
 
         Args:
-            capacity: Maximum number of tokens the bucket can hold (default: 100, aligned with production settings)
-            refill_rate: Number of tokens to add per minute (default: 400)
-            initial_tokens: Initial number of tokens (default: capacity // 4 for conservative start)
+            capacity: Maximum number of tokens the bucket can hold
+                     (default: 300, moderate optimization for Jobber GraphQL API)
+            refill_rate: Number of tokens to add per minute
+                        (default: 180, ~3 req/sec - now configurable via CLI optimization levels)
+            initial_tokens: Initial number of tokens (default: capacity // 4 for balanced start)
+
+        Note:
+            Default values represent moderate optimization level. For production deployments,
+            consider using CLI --optimization-level argument for appropriate performance tuning.
+            See docs/JOBBER_API_OPTIMIZATION.md for detailed configuration guidance.
         """
         self._capacity = capacity
-        # Start with conservative token count to prevent initial burst
+        # Start with moderate token count optimized for Jobber GraphQL API
         self._tokens = float(
             initial_tokens if initial_tokens is not None else capacity // 4
         )
+
         self._refill_rate = refill_rate  # tokens per minute
         self._last_refill = time.time()
         self._lock = threading.Lock()
 
-    def consume(self, tokens: int = 1) -> bool:
-        """Try to consume the specified number of tokens.
+    def consume(self, tokens: float = 1.0) -> bool:
+        """Attempt to consume tokens from the bucket.
 
-        This method is thread-safe and will:
-        1. Acquire a lock to prevent race conditions
+        The method performs these steps:
+        1. Acquire thread lock for thread safety
         2. Refill tokens based on elapsed time
-        3. Check if enough tokens are available
+        3. Check if requested tokens are available
         4. Consume tokens if available
-        5. Return success/failure status
 
         Args:
-            tokens: Number of tokens to consume (default: 1)
+            tokens: Number of tokens to consume (default: 1.0)
 
         Returns:
-            bool: True if tokens were successfully consumed, False otherwise
+            True if tokens were consumed, False if insufficient tokens
         """
         with self._lock:
             self._refill()
+            debug_print(
+                f"[DEBUG] Token bucket - Before consume: {self._tokens:.1f} tokens available"
+            )
 
             if self._tokens >= tokens:
                 self._tokens -= tokens
+                debug_print(
+                    f"[DEBUG] Token bucket - Consumed {tokens} tokens, {self._tokens:.1f} remaining"
+                )
                 return True
+
+            debug_print(
+                f"[DEBUG] Token bucket - Not enough tokens: need {tokens}, have {self._tokens:.1f}"
+            )
             return False
 
     def _refill(self) -> None:
