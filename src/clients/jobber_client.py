@@ -241,6 +241,136 @@ class JobberClient:
     }
     """
 
+    # GraphQL query for fetching jobs with cursor pagination
+    JOBS_QUERY = """
+    query GetJobs($cursor: String) {
+      jobs(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            client {
+              id
+            }
+            property {
+              id
+            }
+            quote {
+              id
+            }
+            jobNumber
+            title
+            description
+            status
+            scheduledStartAt
+            scheduledEndAt
+            completedAt
+            amounts {
+              total
+            }
+            notes {
+              edges {
+                node {
+                  id
+                  message
+                  createdAt
+                  updatedAt
+                }
+              }
+            }
+            createdAt
+            updatedAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching properties with cursor pagination
+    PROPERTIES_QUERY = """
+    query GetProperties($cursor: String) {
+      properties(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            client {
+              id
+            }
+            name
+            address {
+              line1
+              line2
+              city
+              stateProvince
+              postalCode
+              country
+            }
+            coordinates {
+              latitude
+              longitude
+            }
+            createdAt
+            updatedAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching requests with cursor pagination
+    REQUESTS_QUERY = """
+    query GetRequests($cursor: String) {
+      requests(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            client {
+              id
+            }
+            property {
+              id
+            }
+            title
+            description
+            status
+            priority
+            source
+            assignedTo
+            convertedToQuote {
+              id
+            }
+            convertedToJob {
+              id
+            }
+            notes {
+              edges {
+                node {
+                  id
+                  message
+                  createdAt
+                  updatedAt
+                }
+              }
+            }
+            createdAt
+            updatedAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
     def __init__(
         self, auth_provider: AuthProvider, http_client: Optional[IHttpClient] = None
     ) -> None:
@@ -572,4 +702,128 @@ class JobberClient:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(
                 f"Unexpected error while fetching attachments: {e}"
+            ) from e
+
+    def fetch_jobs(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch jobs data from Jobber GraphQL API.
+
+        Retrieves job information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with jobs data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.JOBS_QUERY, cursor)
+
+            # Validate that jobs data exists in response
+            if (
+                response_data.get("data") is not None
+                and "jobs" not in response_data["data"]
+            ):
+                raise JobberApiError(
+                    "Invalid response structure: missing 'jobs' field in data"
+                )
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching jobs: {e}") from e
+
+    def fetch_properties(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch properties data from Jobber GraphQL API.
+
+        Retrieves property information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with properties data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.PROPERTIES_QUERY, cursor)
+
+            # Validate that properties data exists in response
+            if (
+                response_data.get("data") is not None
+                and "properties" not in response_data["data"]
+            ):
+                raise JobberApiError(
+                    "Invalid response structure: missing 'properties' field in data"
+                )
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(
+                f"Unexpected error while fetching properties: {e}"
+            ) from e
+
+    def fetch_requests(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch requests data from Jobber GraphQL API.
+
+        Retrieves service request information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with requests data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.REQUESTS_QUERY, cursor)
+
+            # Validate that requests data exists in response
+            if (
+                response_data.get("data") is not None
+                and "requests" not in response_data["data"]
+            ):
+                raise JobberApiError(
+                    "Invalid response structure: missing 'requests' field in data"
+                )
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(
+                f"Unexpected error while fetching requests: {e}"
             ) from e
