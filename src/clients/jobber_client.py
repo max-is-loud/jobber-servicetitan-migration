@@ -59,7 +59,9 @@ class JobberClient:
             notes {
               edges {
                 node {
-                  id
+                  ... on ClientNote {
+                    id
+                  }
                 }
               }
             }
@@ -94,7 +96,9 @@ class JobberClient:
             notes {
               edges {
                 node {
-                  id
+                  ... on InvoiceNote {
+                    id
+                  }
                 }
               }
             }
@@ -132,14 +136,16 @@ class JobberClient:
                   name
                   quantity
                   unitCost
-                  total
+                  totalCost
                 }
               }
             }
             notes {
               edges {
                 node {
-                  id
+                  ... on QuoteNote {
+                    id
+                  }
                 }
               }
             }
@@ -264,7 +270,9 @@ class JobberClient:
             notes {
               edges {
                 node {
-                  id
+                  ... on JobNote {
+                    id
+                  }
                 }
               }
             }
@@ -343,7 +351,9 @@ class JobberClient:
             notes {
               edges {
                 node {
-                  id
+                  ... on RequestNote {
+                    id
+                  }
                 }
               }
             }
