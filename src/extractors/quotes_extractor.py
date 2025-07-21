@@ -1,24 +1,19 @@
 """QuotesExtractor for extracting Quote entities from Jobber GraphQL API."""
 
-import time
-from typing import Any, List, Union
+from typing import Any, List, Optional
 
 from ..clients import JobberClient
-from ..exceptions import (
-    ConfigurationError,
-    JobberApiError,
-    MappingError,
-    RepositoryError,
-)
-from ..interfaces import BaseExtractor, Logger
+from ..exceptions import MappingError
+from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import Attachment, Client, Invoice, Note, Quote
+from ..models import Note, Quote
 from ..repositories import Repository
+from .base_extractor import BaseExtractor
 
 
-class QuotesExtractor:
+class QuotesExtractor(BaseExtractor[Quote]):
     """
-    Extractor for Quote entities implementing BaseExtractor protocol.
+    Extractor for Quote entities implementing BaseExtractor.
 
     Provides modular OO extraction as specified in PRD Section 3.1, handling
     cursor-based pagination and data transformation for Quote entities from
@@ -40,232 +35,123 @@ class QuotesExtractor:
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
         """
-        self._jobber_client = jobber_client
-        self._entity_mapper = entity_mapper
-        self._repository = repository
-        self._logger = logger
+        super().__init__(
+            jobber_client=jobber_client,
+            entity_mapper=entity_mapper,
+            repository=repository,
+            logger=logger,
+            entity_type=Quote,
+            entity_name="quote",
+        )
+        # Track entities from last batch for extract_all
+        self._last_batch_entities: List[Quote] = []
 
-        # Extraction state tracking
-        self._last_extraction_summary = {
-            "total_entities": 0,
-            "total_pages": 0,
-            "extraction_duration": 0.0,
-            "average_page_size": 0.0,
-            "entities_per_second": 0.0,
-            "last_cursor": None,
-            "extraction_status": "pending",
-            "error_count": 0,
-        }
-
-    def extract(
-        self,
-        cursor: str | None = None,
-        page_limit: int | None = None,
-    ) -> dict[str, Any]:
-        """Extract quotes from Jobber GraphQL API with cursor-based pagination.
-
-        Performs complete extraction workflow including:
-        - GraphQL API calls with cursor pagination
-        - Data transformation via EntityMapper
-        - Batch persistence via Repository
-        - Progress logging and error handling
+    def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch a page of quotes from the Jobber API.
 
         Args:
-            cursor: Optional pagination cursor for continuing extraction
-            page_limit: Optional limit on number of pages to process (for testing)
+            cursor: Optional pagination cursor
 
         Returns:
-            Dictionary containing extraction results with keys:
-            - 'entities_processed': int - Total number of entities extracted
-            - 'pages_processed': int - Number of API pages processed
-            - 'has_next_page': bool - Whether more pages are available
-            - 'end_cursor': Optional[str] - Final cursor for continuation
-            - 'extraction_time': float - Total extraction time in seconds
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-            RepositoryError: If database operations fail
+            API response dictionary
         """
-        start_time = time.time()
-        entities_processed = 0
-        pages_processed = 0
-        current_cursor = cursor
-        error_count = 0
-        page_info = {}  # Initialize page_info
+        return self._jobber_client.fetch_quotes(cursor)
 
-        self._logger.info(f"Starting quotes extraction from cursor: {cursor}")
+    def _extract_edges_and_page_info(
+        self, response: dict[str, Any]
+    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+        """Extract edges and page info from API response.
 
-        try:
-            while True:
-                # Check page limit for testing
-                if page_limit is not None and pages_processed >= page_limit:
-                    self._logger.debug(f"Reached page limit: {page_limit}")
-                    break
+        Args:
+            response: API response dictionary
 
-                # Fetch page of quotes from API
-                self._logger.debug(f"Fetching quotes page {pages_processed + 1}")
-                response = self._jobber_client.fetch_quotes(current_cursor)
-                quotes_data = response.get("data", {}).get("quotes", {})
+        Returns:
+            Tuple of (edges list, page_info dict)
+        """
+        quotes_data = response.get("data", {}).get("quotes", {})
+        edges = quotes_data.get("edges", [])
+        page_info = quotes_data.get("pageInfo", {})
+        return edges, page_info
 
-                # Extract edges and page info
-                edges = quotes_data.get("edges", [])
-                page_info = quotes_data.get("pageInfo", {})
+    def _map_entity(self, node: dict[str, Any]) -> Quote:
+        """Map a single quote node to domain model.
 
-                if not edges:
-                    self._logger.debug("No more quote data to process")
-                    break
+        Args:
+            node: Quote data from API
 
-                # Map GraphQL nodes to domain models
-                quotes = []
-                notes = []  # Collect notes from quotes
-                for edge in edges:
-                    node = edge.get("node", {})
+        Returns:
+            Mapped Quote instance
+        """
+        return self._entity_mapper.map_quote(node)
+
+    def _save_entities(self, entities: List[Quote]) -> None:
+        """Save quotes to repository.
+
+        Args:
+            entities: List of quotes to save
+        """
+        self._repository.save_quotes(entities)
+        # Track for extract_all
+        self._last_batch_entities = entities
+
+    def _extract_related_entities(
+        self, node: dict[str, Any], primary_entity: Quote
+    ) -> dict[str, List[Any]]:
+        """Extract notes related to the quote.
+
+        Args:
+            node: Quote data from API
+            primary_entity: The quote that was mapped
+
+        Returns:
+            Dictionary with notes list
+        """
+        related = {}
+
+        # Extract notes if present
+        quote_notes = node.get("notes", {}).get("edges", [])
+        if quote_notes:
+            notes = []
+            for note_edge in quote_notes:
+                note_node = note_edge.get("node", {})
+                if note_node:
+                    # Add quote relationship to note data
+                    note_node["quote"] = {"id": primary_entity.id}
                     try:
-                        quote = self._entity_mapper.map_quote(node)
-                        quotes.append(quote)
-
-                        # Extract notes if present
-                        quote_notes = node.get("notes", {}).get("edges", [])
-                        for note_edge in quote_notes:
-                            note_node = note_edge.get("node", {})
-                            if note_node:
-                                # Add quote relationship to note data
-                                note_node["quote"] = {"id": quote.id}
-                                try:
-                                    note = self._entity_mapper.map_note(note_node)
-                                    notes.append(note)
-                                except MappingError as e:
-                                    self._logger.debug(
-                                        f"Failed to map note for quote {quote.id}: {e}"
-                                    )
+                        note = self._entity_mapper.map_note(note_node)
+                        notes.append(note)
                     except MappingError as e:
-                        error_msg = (
-                            f"Failed to map quote {node.get('id', 'unknown')}: {e}"
+                        self._logger.debug(
+                            f"Failed to map note for quote {primary_entity.id}: {e}"
                         )
-                        self._logger.error(error_msg)
-                        error_count += 1
+            if notes:
+                related["notes"] = notes
 
-                # Batch save quotes to database
-                if quotes:
-                    self._repository.save_quotes(quotes)
-                    entities_processed += len(quotes)
-                    self._logger.info(
-                        f"Processed {len(quotes)} quotes "
-                        f"(total: {entities_processed})"
-                    )
+        return related
 
-                # Save associated notes if any
-                if notes:
-                    self._repository.save_notes(notes)
-                    self._logger.info(f"Saved {len(notes)} notes for quotes")
+    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+        """Save notes related to quotes.
 
-                pages_processed += 1
+        Args:
+            related_entities: Dictionary with notes list
+        """
+        notes = related_entities.get("notes", [])
+        if notes:
+            self._repository.save_notes(notes)
 
-                # Check for next page
-                has_next_page = page_info.get("hasNextPage", False)
-                end_cursor = page_info.get("endCursor")
-
-                if not has_next_page:
-                    self._logger.debug("Reached last page of quotes")
-                    break
-
-                # Update cursor for next iteration
-                current_cursor = end_cursor
-
-                # Add delay between pages to prevent API overload
-                time.sleep(1.0)
-                self._logger.debug(f"Added 1s delay before page {pages_processed + 1}")
-
-            extraction_time = time.time() - start_time
-
-            # Update extraction summary
-            self._update_extraction_summary(
-                entities_processed,
-                pages_processed,
-                extraction_time,
-                current_cursor,
-                "completed",
-                error_count,
-            )
-
-            result = {
-                "entities_processed": entities_processed,
-                "pages_processed": pages_processed,
-                "has_next_page": page_info.get("hasNextPage", False),
-                "end_cursor": current_cursor,
-                "extraction_time": extraction_time,
-            }
-
-            self._logger.info(
-                f"Quotes extraction completed: {entities_processed} quotes, "
-                f"{pages_processed} pages in {extraction_time:.2f}s"
-            )
-
-            return result
-
-        except Exception as e:
-            extraction_time = time.time() - start_time
-            self._update_extraction_summary(
-                entities_processed,
-                pages_processed,
-                extraction_time,
-                current_cursor,
-                "failed",
-                error_count,
-            )
-            self._logger.error(f"Quotes extraction failed: {e}")
-            raise
-
-    def extract_all(self) -> List[Union[Client, Invoice, Quote, Note, Attachment]]:
-        """Extract all quotes with automatic pagination until completion.
-
-        Continuously calls extract() with cursor pagination until all available
-        quotes are processed. Provides complete dataset extraction with
-        comprehensive progress logging and error recovery.
+    def _get_entities_from_last_batch(self) -> List[Quote]:
+        """Get quotes from the last extraction batch.
 
         Returns:
-            List of all extracted Quote objects
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-            RepositoryError: If database operations fail
+            List of quotes from last batch
         """
-        all_quotes = []
-        cursor = None
-
-        self._logger.info("Starting complete quotes extraction")
-
-        while True:
-            result = self.extract(cursor=cursor)
-
-            # Get quotes from database for this batch
-            quotes_batch = self._repository.get_all_quotes()
-            if quotes_batch:
-                # Filter quotes for this extraction session
-                batch_start = len(all_quotes)
-                new_quotes = quotes_batch[
-                    batch_start : batch_start + result["entities_processed"]
-                ]
-                all_quotes.extend(new_quotes)
-
-            if not result["has_next_page"]:
-                break
-
-            cursor = result["end_cursor"]
-
-        self._logger.info(
-            f"Complete quotes extraction finished: {len(all_quotes)} quotes"
-        )
-        return all_quotes
+        return self._last_batch_entities
 
     def get_entity_count(self) -> int:
         """Get total count of quotes available for extraction.
 
         Performs a lightweight API call to determine the total number of quotes
-        available for extraction without actually extracting data. Useful for
-        progress estimation and extraction planning.
+        available for extraction without actually extracting data.
 
         Returns:
             Total number of quotes available for extraction
@@ -274,109 +160,29 @@ class QuotesExtractor:
             JobberApiError: If GraphQL API communication fails
             ConfigurationError: If authentication or configuration is invalid
         """
-        # For now, we'll use the complete extraction approach
-        # In a production system, this could use a count-only GraphQL query
-        total_count = 0
-        cursor = None
+        self._logger.debug("Fetching total quote count from API")
 
-        while True:
-            response = self._jobber_client.fetch_quotes(cursor)
-            quotes_data = response.get("data", {}).get("quotes", {})
+        # Use minimal query to get just the count
+        response = self._jobber_client.fetch_quotes(cursor=None)
+        quotes_data = response.get("data", {}).get("quotes", {})
+        page_info = quotes_data.get("pageInfo", {})
 
-            edges = quotes_data.get("edges", [])
-            page_info = quotes_data.get("pageInfo", {})
+        # If API provides totalCount, use it
+        total_count = quotes_data.get("totalCount")
+        if total_count is not None:
+            self._logger.debug(f"API reported total quote count: {total_count}")
+            return int(total_count)
 
-            total_count += len(edges)
+        # Otherwise estimate from first page
+        edges = quotes_data.get("edges", [])
+        if not edges:
+            return 0
 
-            if not page_info.get("hasNextPage", False):
-                break
+        # Rough estimate based on first page size and hasNextPage
+        page_size = len(edges)
+        if not page_info.get("hasNextPage", False):
+            return page_size
 
-            cursor = page_info.get("endCursor")
-
-        return total_count
-
-    def validate_dependencies(self) -> bool:
-        """Validate that all required dependencies are properly configured.
-
-        Checks that JobberClient, EntityMapper, Repository, and Logger
-        dependencies are properly injected and configured for extraction.
-        Ensures extraction can proceed without runtime failures.
-
-        Returns:
-            True if all dependencies are valid and ready for extraction
-
-        Raises:
-            ConfigurationError: If any required dependency is missing or invalid
-        """
-        if not self._jobber_client:
-            raise ConfigurationError("JobberClient dependency is required")
-        if not self._entity_mapper:
-            raise ConfigurationError("EntityMapper dependency is required")
-        if not self._repository:
-            raise ConfigurationError("Repository dependency is required")
-        if not self._logger:
-            raise ConfigurationError("Logger dependency is required")
-
-        # Test basic functionality
-        try:
-            # Verify JobberClient has required methods
-            if not hasattr(self._jobber_client, "fetch_quotes"):
-                raise ConfigurationError("JobberClient missing fetch_quotes method")
-
-            # Verify EntityMapper has required methods
-            if not hasattr(self._entity_mapper, "map_quote"):
-                raise ConfigurationError("EntityMapper missing map_quote method")
-
-            # Verify Repository has required methods
-            if not hasattr(self._repository, "save_quotes"):
-                raise ConfigurationError("Repository missing save_quotes method")
-
-            return True
-
-        except Exception as e:
-            raise ConfigurationError(f"Dependency validation failed: {e}") from e
-
-    def get_extraction_summary(self) -> dict[str, Any]:
-        """Get summary statistics of the last extraction operation.
-
-        Provides detailed metrics and status information from the most recent
-        extract() or extract_all() operation for monitoring and reporting.
-
-        Returns:
-            Dictionary containing extraction summary with keys:
-            - 'total_entities': int - Total entities processed
-            - 'total_pages': int - Total API pages processed
-            - 'extraction_duration': float - Total time in seconds
-            - 'average_page_size': float - Average entities per page
-            - 'entities_per_second': float - Processing rate
-            - 'last_cursor': Optional[str] - Final pagination cursor
-            - 'extraction_status': str - 'completed', 'partial', or 'failed'
-            - 'error_count': int - Number of recoverable errors encountered
-        """
-        return self._last_extraction_summary.copy()
-
-    def _update_extraction_summary(
-        self,
-        total_entities: int,
-        total_pages: int,
-        extraction_duration: float,
-        last_cursor: str | None,
-        status: str,
-        error_count: int,
-    ) -> None:
-        """Update internal extraction summary statistics."""
-        average_page_size = total_entities / total_pages if total_pages > 0 else 0.0
-        entities_per_second = (
-            total_entities / extraction_duration if extraction_duration > 0 else 0.0
-        )
-
-        self._last_extraction_summary = {
-            "total_entities": total_entities,
-            "total_pages": total_pages,
-            "extraction_duration": extraction_duration,
-            "average_page_size": average_page_size,
-            "entities_per_second": entities_per_second,
-            "last_cursor": last_cursor,
-            "extraction_status": status,
-            "error_count": error_count,
-        }
+        # Can't determine exact count without pagination
+        self._logger.info("Cannot determine exact quote count without full pagination")
+        return -1  # Indicate unknown count

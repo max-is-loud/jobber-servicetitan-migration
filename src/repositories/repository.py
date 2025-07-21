@@ -793,6 +793,42 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to save attachments batch: {e}") from e
 
+    def save_entities(
+        self,
+        entities: List[Union[Client, Invoice, Quote, Note, Attachment]],
+        entity_type: type,
+    ) -> None:
+        """Generic batch save method for any supported entity type.
+
+        Delegates to the appropriate specific save method based on entity type.
+        Provides a unified interface for saving different entity types.
+
+        Args:
+            entities: List of entities to save
+            entity_type: Type of entities being saved
+
+        Raises:
+            RepositoryError: If entity type is unsupported or save fails
+        """
+        if not entities:
+            return
+
+        # Map entity types to their specific save methods
+        save_methods = {
+            Client: self.save_clients,
+            Invoice: self.save_invoices,
+            Quote: self.save_quotes,
+            Note: self.save_notes,
+            Attachment: self.save_attachments,
+        }
+
+        save_method = save_methods.get(entity_type)
+        if not save_method:
+            raise RepositoryError(f"Unsupported entity type for save: {entity_type}")
+
+        # Call the appropriate save method
+        save_method(entities)
+
     def get_all_clients(self) -> List[Client]:
         """Retrieve all clients from the database.
 
