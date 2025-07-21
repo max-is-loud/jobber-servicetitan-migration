@@ -38,7 +38,8 @@ class NotesExtractor(BaseExtractor[Note]):
 
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """Fetch a page of notes from the Jobber API."""
-        return self._jobber_client.fetch_notes(cursor)
+        # TODO: Implement fetch_notes in JobberClient when adding Notes support
+        return self._jobber_client.fetch_notes(cursor)  # type: ignore
 
     def _extract_edges_and_page_info(
         self, response: dict[str, Any]
@@ -66,7 +67,8 @@ class NotesExtractor(BaseExtractor[Note]):
         """Get total count of notes available for extraction."""
         self._logger.debug("Fetching total note count from API")
 
-        response = self._jobber_client.fetch_notes(cursor=None)
+        # TODO: Implement fetch_notes in JobberClient when adding Notes support
+        response = self._jobber_client.fetch_notes(cursor=None)  # type: ignore
         notes_data = response.get("data", {}).get("notes", {})
 
         # If API provides totalCount, use it
