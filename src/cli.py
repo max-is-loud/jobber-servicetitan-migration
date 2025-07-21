@@ -1207,13 +1207,20 @@ def migrate_quotes(
 
     Fetches all quotes from the Jobber GraphQL API using cursor-based pagination
     and stores them in the specified SQLite database. Uses centralized rate limiting
-    configuration from parent command options (--optimization-level).
+    configuration from parent command options.
+
+    Note: Individual migrate commands use simplified GraphQL queries and don't
+    support deferred notes loading. For deferred notes, use 'migrate all' command.
 
     Args:
         page_limit: Optional limit on number of pages to process (for testing)
     """  # noqa: E501
     # Get shared configuration from context
     config = ctx.obj or {}
+
+    # NOTE: Individual migrate commands don't currently support deferred notes
+    # The deferred_notes setting only applies to 'migrate all' command
+    # Individual commands use simplified GraphQL queries to reduce complexity
 
     _execute_entity_extraction(
         entity_type="quotes",
