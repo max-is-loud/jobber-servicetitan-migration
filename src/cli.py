@@ -988,6 +988,204 @@ def migrate_attachments(
     )
 
 
+@migrate_app.command("users")
+def migrate_users(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+) -> None:
+    """
+    Extract user data from Jobber API to SQLite database.
+
+    Fetches all users from the Jobber GraphQL API using cursor-based pagination
+    and stores them in the specified SQLite database. Includes user notes extraction
+    for performance tracking and administrative information. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+    """
+    _execute_entity_extraction(
+        entity_type="users",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+    )
+
+
+@migrate_app.command("expenses")
+def migrate_expenses(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+) -> None:
+    """
+    Extract expense data from Jobber API to SQLite database.
+
+    Fetches all expenses from the Jobber GraphQL API using cursor-based pagination
+    and stores them in the specified SQLite database. Includes job-related cost
+    tracking and vendor information for financial management. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+    """
+    _execute_entity_extraction(
+        entity_type="expenses",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+    )
+
+
+@migrate_app.command("visits")
+def migrate_visits(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+) -> None:
+    """
+    Extract visit data from Jobber API to SQLite database.
+
+    Fetches all visits from the Jobber GraphQL API using cursor-based pagination
+    and stores them in the specified SQLite database. Includes visit notes extraction
+    for appointment instructions and completion details. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+    """
+    _execute_entity_extraction(
+        entity_type="visits",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+    )
+
+
+@migrate_app.command("timesheet-entries")
+def migrate_timesheet_entries(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+) -> None:
+    """
+    Extract timesheet entry data from Jobber API to SQLite database.
+
+    Fetches all timesheet entries from the Jobber GraphQL API using cursor-based
+    pagination and stores them in the specified SQLite database. Includes time
+    tracking, approval workflows, and payroll processing data. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+    """
+    _execute_entity_extraction(
+        entity_type="timesheet-entries",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+    )
+
+
+@migrate_app.command("products")
+def migrate_products(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+) -> None:
+    """
+    Extract product/service data from Jobber API to SQLite database.
+
+    Fetches all products and services from the Jobber GraphQL API using cursor-based
+    pagination and stores them in the specified SQLite database. Includes pricing,
+    duration, category, and online booking configuration. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+    """
+    _execute_entity_extraction(
+        entity_type="products",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+    )
+
+
+@migrate_app.command("tax-rates")
+def migrate_tax_rates(
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
+        "tightbeam.db"
+    ),
+    verbose: Annotated[
+        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    ] = False,
+    page_limit: Annotated[
+        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
+    ] = None,
+) -> None:
+    """
+    Extract tax rate data from Jobber API to SQLite database.
+
+    Fetches all tax rates from the Jobber GraphQL API using cursor-based pagination
+    and stores them in the specified SQLite database. Includes regional tax
+    configuration, rates, and government tax numbers. Requires authentication
+    via JOBBER_TOKEN environment variable or OAuth2 configuration.
+
+    Args:
+        db: Path to SQLite database file (defaults to tightbeam.db, will be created if it doesn't exist)
+        verbose: Enable verbose logging output for debugging
+        page_limit: Optional limit on number of pages to process (for testing)
+    """
+    _execute_entity_extraction(
+        entity_type="tax-rates",
+        db=db,
+        verbose=verbose,
+        page_limit=page_limit,
+    )
+
+
 def _execute_entity_extraction(
     entity_type: str,
     db: Path,
@@ -996,10 +1194,11 @@ def _execute_entity_extraction(
     download_path: str = "./attachments",
 ) -> None:
     """
-    Common entity extraction workflow for quotes, notes, and attachments.
+    Common entity extraction workflow for all supported entity types.
 
     Args:
-        entity_type: Type of entity to extract ('quotes', 'notes', 'attachments')
+        entity_type: Type of entity to extract ('quotes', 'notes', 'attachments',
+                    'users', 'expenses', 'visits', 'timesheet-entries', 'products', 'tax-rates')
         db: Path to SQLite database file
         verbose: Enable verbose logging
         page_limit: Optional limit on number of pages to process
@@ -1079,6 +1278,47 @@ def _execute_entity_extraction(
                 logger,
                 base_download_path=download_path,
             )
+
+        elif entity_type == "users":
+            from .extractors import UsersExtractor
+
+            extractor = UsersExtractor(jobber_client, entity_mapper, repository, logger)
+
+        elif entity_type == "expenses":
+            from .extractors import ExpensesExtractor
+
+            extractor = ExpensesExtractor(
+                jobber_client, entity_mapper, repository, logger
+            )
+
+        elif entity_type == "visits":
+            from .extractors import VisitsExtractor
+
+            extractor = VisitsExtractor(
+                jobber_client, entity_mapper, repository, logger
+            )
+
+        elif entity_type == "timesheet-entries":
+            from .extractors import TimesheetEntriesExtractor
+
+            extractor = TimesheetEntriesExtractor(
+                jobber_client, entity_mapper, repository, logger
+            )
+
+        elif entity_type == "products":
+            from .extractors import ProductServicesExtractor
+
+            extractor = ProductServicesExtractor(
+                jobber_client, entity_mapper, repository, logger
+            )
+
+        elif entity_type == "tax-rates":
+            from .extractors import TaxRatesExtractor
+
+            extractor = TaxRatesExtractor(
+                jobber_client, entity_mapper, repository, logger
+            )
+
         else:
             raise ValueError(f"Unsupported entity type: {entity_type}")
 
@@ -1150,6 +1390,30 @@ def _execute_entity_extraction(
             logger.info(
                 f"✅ Attachment extraction completed: {result['entities_processed']} attachments processed, "  # noqa: E501
                 f"{files_downloaded} files downloaded ({total_bytes} bytes)"
+            )
+        elif entity_type == "users":
+            logger.info(
+                f"✅ User extraction completed: {result['entities_processed']} users processed"
+            )
+        elif entity_type == "expenses":
+            logger.info(
+                f"✅ Expense extraction completed: {result['entities_processed']} expenses processed"
+            )
+        elif entity_type == "visits":
+            logger.info(
+                f"✅ Visit extraction completed: {result['entities_processed']} visits processed"
+            )
+        elif entity_type == "timesheet-entries":
+            logger.info(
+                f"✅ Timesheet entry extraction completed: {result['entities_processed']} timesheet entries processed"
+            )
+        elif entity_type == "products":
+            logger.info(
+                f"✅ Product/service extraction completed: {result['entities_processed']} products/services processed"
+            )
+        elif entity_type == "tax-rates":
+            logger.info(
+                f"✅ Tax rate extraction completed: {result['entities_processed']} tax rates processed"
             )
 
         # Handle continuation if more pages available

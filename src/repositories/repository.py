@@ -4,7 +4,22 @@ import sqlite3
 from typing import List, Optional, Union
 
 from ..exceptions import RepositoryError
-from ..models import Attachment, Client, Invoice, Job, Note, Property, Quote, Request
+from ..models import (
+    Attachment,
+    Client,
+    Expense,
+    Invoice,
+    Job,
+    Note,
+    ProductService,
+    Property,
+    Quote,
+    Request,
+    TaxRate,
+    TimeSheetEntry,
+    User,
+    Visit,
+)
 
 
 class Repository:
@@ -232,6 +247,129 @@ class Repository:
             """
             cursor.execute(requests_schema)
 
+            # Create users table for team member entities
+            users_schema = """
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    first_name TEXT,
+                    last_name TEXT,
+                    email TEXT,
+                    role TEXT,
+                    is_account_admin TEXT,
+                    is_account_owner TEXT,
+                    status TEXT,
+                    phone TEXT,
+                    timezone TEXT,
+                    created_at TEXT,
+                    last_login_at TEXT
+                )
+            """
+            cursor.execute(users_schema)
+
+            # Create expenses table for job-related expenses
+            expenses_schema = """
+                CREATE TABLE IF NOT EXISTS expenses (
+                    id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+                    amount_cents INTEGER,
+                    description TEXT,
+                    category TEXT,
+                    receipt_url TEXT,
+                    vendor TEXT,
+                    expense_date TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(expenses_schema)
+
+            # Create visits table for scheduled service visits
+            visits_schema = """
+                CREATE TABLE IF NOT EXISTS visits (
+                    id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+                    client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+                    property_id TEXT REFERENCES properties(id) ON DELETE SET NULL,
+                    assigned_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+                    title TEXT,
+                    instructions TEXT,
+                    status TEXT,
+                    all_day TEXT,
+                    duration_minutes INTEGER,
+                    start_at TEXT,
+                    end_at TEXT,
+                    completed_at TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(visits_schema)
+
+            # Create timesheet_entries table for time tracking
+            timesheet_entries_schema = """
+                CREATE TABLE IF NOT EXISTS timesheet_entries (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+                    visit_id TEXT REFERENCES visits(id) ON DELETE SET NULL,
+                    approved_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+                    paid_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+                    label TEXT,
+                    note TEXT,
+                    labour_rate TEXT,
+                    final_duration_seconds INTEGER,
+                    visit_duration_total_seconds INTEGER,
+                    approved TEXT,
+                    ticking TEXT,
+                    start_at TEXT,
+                    end_at TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(timesheet_entries_schema)
+
+            # Create products_services table for service catalog
+            products_services_schema = """
+                CREATE TABLE IF NOT EXISTS products_services (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    description TEXT,
+                    category TEXT,
+                    default_unit_cost_cents INTEGER,
+                    internal_unit_cost_cents INTEGER,
+                    markup_percentage TEXT,
+                    duration_minutes INTEGER,
+                    taxable TEXT,
+                    visible TEXT,
+                    online_booking_enabled TEXT,
+                    online_booking_sort_order INTEGER,
+                    active TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(products_services_schema)
+
+            # Create tax_rates table for regional tax configuration
+            tax_rates_schema = """
+                CREATE TABLE IF NOT EXISTS tax_rates (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    rate_percentage TEXT,
+                    region TEXT,
+                    compound TEXT,
+                    active TEXT,
+                    description TEXT,
+                    tax_number TEXT,
+                    display_order INTEGER,
+                    default_for_region TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """
+            cursor.execute(tax_rates_schema)
+
             # Create indexes for foreign keys to improve query performance
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_properties_client_id ON properties(client_id)"  # noqa: E501
@@ -270,6 +408,38 @@ class Repository:
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_attachments_note_id ON attachments(note_id)"  # noqa: E501
+            )
+
+            # Add indexes for new entity foreign keys
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_expenses_job_id ON expenses(job_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_visits_job_id ON visits(job_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_visits_client_id ON visits(client_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_visits_property_id ON visits(property_id)"  # noqa: E501
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_visits_assigned_user_id ON visits(assigned_user_id)"  # noqa: E501
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_timesheet_entries_user_id ON timesheet_entries(user_id)"  # noqa: E501
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_timesheet_entries_job_id ON timesheet_entries(job_id)"  # noqa: E501
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_timesheet_entries_visit_id ON timesheet_entries(visit_id)"  # noqa: E501
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_timesheet_entries_approved_by_id ON timesheet_entries(approved_by_id)"  # noqa: E501
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_timesheet_entries_paid_by_id ON timesheet_entries(paid_by_id)"  # noqa: E501
             )
 
             # Migrate existing tables to add new columns
@@ -1132,10 +1302,343 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to save requests batch: {e}") from e
 
+    def save_users(self, users: List[User]) -> None:
+        """Batch save multiple users to the database.
+
+        Efficiently handles List[User] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            users: List of User entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not users:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            user_data = [
+                (
+                    user.id,
+                    user.first_name,
+                    user.last_name,
+                    user.email,
+                    user.role,
+                    user.is_account_admin,
+                    user.is_account_owner,
+                    user.status,
+                    user.phone,
+                    user.timezone,
+                    user.created_at,
+                    user.last_login_at,
+                )
+                for user in users
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO users
+                   (id, first_name, last_name, email, role, is_account_admin, is_account_owner,
+                    status, phone, timezone, created_at, last_login_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                user_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save users batch: {e}") from e
+
+    def save_expenses(self, expenses: List[Expense]) -> None:
+        """Batch save multiple expenses to the database.
+
+        Efficiently handles List[Expense] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            expenses: List of Expense entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not expenses:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            expense_data = [
+                (
+                    expense.id,
+                    expense.job_id,
+                    expense.amount_cents,
+                    expense.description,
+                    expense.category,
+                    expense.receipt_url,
+                    expense.vendor,
+                    expense.expense_date,
+                    expense.created_at,
+                    expense.updated_at,
+                )
+                for expense in expenses
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO expenses
+                   (id, job_id, amount_cents, description, category, receipt_url, vendor,
+                    expense_date, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                expense_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save expenses batch: {e}") from e
+
+    def save_visits(self, visits: List[Visit]) -> None:
+        """Batch save multiple visits to the database.
+
+        Efficiently handles List[Visit] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            visits: List of Visit entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not visits:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            visit_data = [
+                (
+                    visit.id,
+                    visit.job_id,
+                    visit.client_id,
+                    visit.property_id,
+                    visit.assigned_user_id,
+                    visit.title,
+                    visit.instructions,
+                    visit.status,
+                    visit.all_day,
+                    visit.duration_minutes,
+                    visit.start_at,
+                    visit.end_at,
+                    visit.completed_at,
+                    visit.created_at,
+                    visit.updated_at,
+                )
+                for visit in visits
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO visits
+                   (id, job_id, client_id, property_id, assigned_user_id, title, instructions,
+                    status, all_day, duration_minutes, start_at, end_at, completed_at,
+                    created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                visit_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save visits batch: {e}") from e
+
+    def save_timesheet_entries(self, timesheet_entries: List[TimeSheetEntry]) -> None:
+        """Batch save multiple timesheet entries to the database.
+
+        Efficiently handles List[TimeSheetEntry] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            timesheet_entries: List of TimeSheetEntry entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not timesheet_entries:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            timesheet_data = [
+                (
+                    entry.id,
+                    entry.user_id,
+                    entry.job_id,
+                    entry.visit_id,
+                    entry.approved_by_id,
+                    entry.paid_by_id,
+                    entry.label,
+                    entry.note,
+                    entry.labour_rate,
+                    entry.final_duration_seconds,
+                    entry.visit_duration_total_seconds,
+                    entry.approved,
+                    entry.ticking,
+                    entry.start_at,
+                    entry.end_at,
+                    entry.created_at,
+                    entry.updated_at,
+                )
+                for entry in timesheet_entries
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO timesheet_entries
+                   (id, user_id, job_id, visit_id, approved_by_id, paid_by_id, label, note,
+                    labour_rate, final_duration_seconds, visit_duration_total_seconds,
+                    approved, ticking, start_at, end_at, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                timesheet_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save timesheet entries batch: {e}") from e
+
+    def save_products_services(self, products_services: List[ProductService]) -> None:
+        """Batch save multiple products/services to the database.
+
+        Efficiently handles List[ProductService] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            products_services: List of ProductService entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not products_services:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            product_data = [
+                (
+                    product.id,
+                    product.name,
+                    product.description,
+                    product.category,
+                    product.default_unit_cost_cents,
+                    product.internal_unit_cost_cents,
+                    product.markup_percentage,
+                    product.duration_minutes,
+                    product.taxable,
+                    product.visible,
+                    product.online_booking_enabled,
+                    product.online_booking_sort_order,
+                    product.active,
+                    product.created_at,
+                    product.updated_at,
+                )
+                for product in products_services
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO products_services
+                   (id, name, description, category, default_unit_cost_cents, internal_unit_cost_cents,
+                    markup_percentage, duration_minutes, taxable, visible, online_booking_enabled,
+                    online_booking_sort_order, active, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                product_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save products/services batch: {e}") from e
+
+    def save_tax_rates(self, tax_rates: List[TaxRate]) -> None:
+        """Batch save multiple tax rates to the database.
+
+        Efficiently handles List[TaxRate] using executemany for bulk operations.
+        Uses INSERT OR REPLACE for upsert behavior.
+
+        Args:
+            tax_rates: List of TaxRate entities to save
+
+        Raises:
+            RepositoryError: If batch operation fails
+        """
+        if not tax_rates:
+            return
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Prepare data tuples for executemany
+            tax_rate_data = [
+                (
+                    tax_rate.id,
+                    tax_rate.name,
+                    tax_rate.rate_percentage,
+                    tax_rate.region,
+                    tax_rate.compound,
+                    tax_rate.active,
+                    tax_rate.description,
+                    tax_rate.tax_number,
+                    tax_rate.display_order,
+                    tax_rate.default_for_region,
+                    tax_rate.created_at,
+                    tax_rate.updated_at,
+                )
+                for tax_rate in tax_rates
+            ]
+
+            cursor.executemany(
+                """INSERT OR REPLACE INTO tax_rates
+                   (id, name, rate_percentage, region, compound, active, description, tax_number,
+                    display_order, default_for_region, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                tax_rate_data,
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save tax rates batch: {e}") from e
+
     def save_entities(
         self,
         entities: List[
-            Union[Client, Invoice, Quote, Note, Attachment, Job, Property, Request]
+            Union[
+                Client,
+                Invoice,
+                Quote,
+                Note,
+                Attachment,
+                Job,
+                Property,
+                Request,
+                User,
+                Expense,
+                Visit,
+                TimeSheetEntry,
+                ProductService,
+                TaxRate,
+            ]
         ],
         entity_type: type,
     ) -> None:
@@ -1164,6 +1667,12 @@ class Repository:
             Job: self.save_jobs,
             Property: self.save_properties,
             Request: self.save_requests,
+            User: self.save_users,
+            Expense: self.save_expenses,
+            Visit: self.save_visits,
+            TimeSheetEntry: self.save_timesheet_entries,
+            ProductService: self.save_products_services,
+            TaxRate: self.save_tax_rates,
         }
 
         save_method = save_methods.get(entity_type)
