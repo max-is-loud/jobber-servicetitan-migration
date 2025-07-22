@@ -508,6 +508,9 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         # Display success message using helper function
         display_oauth_success("server", console)
 
+        # Explicit clean exit after successful OAuth completion
+        sys.exit(0)
+
     finally:
         # Restore original environment
         if original_redirect is not None:
@@ -515,15 +518,28 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         elif "JOBBER_REDIRECT_URI" in os.environ:
             del os.environ["JOBBER_REDIRECT_URI"]
 
-        # Shutdown server properly
+        # Enhanced server cleanup with isolated error handling
         try:
             server.shutdown()
+        except Exception:
+            # Ignore server shutdown errors
+            pass
+
+        try:
             server.server_close()
-            # Wait for server thread to finish
+        except Exception:
+            # Ignore server close errors
+            pass
+
+        try:
             if server_thread.is_alive():
                 server_thread.join(timeout=2.0)
+                if server_thread.is_alive():
+                    console.print(
+                        "[dim]Warning: OAuth server thread did not terminate cleanly[/dim]"
+                    )
         except Exception:
-            # Ignore cleanup errors
+            # Ignore thread join errors
             pass
 
 
