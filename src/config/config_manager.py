@@ -4,7 +4,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import yaml
 from watchdog.events import FileSystemEventHandler
@@ -70,7 +70,7 @@ class ConfigManagerImpl:
         self.enable_hot_reload = enable_hot_reload
         self._config_lock = threading.Lock()
         self._observer: Optional[Observer] = None
-        self._reload_callbacks = []
+        self._reload_callbacks: list[Callable[[AppConfig | None, AppConfig | None], None]] = []
         self._load_config()
 
         # Start file watcher if hot reload is enabled
@@ -335,7 +335,7 @@ class ConfigManagerImpl:
             except Exception as e:
                 print(f"❌ Failed to reload configuration: {e}")
 
-    def add_reload_callback(self, callback) -> None:
+    def add_reload_callback(self, callback: Callable[[AppConfig | None, AppConfig | None], None]) -> None:
         """Add a callback to be called when configuration is reloaded.
 
         Args:

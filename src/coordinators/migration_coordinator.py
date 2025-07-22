@@ -15,6 +15,7 @@ from ..extractors import (
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import MigrationSummary
+from ..performance import AdaptivePerformanceOptimizer
 from ..repositories import Repository
 
 
@@ -41,6 +42,7 @@ class MigrationCoordinator:
         attachment_downloader: Optional[AttachmentDownloader] = None,
         config_manager: Optional[ConfigManagerImpl] = None,
         resume: bool = False,
+        enable_adaptive_optimization: bool = False,
     ) -> None:
         """Initialize MigrationCoordinator with required dependencies.
 
@@ -55,6 +57,7 @@ class MigrationCoordinator:
             attachment_downloader: Optional downloader for Attachment files
             config_manager: Optional ConfigManager for delays and pagination settings
             resume: Whether to skip entities that already exist in database
+            enable_adaptive_optimization: Whether to enable adaptive performance optimization
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
@@ -70,6 +73,16 @@ class MigrationCoordinator:
         self._notes_extractor = notes_extractor
         self._quotes_extractor = quotes_extractor
         self._attachment_downloader = attachment_downloader
+
+        # Adaptive performance optimization
+        self._adaptive_optimizer: Optional[AdaptivePerformanceOptimizer] = None
+        if enable_adaptive_optimization:
+            self._adaptive_optimizer = AdaptivePerformanceOptimizer(
+                config_manager=self._config_manager,
+                logger=self._logger,
+                target_throttle_rate=0.05,  # Allow 5% throttling
+                optimization_interval=10,  # Optimize every 10 requests
+            )
 
     def migrate(self, include_extended_entities: bool = True) -> MigrationSummary:
         """
@@ -180,6 +193,18 @@ class MigrationCoordinator:
             self._logger.info("Migration workflow completed")
             self._logger.info(summary.format_summary())
 
+            # Log adaptive optimization performance summary
+            if self._adaptive_optimizer:
+                perf_summary = self._adaptive_optimizer.get_performance_summary()
+                self._logger.info("🤖 Adaptive Optimization Performance Summary:")
+                self._logger.info(f"   • Total requests: {perf_summary['requests_made']}")
+                self._logger.info(f"   • Throttle rate: {perf_summary['throttle_rate']}")
+                self._logger.info(f"   • Final throughput: {perf_summary['current_throughput']}")
+                self._logger.info(
+                    f"   • Final settings: {perf_summary['current_page_size']} per page, {perf_summary['current_page_delay']} delay"
+                )
+                self._logger.info(f"   • Confidence: {perf_summary['confidence_score']}")
+
         return summary
 
     def migrate_legacy(self) -> MigrationSummary:
@@ -284,12 +309,28 @@ class MigrationCoordinator:
         page_number = 1
 
         while True:
+            # Track request timing for adaptive optimization
+            request_start_time = time.time()
+            was_throttled = False
+
             try:
                 self._logger.debug(f"Fetching clients page {page_number}")
 
                 # Fetch page of clients from API
-                response = self._jobber_client.fetch_clients(cursor)
-                clients_data = response.get("data", {}).get("clients", {})
+                try:
+                    response = self._jobber_client.fetch_clients(cursor)
+                    clients_data = response.get("data", {}).get("clients", {})
+                except JobberApiError as e:
+                    # Check if this was a throttling error
+                    if "throttled" in str(e).lower():
+                        was_throttled = True
+                        # Re-raise to be handled by existing retry logic
+                        raise
+                    else:
+                        # Non-throttling error, re-raise
+                        raise
+
+                request_time = time.time() - request_start_time
 
                 # Extract edges and page info
                 edges = clients_data.get("edges", [])
@@ -324,6 +365,11 @@ class MigrationCoordinator:
                     total_processed += len(clients)
                     self._logger.info(f"Processed {len(clients)} clients (total: {total_processed})")
 
+                # Record performance metrics for adaptive optimization
+                if self._adaptive_optimizer:
+                    entities_received = len(clients) if clients else 0
+                    self._adaptive_optimizer.record_request(entities_received, request_time, was_throttled)
+
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
                 cursor = page_info.get("endCursor")
@@ -343,6 +389,12 @@ class MigrationCoordinator:
                 time.sleep(page_delay)
 
             except (JobberApiError, MappingError, RepositoryError) as e:
+                # Record throttling for adaptive optimization if it was a throttling error
+                if self._adaptive_optimizer and isinstance(e, JobberApiError) and "throttled" in str(e).lower():
+                    # Estimate request time and record throttling
+                    request_time = time.time() - request_start_time if "request_start_time" in locals() else 1.0
+                    self._adaptive_optimizer.record_request(0, request_time, was_throttled=True)
+
                 error_msg = f"Error processing clients page {page_number}: {e}"
                 self._logger.error(error_msg)
                 summary.add_error(error_msg)

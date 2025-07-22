@@ -656,6 +656,10 @@ class JobberClient:
         self.metrics_collector = metrics_collector
         self.config_manager = config_manager or ConfigManagerImpl()
 
+        # Track throttling events for performance optimization
+        self._throttling_events = 0
+        self._last_request_was_throttled = False
+
     def _get_pagination_size(self, entity_type: str) -> int:
         """Get pagination size for the specified entity type from configuration.
 
@@ -768,7 +772,9 @@ class JobberClient:
 
         return "unknown"
 
-    def _execute_graphql_request(self, query: str, cursor: Optional[str] = None) -> dict[str, Any]:
+    def _execute_graphql_request(
+        self, query: str, cursor: Optional[str] = None, variables: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
         """
         Execute a GraphQL request with comprehensive error handling and retry logic.
 
@@ -781,6 +787,7 @@ class JobberClient:
         Args:
             query: GraphQL query string to execute
             cursor: Optional cursor for pagination
+            variables: Optional custom variables dict (overrides cursor if provided)
 
         Returns:
             Dictionary containing GraphQL response data
@@ -792,6 +799,9 @@ class JobberClient:
         """
         max_retries = 5
         base_delay = 2.0
+
+        # Reset throttling flag for this request
+        self._last_request_was_throttled = False
 
         for attempt in range(max_retries + 1):
             try:
@@ -829,7 +839,10 @@ class JobberClient:
             debug_print(f"[DEBUG] Request headers: {debug_headers}")
 
             # Prepare GraphQL payload
-            payload = {"query": query, "variables": {"cursor": cursor}}
+            if variables is not None:
+                payload = {"query": query, "variables": variables}
+            else:
+                payload = {"query": query, "variables": {"cursor": cursor}}
 
             debug_print(f"[DEBUG] GraphQL Query Length: {len(query)} characters")
             debug_print(f"[DEBUG] GraphQL Query Preview: {query[:200]}...")
@@ -887,6 +900,10 @@ class JobberClient:
             except JobberApiError as e:
                 # Check if this is a throttling error and we have retries left
                 if self._is_throttling_error(e) and attempt < max_retries:
+                    # Track throttling event
+                    self._throttling_events += 1
+                    self._last_request_was_throttled = True
+
                     delay = base_delay * (2**attempt)  # Exponential backoff
                     debug_print(
                         f"[DEBUG] GraphQL throttling detected, attempt {attempt + 1}/{max_retries + 1}. Retrying in {delay}s..."
@@ -902,6 +919,22 @@ class JobberClient:
 
         # This should never be reached due to the raise in the except block
         raise JobberApiError(f"GraphQL request failed after {max_retries} retries")
+
+    def was_last_request_throttled(self) -> bool:
+        """Check if the last request experienced throttling (even if it eventually succeeded).
+
+        Returns:
+            True if the last request was throttled at least once
+        """
+        return self._last_request_was_throttled
+
+    def reset_throttling_flag(self) -> None:
+        """Reset the throttling flag for the next request."""
+        self._last_request_was_throttled = False
+
+    def get_total_throttling_events(self) -> int:
+        """Get total number of throttling events since client creation."""
+        return self._throttling_events
 
     def _validate_graphql_response(self, response_data: dict[str, Any]) -> None:
         """
@@ -1474,20 +1507,8 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            # Prepare GraphQL payload with note ID variable
-            headers = self.auth_provider.get_headers()
-            headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
-
-            payload = {"query": self.NOTE_BY_ID_QUERY, "variables": {"id": note_id}}
-
-            # Use shared HttpClient for HTTP communication
-            # When return_headers=False (default), result is guaranteed to be a dict
-            result = self.http_client.post(url=self.API_URL, headers=headers, json=payload)
-            assert isinstance(result, dict), "Expected dict when return_headers=False"
-            response_data = result
-
-            # Validate response structure and check for GraphQL errors
-            self._validate_graphql_response(response_data)
+            # Use throttling-aware GraphQL request execution with note ID variable
+            response_data = self._execute_graphql_request(query=self.NOTE_BY_ID_QUERY, variables={"id": note_id})
 
             # Validate that note data exists in response
             if response_data.get("data") is not None and "node" not in response_data["data"]:

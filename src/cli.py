@@ -789,6 +789,13 @@ def migrate_all(
     optimization_level: str = "moderate",
     enable_cost_monitoring: bool = True,
     cost_monitoring_verbose: bool = False,
+    enable_adaptive_optimization: Annotated[
+        bool,
+        typer.Option(
+            "--adaptive/--no-adaptive",
+            help="Enable adaptive performance optimization (auto-tune page size and delays)",
+        ),
+    ] = False,
 ) -> None:
     """
     Migrate all data from Jobber API to SQLite database.
@@ -999,6 +1006,7 @@ def migrate_all(
             attachment_downloader=attachment_downloader,
             config_manager=config_manager,
             resume=actual_resume,
+            enable_adaptive_optimization=enable_adaptive_optimization,
         )
 
         # Execute migration workflow
@@ -1008,6 +1016,10 @@ def migrate_all(
         logger.info("🚀 Performance Configuration:")
         logger.info(f"   • Optimization level: {actual_optimization_level.upper()}")
         logger.info(f"   • Target rate: {requests_per_second:.0f} requests/sec")
+        if enable_adaptive_optimization:
+            logger.info("   • Adaptive optimization: ENABLED (will auto-tune performance)")
+        else:
+            logger.info("   • Adaptive optimization: DISABLED (using static settings)")
 
         # Calculate safety margin
         api_limit_per_sec = 500 / 60  # 500 req/min = ~8.33 req/sec
