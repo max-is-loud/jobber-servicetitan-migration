@@ -4,6 +4,7 @@ from ..exceptions import ConfigurationError, JobberApiError
 from .base_extractor import BaseExtractor
 from .config_manager import ConfigManager
 from .logger import Logger
+from .migration_progress import MigrationProgressDisplay
 
 """
 Interfaces package for TightBeam application.
@@ -57,4 +58,10 @@ class IHttpClient(Protocol):
         ...
 
 
-__all__ = ["BaseExtractor", "ConfigManager", "IHttpClient", "Logger"]
+__all__ = [
+    "BaseExtractor",
+    "ConfigManager",
+    "IHttpClient",
+    "Logger",
+    "MigrationProgressDisplay",
+]
