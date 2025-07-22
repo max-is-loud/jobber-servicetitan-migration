@@ -32,19 +32,19 @@
         "crawl4ai-rag": {
             "url": "http://localhost:8051/sse"
         },
-        "github": {
-            "command": "docker",
+        "obsidian-mcp-server": {
+            "command": "npx",
             "args": [
-                "run",
-                "-i",
-                "--rm",
-                "-e",
-                "GITHUB_PERSONAL_ACCESS_TOKEN",
-                "ghcr.io/github/github-mcp-server"
+                "obsidian-mcp-server"
             ],
             "env": {
-                "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
-            }
+                "OBSIDIAN_API_KEY": "41c2ab4f71dca12dbdac9bfab38d9e46f00a6f4bba2eef6cb521c5175fe7f6f7",
+                "OBSIDIAN_BASE_URL": "https://127.0.0.1:27124",
+                "OBSIDIAN_VERIFY_SSL": "false",
+                "OBSIDIAN_ENABLE_CACHE": "true"
+            },
+            "disabled": false,
+            "autoApprove": []
         }
     }
 }
