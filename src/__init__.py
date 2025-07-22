@@ -19,7 +19,7 @@ from .clients import HttpClient, JobberClient
 from .config import ConfigManagerImpl
 
 # Coordination components
-from .coordinators import MigrationCoordinator
+from .coordinators import MigrationCoordinator, RichMigrationCoordinator
 
 # Exception classes for error handling
 from .exceptions import (
@@ -28,11 +28,12 @@ from .exceptions import (
     MappingError,
     OAuth2Error,
     RepositoryError,
+    TightBeamError,
 )
 
 # Logging components
 from .interfaces import ConfigManager, Logger
-from .loggers import ConsoleLogger
+from .loggers import ConsoleLogger, RichLogger
 from .mappers import EntityMapper
 from .models import Client, Invoice, MigrationSummary
 from .repositories import Repository
@@ -60,13 +61,15 @@ __all__ = [
     # Logging components
     "Logger",
     "ConsoleLogger",
+    "RichLogger",
     # Coordination components
     "MigrationCoordinator",
+    "RichMigrationCoordinator",
     # Exception classes
     "TightBeamError",
     "ConfigurationError",
     "JobberApiError",
     "MappingError",
-    "RepositoryError",
     "OAuth2Error",
+    "RepositoryError",
 ]
