@@ -5,7 +5,6 @@ import sqlite3
 import sys
 import threading
 import time
-import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Annotated, Optional
@@ -38,6 +37,13 @@ from .rate_limiting import (
     TokenBucketRateLimiter,
 )
 from .repositories import Repository
+from .utils import (
+    complete_oauth_flow,
+    display_manual_auth_instructions,
+    display_oauth_success,
+    display_server_auth_info,
+    open_browser,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -230,40 +236,9 @@ def init() -> None:
 # OAuth2 command subgroup is already defined above
 
 
-def _get_oauth2_config() -> tuple[str, str, str]:
-    """
-    Get OAuth2 configuration from environment variables.
-
-    Returns:
-        Tuple of (client_id, client_secret, redirect_uri)
-
-    Raises:
-        ConfigurationError: If required OAuth2 environment variables are missing
-    """
-    client_id = os.environ.get("JOBBER_CLIENT_ID")
-    client_secret = os.environ.get("JOBBER_CLIENT_SECRET")
-    redirect_uri = os.environ.get("JOBBER_REDIRECT_URI")
-
-    if not client_id:
-        raise ConfigurationError(
-            "JOBBER_CLIENT_ID environment variable is required for OAuth2 operations"
-        )
-    if not client_secret:
-        raise ConfigurationError(
-            "JOBBER_CLIENT_SECRET environment variable is required for "
-            "OAuth2 operations"
-        )
-    if not redirect_uri:
-        raise ConfigurationError(
-            "JOBBER_REDIRECT_URI environment variable is required for OAuth2 operations"
-        )
-
-    return client_id, client_secret, redirect_uri
-
-
 def _create_oauth2_manager() -> OAuth2Manager:
     """Create OAuth2Manager with configuration from environment."""
-    client_id, client_secret, redirect_uri = _get_oauth2_config()
+    client_id, client_secret, redirect_uri = AuthProvider.get_oauth2_config()
     http_client = HttpClient()
     return OAuth2Manager(
         client_id=client_id,
@@ -468,53 +443,10 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         )
 
         # Display Rich UI for OAuth setup
-        server_info = (
-            f"[bold green]🌐 Local callback server:[/bold green] "
-            f"http://localhost:{port}\n"
-            f"[bold blue]🔗 Authorization URL:[/bold blue] {auth_url}\n\n"
-            f"[bold yellow]⏳ Waiting for authorization...[/bold yellow]\n"
-            f"Complete the authorization in your browser, then come back here!"
-        )
+        display_server_auth_info(auth_url, port, console)
 
-        console.print(
-            Panel(
-                server_info,
-                title="🚀 OAuth2 Authorization with Local Server",
-                border_style="green",
-            )
-        )
-
-        # Open browser
-        try:
-            webbrowser.open(auth_url)
-            console.print("✅ [green]Browser opened successfully[/green]")
-        except Exception as e:
-            # In WSL environment, try alternative methods
-            import subprocess
-
-            if "wsl" in os.uname().release.lower():
-                try:
-                    # Try using Windows browser via WSL
-                    subprocess.run(
-                        ["cmd.exe", "/c", "start", auth_url],
-                        check=True,
-                        capture_output=True,
-                    )
-                    console.print("✅ [green]Browser opened via Windows[/green]")
-                except subprocess.CalledProcessError:
-                    console.print(
-                        "⚠️ [yellow]Could not open browser automatically[/yellow]"
-                    )
-                    console.print(
-                        f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n"
-                        f"   {auth_url}"
-                    )
-            else:
-                console.print(f"⚠️ [yellow]Could not open browser: {e}[/yellow]")
-                console.print(
-                    f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n"
-                    f"   {auth_url}"
-                )
+        # Open browser using helper function
+        open_browser(auth_url, console)
 
         # Wait for callback (with timeout)
         timeout = 300  # 5 minutes
@@ -568,38 +500,13 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         ):
             repository = _create_repository(db)
 
-            # Exchange code for tokens
-            token_data = oauth_manager.exchange_code_for_tokens(auth_result["code"])
-
-            # Store tokens in database
-            from datetime import datetime, timedelta, timezone
-
-            # Handle missing expires_in field (Jobber API doesn't always include it)
-            expires_in = token_data.get("expires_in", 3600)  # Default to 1 hour
-            expires_at = (
-                datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-            ).isoformat()
-
-            repository.save_oauth_tokens(
-                access_token=token_data["access_token"],
-                refresh_token=token_data["refresh_token"],
-                expires_at=expires_at,
+            # Complete OAuth flow using helper function
+            complete_oauth_flow(
+                auth_result["code"], oauth_manager, repository, 3600, console
             )
 
-        success_panel = """[bold green]✅ OAuth2 tokens stored successfully![/bold green]
-
-[bold cyan]🚀 You're all set! You can now run:[/bold cyan]
-   [bold]tightbeam migrate --db ./your_data.sqlite[/bold]"""  # noqa: E501
-
-        console.print(
-            Panel(success_panel, title="🎉 OAuth2 Setup Complete", border_style="green")
-        )
-
-        typer.echo("✅ OAuth2 tokens stored successfully!")
-        typer.echo()
-        typer.echo("🚀 You're all set! You can now run:")
-        typer.echo("   tightbeam migrate --db ./your_data.sqlite")
-        typer.echo()
+        # Display success message using helper function
+        display_oauth_success("server", console)
 
     finally:
         # Restore original environment
@@ -628,52 +535,11 @@ def _oauth_init_manual(db: Optional[Path]) -> None:
     # Generate authorization URL
     auth_url, state = oauth_manager.get_authorization_url()
 
-    manual_content = f"""[bold blue]🔗 Authorization URL:[/bold blue]
-{auth_url}
+    # Display manual authorization instructions using helper function
+    display_manual_auth_instructions(auth_url, state, console)
 
-[bold yellow]📋 Next Steps:[/bold yellow]
-1. Complete authorization in your browser
-2. Copy the authorization code from the callback URL
-3. Run: [bold]tightbeam oauth callback --code YOUR_AUTHORIZATION_CODE[/bold]
-
-[bold dim]State parameter (for verification): {state}[/bold dim]"""
-
-    console.print(
-        Panel(
-            manual_content, title="🔐 OAuth2 Manual Authorization", border_style="blue"
-        )
-    )
-
-    # Open browser
-    try:
-        webbrowser.open(auth_url)
-        console.print("✅ [green]Browser opened successfully[/green]")
-    except Exception as e:
-        # In WSL environment, try alternative methods
-        import subprocess
-
-        if "wsl" in os.uname().release.lower():
-            try:
-                # Try using Windows browser via WSL
-                subprocess.run(
-                    ["cmd.exe", "/c", "start", auth_url],
-                    check=True,
-                    capture_output=True,
-                )
-                console.print("✅ [green]Browser opened via Windows[/green]")
-            except subprocess.CalledProcessError:
-
-                console.print("⚠️ [yellow]Could not open browser automatically[/yellow]")
-                console.print(
-                    f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n"
-                    f"   {auth_url}"
-                )
-        else:
-            console.print(f"⚠️ [yellow]Could not open browser: {e}[/yellow]")
-            console.print(
-                f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n"
-                f"   {auth_url}"
-            )
+    # Open browser using helper function
+    open_browser(auth_url, console)
 
 
 @oauth_app.command("callback")
@@ -698,45 +564,17 @@ def oauth_callback(
             console=console,
             spinner="dots",
         ):
-            # Exchange code for tokens
-            token_data = oauth_manager.exchange_code_for_tokens(code)
-
-            # Store tokens in database
-            from datetime import datetime, timedelta, timezone
-
-            expires_in = token_data.get("expires_in")
-            if not isinstance(expires_in, int) or expires_in <= 0:
-                raise OAuth2Error(
-                    "Invalid or missing 'expires_in' field in token data."
-                )
-            expires_at = (
-                datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-            ).isoformat()
-
-            repository.save_oauth_tokens(
-                access_token=token_data["access_token"],
-                refresh_token=token_data["refresh_token"],
-                expires_at=expires_at,
+            # Complete OAuth flow using helper function with default expires_in handling
+            complete_oauth_flow(
+                code,
+                oauth_manager,
+                repository,
+                expires_in_default=3600,
+                console=console,
             )
 
-        success_content = """[bold green]✅ OAuth2 tokens stored successfully![/bold green]
-
-
-        expires_in = token_data.get("expires_in")
-        if not isinstance(expires_in, int) or expires_in <= 0:
-            raise OAuth2Error("Invalid or missing 'expires_in' field in token data.")
-        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
-[bold cyan]🎯 Next Steps:[/bold cyan]
-• Use the migration tool with OAuth2 authentication
-• Run [bold]tightbeam oauth status[/bold] to check token status"""  # noqa: E501
-
-        console.print(
-            Panel(
-                success_content,
-                title="🎉 OAuth2 Callback Complete",
-                border_style="green",
-            )
-        )
+        # Display success message using helper function
+        display_oauth_success("callback", console)
 
     except ConfigurationError as e:
         console.print(f"[red]Configuration Error:[/red] {e}")
@@ -1080,7 +918,7 @@ def migrate_all(
 
         # Create OAuth2 components
         try:
-            client_id, client_secret, redirect_uri = _get_oauth2_config()
+            client_id, client_secret, redirect_uri = AuthProvider.get_oauth2_config()
             http_client = HttpClient()
             oauth_manager = OAuth2Manager(
                 client_id=client_id,

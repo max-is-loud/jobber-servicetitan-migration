@@ -14,7 +14,7 @@ from ..extractors import (
     QuotesExtractor,
 )
 from ..interfaces import Logger
-from ..interfaces.migration_progress import MigrationProgressDisplay
+from ..interfaces import MigrationProgressDisplay
 from ..mappers import EntityMapper
 from ..models import MigrationSummary
 from ..performance import AdaptivePerformanceOptimizer
@@ -167,7 +167,7 @@ class BaseMigrationCoordinator(ABC):
         ...
 
     @abstractmethod
-    def _start_display_context(self, display_obj: Any):
+    def _start_display_context(self, display_obj: Any) -> Any:
         """Start the display context manager (for Rich Live or console).
 
         Template Method: Subclasses implement display lifecycle management.

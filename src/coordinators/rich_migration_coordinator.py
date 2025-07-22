@@ -1,6 +1,6 @@
 """Enhanced migration coordinator with Rich progress bars and status displays."""
 
-import time
+from typing import Optional, Any
 
 from rich.console import Console
 from rich.live import Live
@@ -14,19 +14,29 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from .base_migration_coordinator import BaseMigrationCoordinator
 from ..clients import JobberClient
-from ..exceptions import JobberApiError, MappingError, RepositoryError
+from ..config import ConfigManagerImpl
+from ..extractors import (
+    AttachmentDownloader,
+    NoteReferenceCollector,
+    NotesExtractor,
+    QuotesExtractor,
+)
 from ..interfaces import Logger
 from ..loggers import RichLogger
 from ..mappers import EntityMapper
-from ..models import MigrationSummary
 from ..repositories import Repository
 
 
-class RichMigrationCoordinator:
+class RichMigrationCoordinator(BaseMigrationCoordinator):
     """Enhanced migration coordinator with Rich progress bars and visual feedback.
 
-    Provides the same functionality as MigrationCoordinator but with enhanced
+    Provides Rich UI-based progress feedback while delegating shared migration
+    logic to BaseMigrationCoordinator. Implements Template Method pattern with
+    Rich progress bars, status displays, and real-time updates.
+
+    Provides the same functionality as console MigrationCoordinator but with enhanced
     visual feedback using Rich progress bars, status displays, and real-time
     updates during migration operations.
     """
@@ -37,115 +47,58 @@ class RichMigrationCoordinator:
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        note_reference_collector: Optional[NoteReferenceCollector] = None,
+        notes_extractor: Optional[NotesExtractor] = None,
+        quotes_extractor: Optional[QuotesExtractor] = None,
+        attachment_downloader: Optional[AttachmentDownloader] = None,
+        config_manager: Optional[ConfigManagerImpl] = None,
+        resume: bool = False,
+        enable_adaptive_optimization: bool = False,
     ) -> None:
-        """Initialize migration coordinator with Rich enhancements.
+        """Initialize Rich migration coordinator with enhanced visual feedback.
 
         Args:
             jobber_client: Client for Jobber API operations
             entity_mapper: Mapper for transforming API data to domain models
             repository: Repository for database operations
             logger: Logger for progress and error reporting
+            note_reference_collector: Optional collector for deferred note processing
+            notes_extractor: Optional extractor for Note entities with deferred processing
+            quotes_extractor: Optional extractor for Quote entities
+            attachment_downloader: Optional downloader for Attachment files
+            config_manager: Optional ConfigManager for delays and pagination settings
+            resume: Whether to skip entities that already exist in database
+            enable_adaptive_optimization: Whether to enable adaptive performance optimization
         """
-        self._jobber_client = jobber_client
-        self._entity_mapper = entity_mapper
-        self._repository = repository
-        self._logger = logger
+        # Initialize base class with all dependencies
+        super().__init__(
+            jobber_client=jobber_client,
+            entity_mapper=entity_mapper,
+            repository=repository,
+            logger=logger,
+            note_reference_collector=note_reference_collector,
+            notes_extractor=notes_extractor,
+            quotes_extractor=quotes_extractor,
+            attachment_downloader=attachment_downloader,
+            config_manager=config_manager,
+            resume=resume,
+            enable_adaptive_optimization=enable_adaptive_optimization,
+        )
+
         self._console = Console()
 
         # Check if we have a RichLogger for enhanced features
         self._rich_logger = isinstance(logger, RichLogger)
 
-    def migrate(self) -> MigrationSummary:
-        """
-        Execute complete migration workflow with Rich progress tracking.
+    def _create_progress_display(self) -> Progress:
+        """Create Rich Progress display for migration tracking.
 
-        Coordinates the full migration process: schema initialization,
-        client migration, and invoice migration with visual progress feedback.
+        Template Method Implementation: Rich coordinator creates Rich Progress
+        with spinners, bars, and time tracking.
 
         Returns:
-            MigrationSummary containing migration results and statistics
-
-        Raises:
-            RepositoryError: If database operations fail
-            JobberApiError: If API communication fails
-            MappingError: If data transformation fails
+            Rich Progress object for visual progress tracking
         """
-        # Initialize migration summary with start time
-        start_time = time.time()
-        summary = MigrationSummary(
-            clients_processed=0,
-            invoices_processed=0,
-            quotes_processed=0,
-            notes_processed=0,
-            note_references_collected=0,
-            attachments_processed=0,
-            files_downloaded=0,
-            total_bytes_downloaded=0,
-            download_failures=0,
-            start_time=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
-            end_time="",
-            duration_seconds=0.0,
-            errors=[],
-        )
-
-        try:
-            self._logger.info("Starting migration workflow")
-
-            # Initialize database schema
-            self._logger.info("Initializing database schema")
-            self._repository.init_schema()
-
-            # Create overall progress display
-            progress = self._create_migration_progress()
-            with Live(progress, console=self._console, refresh_per_second=4):
-                # Migrate clients with visual progress
-                client_task = progress.add_task(
-                    "[cyan]Migrating clients...", total=None
-                )
-
-                self._logger.info("Starting client migration")
-                summary.clients_processed = self._migrate_clients_with_progress(
-                    summary, progress, client_task
-                )
-                progress.update(client_task, description="[green]✓ Clients complete")
-
-                # Migrate invoices with visual progress
-                invoice_task = progress.add_task(
-                    "[cyan]Migrating invoices...", total=None
-                )
-
-                self._logger.info("Starting invoice migration")
-                summary.invoices_processed = self._migrate_invoices_with_progress(
-                    summary, progress, invoice_task
-                )
-                progress.update(invoice_task, description="[green]✓ Invoices complete")
-
-        except (RepositoryError, JobberApiError, MappingError) as e:
-            self._logger.error(f"Critical migration error: {e}")
-            summary.add_error(f"Critical error: {str(e)}")
-            raise
-        except Exception as e:
-            self._logger.error(f"Unexpected migration error: {e}")
-            summary.add_error(f"Unexpected error: {str(e)}")
-            raise
-        finally:
-            # Calculate final timing
-            end_time = time.time()
-            summary.end_time = time.strftime(
-                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(end_time)
-            )
-            summary.duration_seconds = end_time - start_time
-
-            # Log completion summary
-            self._logger.info(
-                f"Migration completed: {summary.clients_processed} clients, "
-                f"{summary.invoices_processed} invoices in {summary.format_duration()}"
-            )
-
-        return summary
-
-    def _create_migration_progress(self) -> Progress:
-        """Create a Rich Progress display for migration tracking."""
         return Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -155,176 +108,92 @@ class RichMigrationCoordinator:
             console=self._console,
         )
 
-    def _migrate_clients_with_progress(
-        self, summary: MigrationSummary, progress: Progress, task_id: TaskID
-    ) -> int:
-        """Migrate clients with Rich progress tracking."""
-        total_processed = 0
-        cursor = None
-        page_number = 1
+    def _add_entity_task(
+        self, display_obj: Progress, entity_name: str, description: str
+    ) -> TaskID:
+        """Add a new entity migration task to Rich progress display.
 
-        while True:
-            try:
-                # Update progress description
-                progress.update(
-                    task_id,
-                    description=f"[cyan]Fetching clients page {page_number}...",
+        Template Method Implementation: Rich coordinator adds progress task
+        with Rich formatting and returns TaskID for updates.
+
+        Args:
+            display_obj: Rich Progress object from _create_progress_display()
+            entity_name: Name of entity type being migrated
+            description: Initial task description with Rich formatting
+
+        Returns:
+            TaskID for progress updates
+        """
+        return display_obj.add_task(description, total=None)
+
+    def _update_task_progress(
+        self,
+        display_obj: Progress,
+        task_id: Optional[Any],
+        description: str,
+        completed: Optional[int] = None,
+        total: Optional[int] = None,
+    ) -> None:
+        """Update Rich progress display for existing task.
+
+        Template Method Implementation: Rich coordinator updates progress
+        with real-time visual feedback and Rich formatting.
+
+        Args:
+            display_obj: Rich Progress object from _create_progress_display()
+            task_id: TaskID from _add_entity_task()
+            description: Updated task description with Rich formatting
+            completed: Current progress count
+            total: Total expected count (if known)
+        """
+        # Only update if we have a valid task_id (Rich UI case)
+        if task_id is not None:
+            if completed is not None and total is not None:
+                display_obj.update(
+                    task_id, description=description, completed=completed, total=total
                 )
-
-                # Fetch page of clients from API
-                response = self._jobber_client.fetch_clients(cursor)
-                clients_data = response.get("data", {}).get("clients", {})
-
-                # Extract edges and page info
-                edges = clients_data.get("edges", [])
-                page_info = clients_data.get("pageInfo", {})
-
-                if not edges:
-                    break
-
-                # Update progress description for processing
-                progress.update(
-                    task_id,
-                    description=f"[cyan]Processing {len(edges)} clients from page {page_number}...",  # noqa: E501
+            elif completed is not None:
+                display_obj.update(
+                    task_id, description=description, completed=completed
                 )
+            else:
+                display_obj.update(task_id, description=description)
 
-                # Map GraphQL nodes to domain models
-                clients = []
-                for edge in edges:
-                    node = edge.get("node", {})
-                    try:
-                        client = self._entity_mapper.map_client(node)
-                        clients.append(client)
-                    except MappingError as e:
-                        error_msg = (
-                            f"Failed to map client {node.get('id', 'unknown')}: {e}"
-                        )
-                        self._logger.error(error_msg)
-                        summary.add_error(error_msg)
+    def _complete_task(
+        self,
+        display_obj: Progress,
+        task_id: Optional[Any],
+        entity_name: str,
+        final_count: int,
+    ) -> None:
+        """Mark Rich progress task as completed with final status.
 
-                # Batch save clients to database
-                if clients:
-                    self._repository.save_clients(clients)
-                    total_processed += len(clients)
+        Template Method Implementation: Rich coordinator updates task
+        with green checkmark and final count.
 
-                    # Update progress with current count
-                    progress.update(
-                        task_id,
-                        completed=total_processed,
-                        description=f"[cyan]Processed {total_processed:,} clients",
-                    )
+        Args:
+            display_obj: Rich Progress object from _create_progress_display()
+            task_id: TaskID from _add_entity_task()
+            entity_name: Name of entity type that was migrated
+            final_count: Final number of entities processed
+        """
+        # Only update if we have a valid task_id (Rich UI case)
+        if task_id is not None:
+            display_obj.update(
+                task_id,
+                description=f"[green]✓ {entity_name.title()} complete ({final_count:,} processed)",
+            )
 
-                # Check for next page
-                has_next_page = page_info.get("hasNextPage", False)
-                if not has_next_page:
-                    break
+    def _start_display_context(self, display_obj: Progress) -> Live:
+        """Start Rich Live display context for real-time updates.
 
-                # Update cursor for next iteration
-                cursor = page_info.get("endCursor")
-                page_number += 1
+        Template Method Implementation: Rich coordinator wraps Progress
+        in Live context for real-time refresh and visual updates.
 
-                # Add mandatory delay between pages
-                time.sleep(2.0)
+        Args:
+            display_obj: Rich Progress object from _create_progress_display()
 
-            except JobberApiError as e:
-                error_msg = f"API error during client migration page {page_number}: {e}"
-                self._logger.error(error_msg)
-                summary.add_error(error_msg)
-                raise
-            except RepositoryError as e:
-                error_msg = (
-                    f"Database error during client migration page {page_number}: {e}"
-                )
-                self._logger.error(error_msg)
-                summary.add_error(error_msg)
-                raise
-
-        return total_processed
-
-    def _migrate_invoices_with_progress(
-        self, summary: MigrationSummary, progress: Progress, task_id: TaskID
-    ) -> int:
-        """Migrate invoices with Rich progress tracking."""
-        total_processed = 0
-        cursor = None
-        page_number = 1
-
-        while True:
-            try:
-                # Update progress description
-                progress.update(
-                    task_id,
-                    description=f"[cyan]Fetching invoices page {page_number}...",
-                )
-
-                # Fetch page of invoices from API
-                response = self._jobber_client.fetch_invoices(cursor)
-                invoices_data = response.get("data", {}).get("invoices", {})
-
-                # Extract edges and page info
-                edges = invoices_data.get("edges", [])
-                page_info = invoices_data.get("pageInfo", {})
-
-                if not edges:
-                    break
-
-                # Update progress description for processing
-                progress.update(
-                    task_id,
-                    description=f"[cyan]Processing {len(edges)} invoices from page {page_number}...",  # noqa: E501
-                )
-
-                # Map GraphQL nodes to domain models
-                invoices = []
-                for edge in edges:
-                    node = edge.get("node", {})
-                    try:
-                        invoice = self._entity_mapper.map_invoice(node)
-                        invoices.append(invoice)
-                    except MappingError as e:
-                        error_msg = (
-                            f"Failed to map invoice {node.get('id', 'unknown')}: {e}"
-                        )
-                        self._logger.error(error_msg)
-                        summary.add_error(error_msg)
-
-                # Batch save invoices to database
-                if invoices:
-                    self._repository.save_invoices(invoices)
-                    total_processed += len(invoices)
-
-                    # Update progress with current count
-                    progress.update(
-                        task_id,
-                        completed=total_processed,
-                        description=f"[cyan]Processed {total_processed:,} invoices",
-                    )
-
-                # Check for next page
-                has_next_page = page_info.get("hasNextPage", False)
-                if not has_next_page:
-                    break
-
-                # Update cursor for next iteration
-                cursor = page_info.get("endCursor")
-                page_number += 1
-
-                # Add mandatory delay between pages
-                time.sleep(2.0)
-
-            except JobberApiError as e:
-                error_msg = (
-                    f"API error during invoice migration page {page_number}: {e}"
-                )
-                self._logger.error(error_msg)
-                summary.add_error(error_msg)
-                raise
-            except RepositoryError as e:
-                error_msg = (
-                    f"Database error during invoice migration page {page_number}: {e}"
-                )
-                self._logger.error(error_msg)
-                summary.add_error(error_msg)
-                raise
-
-        return total_processed
+        Returns:
+            Rich Live context manager for real-time display updates
+        """
+        return Live(display_obj, console=self._console, refresh_per_second=4)
