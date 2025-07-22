@@ -7,11 +7,15 @@ and response handling. The client supports both environment token and
 OAuth2 authentication with automatic token refresh.
 """
 
+import time
 from typing import Any, Optional
 
 from ..auth.auth_provider import AuthProvider
+from ..config import ConfigManagerImpl
 from ..exceptions import ConfigurationError, JobberApiError, OAuth2Error
 from ..interfaces import IHttpClient
+from ..rate_limiting.metrics_collector import MetricsCollector
+from ..utils.debug import debug_print
 from .http_client import HttpClient
 
 
@@ -39,21 +43,187 @@ class JobberClient:
     # Jobber API version - required for all requests
     API_VERSION = "2023-11-15"
 
-    # GraphQL query for fetching clients with cursor pagination
-    CLIENTS_QUERY = """
-    query GetClients($cursor: String) {
-      clients(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_clients_query(self) -> str:
+        """Get GraphQL query for fetching clients with configurable pagination."""
+        page_size = self._get_pagination_size("clients")
+        return f"""
+    query GetClients($cursor: String) {{
+      clients(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
             firstName
             lastName
-            emails {
+            emails {{
               address
-            }
-            phones {
+            }}
+            phones {{
               number
+            }}
+            notes {{
+              edges {{
+                node {{
+                  ... on ClientNote {{
+                    id
+                  }}
+                }}
+              }}
+            }}
+            createdAt
+            updatedAt
+          }}
+        }}
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+      }}
+    }}
+    """
+
+    def _get_invoices_query(self) -> str:
+        """Get GraphQL query for fetching invoices with configurable pagination."""
+        page_size = self._get_pagination_size("invoices")
+        return f"""
+    query GetInvoices($cursor: String) {{
+      invoices(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
+            id
+            client {{
+              id
+            }}
+            invoiceNumber
+            amounts {{
+              total
+            }}
+            invoiceStatus
+            issuedDate
+            notes {{
+              edges {{
+                node {{
+                  ... on InvoiceNote {{
+                    id
+                  }}
+                }}
+              }}
+            }}
+          }}
+        }}
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+      }}
+    }}
+    """
+
+    def _get_quotes_query(self) -> str:
+        """Get GraphQL query for fetching quotes with configurable pagination."""
+        page_size = self._get_pagination_size("quotes")
+        return f"""
+    query GetQuotes($cursor: String) {{
+      quotes(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
+            id
+            client {{
+              id
+            }}
+            quoteNumber
+            title
+            amounts {{
+              total
+              subtotal
+            }}
+            message
+            lineItems {{
+              totalCount
+            }}
+            notes {{
+              totalCount
+            }}
+            createdAt
+            transitionedAt
+            updatedAt
+          }}
+        }}
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+      }}
+    }}
+    """
+
+    # NOTE: This query is deprecated - notes are now fetched with their parent entities
+    # (clients, jobs, quotes, invoices)
+    # NOTES_QUERY = """
+    # query GetNotes($cursor: String) {
+    #   nodes(first: 100, after: $cursor) {
+    #     edges {
+    #       node {
+    #         ... on ClientNote {
+    #           id
+    #           message
+    #           client {
+    #             id
+    #           }
+    #           createdAt
+    #           updatedAt
+    #         }
+    #         ... on JobNote {
+    #           id
+    #           message
+    #           job {
+    #             id
+    #           }
+    #           createdAt
+    #           updatedAt
+    #         }
+    #         ... on QuoteNote {
+    #           id
+    #           message
+    #           quote {
+    #             id
+    #           }
+    #           createdAt
+    #           updatedAt
+    #         }
+    #         ... on InvoiceNote {
+    #           id
+    #           message
+    #           invoice {
+    #             id
+    #           }
+    #           createdAt
+    #           updatedAt
+    #         }
+    #       }
+    #     }
+    #     pageInfo {
+    #       hasNextPage
+    #       endCursor
+    #     }
+    #   }
+    # }
+    # """
+
+    # GraphQL query for fetching attachments with cursor pagination
+    # Attachments are file attachments linked to notes
+    ATTACHMENTS_QUERY = """
+    query GetAttachments($cursor: String) {
+      noteFiles(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            note {
+              id
             }
+            fileName
+            contentType
+            downloadUrl
+            fileSize
             createdAt
           }
         }
@@ -65,22 +235,43 @@ class JobberClient:
     }
     """
 
-    # GraphQL query for fetching invoices with cursor pagination
-    INVOICES_QUERY = """
-    query GetInvoices($cursor: String) {
-      invoices(first: 100, after: $cursor) {
+    # GraphQL query for fetching jobs with cursor pagination
+    JOBS_QUERY = """
+    query GetJobs($cursor: String) {
+      jobs(first: 100, after: $cursor) {
         edges {
           node {
             id
             client {
               id
             }
-            invoiceNumber
+            property {
+              id
+            }
+            quote {
+              id
+            }
+            jobNumber
+            title
+            description
+            status
+            scheduledStartAt
+            scheduledEndAt
+            completedAt
             amounts {
               total
             }
-            invoiceStatus
-            issuedDate
+            notes {
+              edges {
+                node {
+                  ... on JobNote {
+                    id
+                  }
+                }
+              }
+            }
+            createdAt
+            updatedAt
           }
         }
         pageInfo {
@@ -91,8 +282,359 @@ class JobberClient:
     }
     """
 
+    # GraphQL query for fetching properties with cursor pagination
+    PROPERTIES_QUERY = """
+    query GetProperties($cursor: String) {
+      properties(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            client {
+              id
+            }
+            name
+            address {
+              line1
+              line2
+              city
+              stateProvince
+              postalCode
+              country
+            }
+            coordinates {
+              latitude
+              longitude
+            }
+            createdAt
+            updatedAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching requests with cursor pagination
+    REQUESTS_QUERY = """
+    query GetRequests($cursor: String) {
+      requests(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            client {
+              id
+            }
+            property {
+              id
+            }
+            title
+            description
+            status
+            priority
+            source
+            assignedTo
+            convertedToQuote {
+              id
+            }
+            convertedToJob {
+              id
+            }
+            notes {
+              edges {
+                node {
+                  ... on RequestNote {
+                    id
+                  }
+                }
+              }
+            }
+            createdAt
+            updatedAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching users with cursor pagination
+    USERS_QUERY = """
+    query GetUsers($cursor: String) {
+      users(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            name {
+              first
+              last
+            }
+            email {
+              email
+            }
+            isAccountAdmin
+            isAccountOwner
+            status
+            phone {
+              number
+            }
+            timezone {
+              identifier
+            }
+            createdAt
+            lastLoginAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching expenses with cursor pagination
+    EXPENSES_QUERY = """
+    query GetExpenses($cursor: String) {
+      expenses(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            linkedJob {
+              id
+            }
+            title
+            description
+            total
+            date
+            enteredBy {
+              id
+            }
+            paidBy {
+              id
+            }
+            reimbursableTo {
+              id
+            }
+            createdAt
+            updatedAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching visits with cursor pagination
+    VISITS_QUERY = """
+    query GetVisits($cursor: String) {
+      visits(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            job {
+              id
+            }
+            client {
+              id
+            }
+            property {
+              id
+            }
+            assignedUsers {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+            title
+            instructions
+            visitStatus
+            allDay
+            duration
+            startAt
+            endAt
+            completedAt
+            createdAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching timesheet entries with cursor pagination
+    TIMESHEET_ENTRIES_QUERY = """
+    query GetTimesheetEntries($cursor: String) {
+      timesheetEntries(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            user {
+              id
+            }
+            job {
+              id
+            }
+            visit {
+              id
+            }
+            approvedBy {
+              id
+            }
+            paidBy {
+              id
+            }
+            label
+            note
+            labourRate
+            finalDuration
+            visitDurationTotal
+            approved
+            ticking
+            startAt
+            endAt
+            createdAt
+            updatedAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching products or services with cursor pagination
+    PRODUCTS_SERVICES_QUERY = """
+    query GetProductsServices($cursor: String) {
+      productsAndServices(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            name
+            description
+            category {
+              name
+            }
+            defaultUnitCost
+            internalUnitCost
+            markup
+            durationMinutes
+            taxable
+            visible
+            onlineBookingEnabled
+            onlineBookingSortOrder
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching tax rates with cursor pagination
+    TAX_RATES_QUERY = """
+    query GetTaxRates($cursor: String) {
+      taxRates(first: 100, after: $cursor) {
+        edges {
+          node {
+            id
+            name
+            rate
+            region
+            compound
+            active
+            description
+            taxNumber
+            displayOrder
+            defaultForRegion
+            createdAt
+            updatedAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching individual note by ID
+    NOTE_BY_ID_QUERY = """
+    query GetNoteById($id: ID!) {
+      node(id: $id) {
+        ... on ClientNote {
+          id
+          message
+          createdAt
+          updatedAt
+          client {
+            id
+          }
+        }
+        ... on JobNote {
+          id
+          message
+          createdAt
+          updatedAt
+          job {
+            id
+          }
+        }
+        ... on QuoteNote {
+          id
+          message
+          createdAt
+          updatedAt
+          quote {
+            id
+          }
+        }
+        ... on InvoiceNote {
+          id
+          message
+          createdAt
+          updatedAt
+          invoice {
+            id
+          }
+        }
+        ... on RequestNote {
+          id
+          message
+          createdAt
+          updatedAt
+          request {
+            id
+          }
+        }
+      }
+    }
+    """
+
     def __init__(
-        self, auth_provider: AuthProvider, http_client: Optional[IHttpClient] = None
+        self,
+        auth_provider: AuthProvider,
+        http_client: Optional[IHttpClient] = None,
+        metrics_collector: Optional[MetricsCollector] = None,
+        config_manager: Optional[ConfigManagerImpl] = None,
     ) -> None:
         """
         Initialize the JobberClient with authentication provider.
@@ -103,9 +645,35 @@ class JobberClient:
                           and OAuth2 authentication with automatic refresh.
             http_client: Optional IHttpClient instance. If not provided,
                         a new HttpClient instance will be created.
+            metrics_collector: Optional MetricsCollector for GraphQL cost
+                             and rate limit monitoring. If not provided,
+                             monitoring features are disabled.
+            config_manager: Optional ConfigManagerImpl for pagination settings.
+                          If not provided, a new instance will be created.
         """
         self.auth_provider = auth_provider
         self.http_client = http_client or HttpClient()
+        self.metrics_collector = metrics_collector
+        self.config_manager = config_manager or ConfigManagerImpl()
+
+        # Track throttling events for performance optimization
+        self._throttling_events = 0
+        self._last_request_was_throttled = False
+
+    def _get_pagination_size(self, entity_type: str) -> int:
+        """Get pagination size for the specified entity type from configuration.
+
+        Args:
+            entity_type: The entity type (clients, invoices, quotes, etc.)
+
+        Returns:
+            Pagination size for the entity type
+        """
+        try:
+            return self.config_manager.get_pagination_config(entity_type)
+        except ConfigurationError:
+            # Fallback to default if entity type not found
+            return self.config_manager.get_pagination_config()
 
     def set_http_client(self, http_client: IHttpClient) -> None:
         """
@@ -119,19 +687,107 @@ class JobberClient:
         """
         self.http_client = http_client
 
+    def _record_graphql_cost(
+        self,
+        response_data: dict[str, Any],
+        query: str = "",
+        query_type: str = "unknown",
+    ) -> None:
+        """
+        Extract and record GraphQL cost information from response extensions.
+
+        Args:
+            response_data: The GraphQL response containing potential cost data
+            query: The GraphQL query string to extract batch size from
+            query_type: The type of query being executed (e.g., 'clients', 'invoices')
+        """
+        if not self.metrics_collector:
+            return
+
+        try:
+            extensions = response_data.get("extensions", {})
+            cost_info = extensions.get("cost", {})
+
+            requested_cost = cost_info.get("requestedQueryCost")
+            actual_cost = cost_info.get("actualQueryCost")
+
+            if requested_cost is not None and actual_cost is not None:
+                # Extract batch size from GraphQL query using regex
+                import re
+
+                batch_size = 30  # Default batch size
+                batch_match = re.search(r"first:\s*(\d+)", query)
+                if batch_match:
+                    batch_size = int(batch_match.group(1))
+
+                self.metrics_collector.record_graphql_cost(
+                    int(requested_cost),
+                    int(actual_cost),
+                    query_type=query_type,
+                    batch_size=batch_size,
+                )
+        except (KeyError, ValueError, TypeError):
+            # Gracefully handle missing or invalid cost data
+            pass
+
+    def _extract_query_type(self, query: str) -> str:
+        """
+        Extract the entity type from a GraphQL query string.
+
+        Args:
+            query: GraphQL query string
+
+        Returns:
+            str: Entity type (e.g., 'clients', 'invoices', 'quotes') or 'unknown'
+        """
+        import re
+
+        # Look for the main query field in the GraphQL query
+        # Pattern matches: clients(, invoices(, quotes(, etc.
+        match = re.search(r"(\w+)\s*\([^)]*first:", query)
+        if match:
+            return match.group(1)
+
+        # Fallback patterns for other query types
+        entity_patterns = [
+            "clients",
+            "invoices",
+            "quotes",
+            "jobs",
+            "properties",
+            "requests",
+            "users",
+            "expenses",
+            "visits",
+            "timesheetEntries",
+            "products",
+            "taxRates",
+            "attachments",
+            "notes",
+        ]
+
+        for entity in entity_patterns:
+            if entity in query:
+                return entity
+
+        return "unknown"
+
     def _execute_graphql_request(
-        self, query: str, cursor: Optional[str] = None
+        self, query: str, cursor: Optional[str] = None, variables: Optional[dict[str, Any]] = None
     ) -> dict[str, Any]:
         """
-        Execute a GraphQL request with comprehensive error handling.
+        Execute a GraphQL request with comprehensive error handling and retry logic.
 
         This method handles authentication automatically, including OAuth2 token
         refresh when needed. For OAuth2 users, expired tokens are automatically
         refreshed transparently. Environment token users see no changes in behavior.
 
+        Includes automatic retry logic for GraphQL throttling errors with exponential backoff.
+
         Args:
             query: GraphQL query string to execute
             cursor: Optional cursor for pagination
+            variables: Optional custom variables dict (overrides cursor if provided)
 
         Returns:
             Dictionary containing GraphQL response data
@@ -139,47 +795,146 @@ class JobberClient:
         Raises:
             ConfigurationError: If authentication configuration is invalid
                                or OAuth2 token refresh fails
-            JobberApiError: If API communication fails
+            JobberApiError: If API communication fails after all retries
         """
-        try:
-            # Get authentication headers with automatic OAuth2 token refresh
-            # This may raise ConfigurationError or OAuth2Error
-            headers = self.auth_provider.get_headers()
+        max_retries = 5
+        base_delay = 2.0
 
-        except ConfigurationError:
-            # Re-raise configuration errors as-is (includes OAuth2 auth failures)
-            raise
+        # Reset throttling flag for this request
+        self._last_request_was_throttled = False
 
-        except OAuth2Error as e:
-            # Convert OAuth2 errors to user-friendly configuration errors
-            raise ConfigurationError(
-                f"OAuth2 authentication failed: {e}. "
-                "Please re-authorize using 'tightbeam oauth init' or set JOBBER_TOKEN."
-            ) from None
+        for attempt in range(max_retries + 1):
+            try:
+                # Get authentication headers with automatic OAuth2 token refresh
+                # This may raise ConfigurationError or OAuth2Error
+                headers = self.auth_provider.get_headers()
 
-        except Exception as e:
-            # Catch any other unexpected authentication errors
-            raise ConfigurationError(
-                f"Authentication failed: {e}. "
-                "Please verify your authentication configuration."
-            ) from e
+            except ConfigurationError:
+                # Re-raise configuration errors as-is (includes OAuth2 auth failures)
+                raise
 
-        # Add required API version header - this is mandatory for all
-        # Jobber API requests
-        headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
+            except OAuth2Error as e:
+                # Convert OAuth2 errors to user-friendly configuration errors
+                raise ConfigurationError(
+                    f"OAuth2 authentication failed: {e}. "
+                    "Please re-authorize using 'tightbeam oauth init' or set JOBBER_TOKEN."
+                ) from None
 
-        # Prepare GraphQL payload
-        payload = {"query": query, "variables": {"cursor": cursor}}
+            except Exception as e:
+                # Catch any other unexpected authentication errors
+                raise ConfigurationError(
+                    f"Authentication failed: {e}. " "Please verify your authentication configuration."
+                ) from e
 
-        # Use shared HttpClient for HTTP communication
-        response_data = self.http_client.post(
-            url=self.API_URL, headers=headers, json=payload
-        )
+            # Add required API version header - this is mandatory for all
+            # Jobber API requests
+            headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
 
-        # Validate response structure and check for GraphQL errors
-        self._validate_graphql_response(response_data)
+            # Debug log headers (mask sensitive data)
+            debug_headers = headers.copy()
+            if "Authorization" in debug_headers:
+                auth_value = debug_headers["Authorization"]
+                if auth_value.startswith("Bearer "):
+                    debug_headers["Authorization"] = f"Bearer {'*' * 10}..."
+            debug_print(f"[DEBUG] Request headers: {debug_headers}")
 
-        return response_data
+            # Prepare GraphQL payload
+            if variables is not None:
+                payload = {"query": query, "variables": variables}
+            else:
+                payload = {"query": query, "variables": {"cursor": cursor}}
+
+            debug_print(f"[DEBUG] GraphQL Query Length: {len(query)} characters")
+            debug_print(f"[DEBUG] GraphQL Query Preview: {query[:200]}...")
+            if cursor:
+                debug_print(f"[DEBUG] Using cursor: {cursor}")
+
+            try:
+                # Use shared HttpClient for HTTP communication with optional header tracking
+                response_data: dict[str, Any]
+                if self.metrics_collector:
+                    result = self.http_client.post(url=self.API_URL, headers=headers, json=payload, return_headers=True)
+
+                    # Handle tuple unpacking for metrics-enabled path
+                    # When return_headers=True, result is guaranteed to be a tuple
+                    assert isinstance(result, tuple), "Expected tuple when return_headers=True"
+                    response_data, rate_limit_headers = result
+
+                    # Track rate limit headers if available
+                    remaining = rate_limit_headers.get("x-ratelimit-remaining")
+                    reset_time = rate_limit_headers.get("x-ratelimit-reset")
+                    if remaining is not None:
+                        try:
+                            remaining_int = int(remaining)
+                            reset_int = int(reset_time) if reset_time else None
+                            self.metrics_collector.record_rate_limit_headers(remaining_int, reset_int)
+                        except (ValueError, TypeError):
+                            # Gracefully handle invalid header values
+                            pass
+
+                    # Extract and record GraphQL cost information
+                    self._record_graphql_cost(response_data, query, self._extract_query_type(query))
+                else:
+                    # When return_headers=False (default), result is guaranteed to be a dict
+                    result = self.http_client.post(url=self.API_URL, headers=headers, json=payload)
+                    assert isinstance(result, dict), "Expected dict when return_headers=False"
+                    response_data = result
+
+                debug_print(f"[DEBUG] GraphQL Response Keys: {list(response_data.keys())}")
+                if "errors" in response_data:
+                    debug_print(f"[DEBUG] GraphQL Errors: {response_data['errors']}")
+                    for error in response_data.get("errors", []):
+                        if "extensions" in error:
+                            debug_print(f"[DEBUG] Error extensions: {error['extensions']}")
+                            if "documentation" in error.get("extensions", {}):
+                                doc_url = error["extensions"]["documentation"]
+                                debug_print(f"[DEBUG] API Documentation: {doc_url}")
+                if "extensions" in response_data:
+                    debug_print(f"[DEBUG] Response extensions: {response_data['extensions']}")
+
+                # Validate response structure and check for GraphQL errors
+                self._validate_graphql_response(response_data)
+
+                return response_data
+
+            except JobberApiError as e:
+                # Check if this is a throttling error and we have retries left
+                if self._is_throttling_error(e) and attempt < max_retries:
+                    # Track throttling event
+                    self._throttling_events += 1
+                    self._last_request_was_throttled = True
+
+                    delay = base_delay * (2**attempt)  # Exponential backoff
+                    debug_print(
+                        f"[DEBUG] GraphQL throttling detected, attempt {attempt + 1}/{max_retries + 1}. Retrying in {delay}s..."
+                    )
+                    print(
+                        f"⏳ GraphQL throttling detected, retrying in {delay:.1f}s... (attempt {attempt + 1}/{max_retries + 1})"
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    # Not a throttling error or out of retries
+                    raise
+
+        # This should never be reached due to the raise in the except block
+        raise JobberApiError(f"GraphQL request failed after {max_retries} retries")
+
+    def was_last_request_throttled(self) -> bool:
+        """Check if the last request experienced throttling (even if it eventually succeeded).
+
+        Returns:
+            True if the last request was throttled at least once
+        """
+        return self._last_request_was_throttled
+
+    def reset_throttling_flag(self) -> None:
+        """Reset the throttling flag for the next request."""
+        self._last_request_was_throttled = False
+
+    def get_total_throttling_events(self) -> int:
+        """Get total number of throttling events since client creation."""
+        return self._throttling_events
 
     def _validate_graphql_response(self, response_data: dict[str, Any]) -> None:
         """
@@ -208,15 +963,27 @@ class JobberClient:
                     else:
                         error_messages.append(str(error))
 
-                raise JobberApiError(
-                    f"GraphQL errors in response: {'; '.join(error_messages)}"
-                )
+                raise JobberApiError(f"GraphQL errors in response: {'; '.join(error_messages)}")
 
         # Check for data field
         if "data" not in response_data:
             raise JobberApiError("Invalid GraphQL response: missing 'data' field")
 
         # Data can be None for some valid GraphQL responses, so we don't check for that
+
+    def _is_throttling_error(self, error: JobberApiError) -> bool:
+        """
+        Check if a JobberApiError is caused by GraphQL throttling.
+
+        Args:
+            error: JobberApiError to check
+
+        Returns:
+            bool: True if the error is caused by throttling
+        """
+        error_message = str(error).lower()
+        throttling_patterns = ["throttled", "throttle", "rate limit", "too many requests"]
+        return any(pattern in error_message for pattern in throttling_patterns)
 
     def fetch_clients(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -238,16 +1005,11 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.CLIENTS_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_clients_query(), cursor)
 
             # Validate that clients data exists in response
-            if (
-                response_data.get("data") is not None
-                and "clients" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'clients' field in data"
-                )
+            if response_data.get("data") is not None and "clients" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'clients' field in data")
 
             return response_data
 
@@ -278,15 +1040,369 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.INVOICES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_invoices_query(), cursor)
 
             # Validate that invoices data exists in response
-            if (
-                response_data.get("data") is not None
-                and "invoices" not in response_data["data"]
-            ):
+            if response_data.get("data") is not None and "invoices" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'invoices' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching invoices: {e}") from e
+
+    def fetch_quotes(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch quotes data from Jobber GraphQL API.
+
+        Retrieves quote information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with quotes data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self._get_quotes_query(), cursor)
+
+            # Validate that quotes data exists in response
+            if response_data.get("data") is not None and "quotes" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'quotes' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching quotes: {e}") from e
+
+    # NOTE: This method is deprecated - notes are now fetched with their parent entities
+    # def fetch_notes(self, cursor: Optional[str] = None) -> dict[str, Any]:
+    #     """Fetch notes from Jobber API with cursor pagination.
+    #
+    #     Notes in Jobber are polymorphic and can be attached to clients, jobs,
+    #     quotes, or invoices. This method fetches all types of notes.
+    #
+    #     Args:
+    #         cursor: Optional pagination cursor for fetching next page
+    #
+    #     Returns:
+    #         dict[str, Any]: Raw GraphQL response containing notes data
+    #
+    #     Raises:
+    #         JobberApiError: If API request fails with HTTP error or
+    #                        invalid response structure
+    #         ConfigurationError: If authentication configuration is invalid
+    #                            or OAuth2 token refresh fails
+    #     """
+    #     try:
+    #         response_data = self._execute_graphql_request(self.NOTES_QUERY, cursor)
+    #
+    #         # Validate that notes data exists in response
+    #         if (
+    #             response_data.get("data") is not None
+    #             and "nodes" not in response_data["data"]
+    #         ):
+    #             raise JobberApiError(
+    #                 "Invalid response structure: missing 'nodes' field in data"
+    #             )
+    #
+    #         return response_data
+    #
+    #     except (ConfigurationError, JobberApiError):
+    #         # Re-raise our domain exceptions as-is
+    #         raise
+    #     except Exception as e:
+    #         # Wrap unexpected exceptions in JobberApiError
+    #         raise JobberApiError(f"Unexpected error fetching notes: {str(e)}") from e
+
+    def fetch_attachments(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch attachments data from Jobber GraphQL API.
+
+        Retrieves attachment (note file) information using cursor-based pagination
+        with automatic authentication handling. Attachments are files linked to notes.
+        For OAuth2 users, expired tokens are automatically refreshed during the request.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with attachments data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.ATTACHMENTS_QUERY, cursor)
+
+            # Validate that attachments data exists in response
+            if response_data.get("data") is not None and "noteFiles" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'noteFiles' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching attachments: {e}") from e
+
+    def fetch_jobs(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch jobs data from Jobber GraphQL API.
+
+        Retrieves job information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with jobs data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.JOBS_QUERY, cursor)
+
+            # Validate that jobs data exists in response
+            if response_data.get("data") is not None and "jobs" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'jobs' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching jobs: {e}") from e
+
+    def fetch_properties(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch properties data from Jobber GraphQL API.
+
+        Retrieves property information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with properties data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.PROPERTIES_QUERY, cursor)
+
+            # Validate that properties data exists in response
+            if response_data.get("data") is not None and "properties" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'properties' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching properties: {e}") from e
+
+    def fetch_requests(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch requests data from Jobber GraphQL API.
+
+        Retrieves service request information using cursor-based pagination with
+        automatic authentication handling. For OAuth2 users, expired tokens are
+        automatically refreshed during the request. Environment token users see
+        no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with requests data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.REQUESTS_QUERY, cursor)
+
+            # Validate that requests data exists in response
+            if response_data.get("data") is not None and "requests" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'requests' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching requests: {e}") from e
+
+    def fetch_users(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch users data from Jobber GraphQL API.
+
+        Retrieves user information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with users data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.USERS_QUERY, cursor)
+
+            # Validate that users data exists in response
+            if response_data.get("data") is not None and "users" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'users' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching users: {e}") from e
+
+    def fetch_expenses(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch expenses data from Jobber GraphQL API.
+
+        Retrieves expense information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with expenses data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.EXPENSES_QUERY, cursor)
+
+            # Validate that expenses data exists in response
+            if response_data.get("data") is not None and "expenses" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'expenses' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching expenses: {e}") from e
+
+    def fetch_visits(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch visits data from Jobber GraphQL API.
+
+        Retrieves visit information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with visits data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.VISITS_QUERY, cursor)
+
+            # Validate that visits data exists in response
+            if response_data.get("data") is not None and "visits" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'visits' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching visits: {e}") from e
+
+    def fetch_timesheet_entries(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch timesheet entries data from Jobber GraphQL API.
+
+        Retrieves timesheet entry information using cursor-based pagination with
+        automatic authentication handling. For OAuth2 users, expired tokens are
+        automatically refreshed during the request. Environment token users see
+        no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with timesheet entries data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.TIMESHEET_ENTRIES_QUERY, cursor)
+
+            # Validate that timesheet entries data exists in response
+            if response_data.get("data") is not None and "timesheetEntries" not in response_data["data"]:
                 raise JobberApiError(
-                    "Invalid response structure: missing 'invoices' field in data"
+                    "Invalid response structure: missing 'timesheetEntries' field in data"  # noqa: E501
                 )
 
             return response_data
@@ -296,6 +1412,118 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching invoices: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching timesheet entries: {e}") from e
+
+    def fetch_products_services(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch products and services data from Jobber GraphQL API.
+
+        Retrieves product and service catalog information using cursor-based pagination
+        with automatic authentication handling. For OAuth2 users, expired tokens are
+        automatically refreshed during the request. Environment token users see no
+        behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with products and services data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.PRODUCTS_SERVICES_QUERY, cursor)
+
+            # Validate that products and services data exists in response
+            if response_data.get("data") is not None and "productsAndServices" not in response_data["data"]:
+                raise JobberApiError(
+                    "Invalid response structure: missing 'productsAndServices' field in data"  # noqa: E501
+                )
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching products and services: {e}") from e
+
+    def fetch_tax_rates(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """
+        Fetch tax rates data from Jobber GraphQL API.
+
+        Retrieves tax rate information using cursor-based pagination with automatic
+        authentication handling. For OAuth2 users, expired tokens are automatically
+        refreshed during the request. Environment token users see no behavior changes.
+
+        Args:
+            cursor: Optional cursor for pagination (None for first page)
+
+        Returns:
+            Dictionary containing GraphQL response with tax rates data
+
+        Raises:
+            JobberApiError: If API communication fails
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            response_data = self._execute_graphql_request(self.TAX_RATES_QUERY, cursor)
+
+            # Validate that tax rates data exists in response
+            if response_data.get("data") is not None and "taxRates" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'taxRates' field in data")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching tax rates: {e}") from e
+
+    def fetch_note_by_id(self, note_id: str) -> dict[str, Any]:
+        """
+        Fetch individual note by ID from Jobber GraphQL API.
+
+        Retrieves a specific note with its full content and parent entity relationship
+        using the node interface. Supports all note types: ClientNote, JobNote,
+        QuoteNote, InvoiceNote, and RequestNote.
+
+        Args:
+            note_id: The unique identifier of the note to fetch
+
+        Returns:
+            Dictionary containing GraphQL response with note data
+
+        Raises:
+            JobberApiError: If API communication fails or note not found
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            # Use throttling-aware GraphQL request execution with note ID variable
+            response_data = self._execute_graphql_request(query=self.NOTE_BY_ID_QUERY, variables={"id": note_id})
+
+            # Validate that note data exists in response
+            if response_data.get("data") is not None and "node" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'node' field in data")
+
+            # Check if note was found
+            node_data = response_data.get("data", {}).get("node")
+            if node_data is None:
+                raise JobberApiError(f"Note with ID '{note_id}' not found")
+
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching note {note_id}: {e}") from e

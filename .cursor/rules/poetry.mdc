@@ -1,0 +1,5 @@
+---
+description: When running any console commands, use the following rules:
+alwaysApply: false
+---
+Remember to activate the virtual environment before running any console commands! You can do this by running `poetry shell` in the root of the project.
