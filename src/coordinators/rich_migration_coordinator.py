@@ -75,6 +75,13 @@ class RichMigrationCoordinator:
         summary = MigrationSummary(
             clients_processed=0,
             invoices_processed=0,
+            quotes_processed=0,
+            notes_processed=0,
+            note_references_collected=0,
+            attachments_processed=0,
+            files_downloaded=0,
+            total_bytes_downloaded=0,
+            download_failures=0,
             start_time=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
             end_time="",
             duration_seconds=0.0,
