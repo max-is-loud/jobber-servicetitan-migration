@@ -32,9 +32,7 @@ def oauth_callback_problematic(token_data: Dict[str, Any]) -> str:
     if not isinstance(expires_in, int) or expires_in <= 0:
         raise OAuth2Error("Invalid or missing 'expires_in' field in token data.")
 
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-    ).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
     return expires_at
 
@@ -55,9 +53,7 @@ def oauth_callback_fixed(token_data: Dict[str, Any]) -> str:
     # THIS IS THE FIXED PATTERN using .get() with default value:
     expires_in = token_data.get("expires_in", 3600)  # Default to 1 hour if not provided
 
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-    ).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
     return expires_at
 
@@ -78,8 +74,6 @@ def oauth_init_with_server_fixed(token_data: Dict[str, Any]) -> str:
     # This pattern is already correct in the oauth2-lifecycle branch:
     expires_in = token_data.get("expires_in", 3600)  # Default to 1 hour if not provided
 
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-    ).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
     return expires_at

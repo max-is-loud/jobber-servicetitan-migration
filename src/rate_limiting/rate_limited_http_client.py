@@ -84,9 +84,7 @@ class RateLimitedHttpClient:
         self.auth_provider = auth_provider
 
         # Use provided patterns or fall back to defaults
-        self.rate_limit_error_patterns = (
-            rate_limit_error_patterns or self.DEFAULT_RATE_LIMIT_ERROR_PATTERNS.copy()
-        )
+        self.rate_limit_error_patterns = rate_limit_error_patterns or self.DEFAULT_RATE_LIMIT_ERROR_PATTERNS.copy()
 
     def post(
         self,
@@ -135,9 +133,7 @@ class RateLimitedHttpClient:
             if not self.rate_limiter.consume(1):
                 # No tokens available, wait for next token
                 wait_time = self.rate_limiter.get_wait_time()
-                debug_print(
-                    f"[DEBUG] No tokens available, waiting {wait_time:.2f} seconds"
-                )
+                debug_print(f"[DEBUG] No tokens available, waiting {wait_time:.2f} seconds")
                 if wait_time > 0:
                     # Record throttling event
                     if self.metrics_collector:
@@ -145,9 +141,7 @@ class RateLimitedHttpClient:
                     time.sleep(wait_time)
                     continue  # Try again after waiting
             else:
-                debug_print(
-                    f"[DEBUG] Token consumed, remaining: {self.rate_limiter.get_available_tokens():.1f}"
-                )
+                debug_print(f"[DEBUG] Token consumed, remaining: {self.rate_limiter.get_available_tokens():.1f}")
 
             try:
                 # Execute request through wrapped HttpClient
@@ -161,9 +155,7 @@ class RateLimitedHttpClient:
                     return_headers=return_headers,
                 )
                 response_time = time.time() - start_time
-                debug_print(
-                    f"[DEBUG] Request successful, response time: {response_time:.2f}s"
-                )
+                debug_print(f"[DEBUG] Request successful, response time: {response_time:.2f}s")
 
                 # Record successful request
                 if self.metrics_collector:
@@ -172,14 +164,10 @@ class RateLimitedHttpClient:
                 return result
 
             except Exception as e:
-                debug_print(
-                    f"[DEBUG] Request failed with error: {type(e).__name__}: {str(e)}"
-                )
+                debug_print(f"[DEBUG] Request failed with error: {type(e).__name__}: {str(e)}")
                 # Check if this is a rate limit error (HTTP 429)
                 if self._is_rate_limit_error(e):
-                    debug_print(
-                        f"[DEBUG] Detected rate limit error, attempt {attempt + 1}/{self.max_retries}"
-                    )
+                    debug_print(f"[DEBUG] Detected rate limit error, attempt {attempt + 1}/{self.max_retries}")
                     # Record rate limit error
                     if self.metrics_collector:
                         self.metrics_collector.record_rate_limit_error()
@@ -190,8 +178,7 @@ class RateLimitedHttpClient:
                     # If we've exhausted retries, raise RateLimitError
                     if attempt >= self.max_retries:
                         raise RateLimitError(
-                            f"Rate limit exceeded after {self.max_retries} retries. "
-                            f"Last error: {e}",
+                            f"Rate limit exceeded after {self.max_retries} retries. " f"Last error: {e}",
                             retry_after=retry_after,
                         ) from e
 
@@ -206,20 +193,12 @@ class RateLimitedHttpClient:
                     continue
 
                 # Check if this is an authentication error that could benefit from token refresh
-                elif (
-                    self._is_auth_error(e)
-                    and self.auth_provider is not None
-                    and attempt == 0
-                ):
-                    debug_print(
-                        "[DEBUG] Detected authentication error, attempting token refresh"
-                    )
+                elif self._is_auth_error(e) and self.auth_provider is not None and attempt == 0:
+                    debug_print("[DEBUG] Detected authentication error, attempting token refresh")
                     try:
                         # Attempt to refresh the OAuth token
                         new_token = self.auth_provider.force_refresh_token()
-                        debug_print(
-                            "[DEBUG] Token refresh successful, retrying request"
-                        )
+                        debug_print("[DEBUG] Token refresh successful, retrying request")
 
                         # Update headers with new token
                         new_headers = headers.copy()
@@ -235,9 +214,7 @@ class RateLimitedHttpClient:
                         continue
 
                     except (ConfigurationError, Exception) as refresh_error:
-                        debug_print(
-                            f"[DEBUG] Token refresh failed: {type(refresh_error).__name__}: {refresh_error}"
-                        )
+                        debug_print(f"[DEBUG] Token refresh failed: {type(refresh_error).__name__}: {refresh_error}")
                         # If token refresh fails, fall through to raise original error
                         raise e from refresh_error
 
@@ -262,9 +239,7 @@ class RateLimitedHttpClient:
         """
         # Check if the exception message matches any of the configured error patterns
         error_message = str(exception).lower()
-        return any(
-            pattern in error_message for pattern in self.rate_limit_error_patterns
-        )
+        return any(pattern in error_message for pattern in self.rate_limit_error_patterns)
 
     def _is_auth_error(self, exception: Exception) -> bool:
         """Check if an exception represents an authentication error.

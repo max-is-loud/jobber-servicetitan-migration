@@ -22,8 +22,6 @@ class Attachment:
     file_name: str  # Original filename of the attachment
     content_type: str  # MIME type of the file (e.g., 'image/jpeg', 'application/pdf')
     original_url: str  # Remote URL from Jobber API for file download
-    local_file_path: (
-        str  # Local storage path following ./attachments/{note_id}/{filename}
-    )
+    local_file_path: str  # Local storage path following ./attachments/{note_id}/{filename}
     file_size: int  # File size in bytes for storage tracking
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string

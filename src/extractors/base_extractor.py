@@ -62,9 +62,28 @@ class BaseExtractor(ABC, Generic[T]):
     - Progress tracking and logging
     - Batch processing
     - Extraction state management
+    - Entity existence checking and skip logic
 
     Subclasses must implement entity-specific methods for API calls and mapping.
     """
+
+    # Entity type to table name mapping for entity existence checking
+    _ENTITY_TABLE_MAP = {
+        Attachment: "attachments",
+        Client: "clients",
+        Expense: "expenses",
+        Invoice: "invoices",
+        Job: "jobs",
+        Note: "notes",
+        ProductService: "products_services",
+        Property: "properties",
+        Quote: "quotes",
+        Request: "requests",
+        TaxRate: "tax_rates",
+        TimeSheetEntry: "timesheet_entries",
+        User: "users",
+        Visit: "visits",
+    }
 
     def __init__(
         self,
@@ -75,6 +94,7 @@ class BaseExtractor(ABC, Generic[T]):
         entity_type: Type[T],
         entity_name: str,
         config_manager: Optional[ConfigManagerImpl] = None,
+        skip_existing_entities: bool = False,
     ) -> None:
         """Initialize BaseExtractor with required dependencies.
 
@@ -86,6 +106,7 @@ class BaseExtractor(ABC, Generic[T]):
             entity_type: Type of entity being extracted (for type safety)
             entity_name: Human-readable name of entity for logging
             config_manager: Optional ConfigManager for delays and pagination settings
+            skip_existing_entities: Whether to skip entities that already exist in database
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
@@ -94,10 +115,19 @@ class BaseExtractor(ABC, Generic[T]):
         self._entity_type = entity_type
         self._entity_name = entity_name
         self._config_manager = config_manager or ConfigManagerImpl()
+        self._skip_existing_entities = skip_existing_entities
+
+        # Get table name for entity existence checking
+        self._table_name = self._ENTITY_TABLE_MAP.get(entity_type)
+        if not self._table_name:
+            raise ConfigurationError(
+                f"No table mapping found for entity type: {entity_type}"
+            )
 
         # Extraction state tracking
         self._last_extraction_summary = {
             "total_entities": 0,
+            "entities_skipped": 0,
             "total_pages": 0,
             "extraction_duration": 0.0,
             "average_page_size": 0.0,
@@ -106,6 +136,51 @@ class BaseExtractor(ABC, Generic[T]):
             "extraction_status": "pending",
             "error_count": 0,
         }
+
+    def _should_skip_entity(self, entity_id: str) -> bool:
+        """Check if an entity should be skipped based on existence in database.
+
+        Uses Repository.entity_exists() for fast primary key lookups when
+        skip_existing_entities is enabled.
+
+        Args:
+            entity_id: ID of the entity to check
+
+        Returns:
+            True if entity should be skipped, False otherwise
+        """
+        if not self._skip_existing_entities or not self._table_name:
+            return False
+
+        try:
+            return self._repository.entity_exists(self._table_name, entity_id)
+        except RepositoryError as e:
+            self._logger.debug(f"Failed to check entity existence for {entity_id}: {e}")
+            # Err on the side of processing if check fails
+            return False
+
+    def _filter_new_entities(self, entities: List[T]) -> tuple[List[T], int]:
+        """Filter out existing entities if skip logic is enabled.
+
+        Args:
+            entities: List of entities to filter
+
+        Returns:
+            Tuple of (filtered_entities, skipped_count)
+        """
+        if not self._skip_existing_entities:
+            return entities, 0
+
+        new_entities = []
+        skipped_count = 0
+
+        for entity in entities:
+            if hasattr(entity, "id") and self._should_skip_entity(entity.id):
+                skipped_count += 1
+            else:
+                new_entities.append(entity)
+
+        return new_entities, skipped_count
 
     @abstractmethod
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
@@ -180,6 +255,62 @@ class BaseExtractor(ABC, Generic[T]):
         """
         pass
 
+    def get_resume_cursor(self, entity_type_name: str) -> Optional[str]:
+        """Get the last saved cursor position for resuming extraction.
+
+        Args:
+            entity_type_name: Name of the entity type (e.g., 'clients', 'quotes')
+
+        Returns:
+            Last saved cursor position, or None if no saved state exists
+        """
+        try:
+            migration_state = self._repository.get_migration_state(entity_type_name)
+            if migration_state:
+                self._logger.debug(
+                    f"Found saved cursor for {entity_type_name}: {migration_state.last_cursor}"
+                )
+                return migration_state.last_cursor
+            return None
+        except RepositoryError as e:
+            self._logger.debug(
+                f"Failed to get resume cursor for {entity_type_name}: {e}"
+            )
+            return None
+
+    def _save_cursor_progress(
+        self, entity_type_name: str, cursor: Optional[str]
+    ) -> None:
+        """Save cursor position for resumption.
+
+        Args:
+            entity_type_name: Name of the entity type (e.g., 'clients', 'quotes')
+            cursor: Current cursor position to save
+        """
+        try:
+            self._repository.save_migration_state(entity_type_name, cursor)
+            self._logger.debug(
+                f"Saved cursor progress for {entity_type_name}: {cursor}"
+            )
+        except RepositoryError as e:
+            self._logger.debug(
+                f"Failed to save cursor progress for {entity_type_name}: {e}"
+            )
+
+    def _cleanup_cursor_state(self, entity_type_name: str) -> None:
+        """Clean up cursor state after successful completion.
+
+        Args:
+            entity_type_name: Name of the entity type (e.g., 'clients', 'quotes')
+        """
+        try:
+            self._repository.save_migration_state(entity_type_name, None)
+            self._logger.debug(f"Cleaned up cursor state for {entity_type_name}")
+        except RepositoryError as e:
+            self._logger.debug(
+                f"Failed to cleanup cursor state for {entity_type_name}: {e}"
+            )
+
     def extract(
         self,
         cursor: Optional[str] = None,
@@ -190,6 +321,8 @@ class BaseExtractor(ABC, Generic[T]):
         Performs complete extraction workflow including:
         - GraphQL API calls with cursor pagination
         - Data transformation via EntityMapper
+        - Entity existence checking and skip logic (if enabled)
+        - Cursor persistence for resumption support
         - Batch persistence via Repository
         - Progress logging and error handling
 
@@ -200,6 +333,7 @@ class BaseExtractor(ABC, Generic[T]):
         Returns:
             Dictionary containing extraction results with keys:
             - 'entities_processed': int - Total number of entities extracted
+            - 'entities_skipped': int - Total number of entities skipped
             - 'pages_processed': int - Number of API pages processed
             - 'has_next_page': bool - Whether more pages are available
             - 'end_cursor': Optional[str] - Final cursor for continuation
@@ -212,13 +346,27 @@ class BaseExtractor(ABC, Generic[T]):
         """
         start_time = time.time()
         entities_processed = 0
+        entities_skipped = 0
         pages_processed = 0
         current_cursor = cursor
         error_count = 0
         page_info = {}
+        entity_type_name = (
+            self._entity_name + "s"
+        )  # Convert to plural for state tracking
 
+        # Check for resume cursor if no cursor provided and skip mode is enabled
+        if cursor is None and self._skip_existing_entities:
+            resume_cursor = self.get_resume_cursor(entity_type_name)
+            if resume_cursor:
+                current_cursor = resume_cursor
+                self._logger.info(
+                    f"🔄 Resuming {self._entity_name} extraction from saved cursor: {resume_cursor}"
+                )
+
+        skip_status = " (skip mode enabled)" if self._skip_existing_entities else ""
         self._logger.info(
-            f"Starting {self._entity_name} extraction from cursor: {cursor}"
+            f"Starting {self._entity_name} extraction from cursor: {current_cursor}{skip_status}"
         )
 
         try:
@@ -266,14 +414,28 @@ class BaseExtractor(ABC, Generic[T]):
                         self._logger.error(error_msg)
                         error_count += 1
 
-                # Batch save entities to database
+                # Filter entities and apply skip logic
                 if entities:
-                    self._save_entities(entities)
-                    entities_processed += len(entities)
-                    self._logger.info(
-                        f"Processed {len(entities)} {self._entity_name}s "
-                        f"(total: {entities_processed})"
-                    )
+                    entities_to_save, page_skipped = self._filter_new_entities(entities)
+                    entities_skipped += page_skipped
+
+                    # Batch save entities to database
+                    if entities_to_save:
+                        self._save_entities(entities_to_save)
+                        entities_processed += len(entities_to_save)
+
+                    # Log with processed vs skipped counts
+                    if self._skip_existing_entities and page_skipped > 0:
+                        self._logger.info(
+                            f"Processed {len(entities_to_save)} {self._entity_name}s, "
+                            f"skipped {page_skipped} (total: {entities_processed} processed, "
+                            f"{entities_skipped} skipped)"
+                        )
+                    else:
+                        self._logger.info(
+                            f"Processed {len(entities_to_save)} {self._entity_name}s "
+                            f"(total: {entities_processed})"
+                        )
 
                 # Save related entities if any
                 if all_related_entities:
@@ -289,6 +451,10 @@ class BaseExtractor(ABC, Generic[T]):
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
                 end_cursor = page_info.get("endCursor")
+
+                # Save cursor progress after successful page processing
+                if self._skip_existing_entities and end_cursor:
+                    self._save_cursor_progress(entity_type_name, end_cursor)
 
                 if not has_next_page:
                     self._logger.debug(f"Reached last page of {self._entity_name}s")
@@ -306,9 +472,17 @@ class BaseExtractor(ABC, Generic[T]):
 
             extraction_time = time.time() - start_time
 
+            # Clean up cursor state after successful completion
+            if self._skip_existing_entities:
+                self._cleanup_cursor_state(entity_type_name)
+                self._logger.debug(
+                    f"✅ Completed {self._entity_name} extraction - cursor state cleaned up"
+                )
+
             # Update extraction summary
             self._update_extraction_summary(
                 entities_processed,
+                entities_skipped,
                 pages_processed,
                 extraction_time,
                 current_cursor,
@@ -318,16 +492,18 @@ class BaseExtractor(ABC, Generic[T]):
 
             result = {
                 "entities_processed": entities_processed,
+                "entities_skipped": entities_skipped,
                 "pages_processed": pages_processed,
                 "has_next_page": page_info.get("hasNextPage", False),
                 "end_cursor": current_cursor,
                 "extraction_time": extraction_time,
             }
 
-            self._logger.info(
-                f"Completed {self._entity_name} extraction: "
-                f"{entities_processed} entities in {extraction_time:.2f}s"
-            )
+            summary_msg = f"Completed {self._entity_name} extraction: {entities_processed} entities"
+            if self._skip_existing_entities and entities_skipped > 0:
+                summary_msg += f", {entities_skipped} skipped"
+            summary_msg += f" in {extraction_time:.2f}s"
+            self._logger.info(summary_msg)
 
             return result
 
@@ -336,6 +512,7 @@ class BaseExtractor(ABC, Generic[T]):
             extraction_time = time.time() - start_time
             self._update_extraction_summary(
                 entities_processed,
+                entities_skipped,
                 pages_processed,
                 extraction_time,
                 current_cursor,
@@ -440,13 +617,14 @@ class BaseExtractor(ABC, Generic[T]):
         """Get summary statistics of the last extraction operation.
 
         Returns:
-            Dictionary containing extraction summary
+            Dictionary containing extraction summary including skip counts
         """
         return self._last_extraction_summary.copy()
 
     def _update_extraction_summary(
         self,
         entities_processed: int,
+        entities_skipped: int,
         pages_processed: int,
         extraction_time: float,
         last_cursor: Optional[str],
@@ -457,6 +635,7 @@ class BaseExtractor(ABC, Generic[T]):
 
         Args:
             entities_processed: Total entities processed
+            entities_skipped: Total entities skipped
             pages_processed: Total pages processed
             extraction_time: Total extraction time in seconds
             last_cursor: Final pagination cursor
@@ -472,6 +651,7 @@ class BaseExtractor(ABC, Generic[T]):
 
         self._last_extraction_summary = {
             "total_entities": entities_processed,
+            "entities_skipped": entities_skipped,
             "total_pages": pages_processed,
             "extraction_duration": extraction_time,
             "average_page_size": avg_page_size,

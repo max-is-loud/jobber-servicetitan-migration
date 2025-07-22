@@ -57,9 +57,7 @@ class TokenBucketRateLimiter:
         """
         self._capacity = capacity
         # Start with moderate token count optimized for Jobber GraphQL API
-        self._tokens = float(
-            initial_tokens if initial_tokens is not None else capacity // 4
-        )
+        self._tokens = float(initial_tokens if initial_tokens is not None else capacity // 4)
 
         self._refill_rate = refill_rate  # tokens per minute
         self._last_refill = time.time()
@@ -82,20 +80,14 @@ class TokenBucketRateLimiter:
         """
         with self._lock:
             self._refill()
-            debug_print(
-                f"[DEBUG] Token bucket - Before consume: {self._tokens:.1f} tokens available"
-            )
+            debug_print(f"[DEBUG] Token bucket - Before consume: {self._tokens:.1f} tokens available")
 
             if self._tokens >= tokens:
                 self._tokens -= tokens
-                debug_print(
-                    f"[DEBUG] Token bucket - Consumed {tokens} tokens, {self._tokens:.1f} remaining"
-                )
+                debug_print(f"[DEBUG] Token bucket - Consumed {tokens} tokens, {self._tokens:.1f} remaining")
                 return True
 
-            debug_print(
-                f"[DEBUG] Token bucket - Not enough tokens: need {tokens}, have {self._tokens:.1f}"
-            )
+            debug_print(f"[DEBUG] Token bucket - Not enough tokens: need {tokens}, have {self._tokens:.1f}")
             return False
 
     def _refill(self) -> None:

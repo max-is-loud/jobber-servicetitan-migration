@@ -7,6 +7,7 @@ and response handling. The client supports both environment token and
 OAuth2 authentication with automatic token refresh.
 """
 
+import time
 from typing import Any, Optional
 
 from ..auth.auth_provider import AuthProvider
@@ -767,15 +768,15 @@ class JobberClient:
 
         return "unknown"
 
-    def _execute_graphql_request(
-        self, query: str, cursor: Optional[str] = None
-    ) -> dict[str, Any]:
+    def _execute_graphql_request(self, query: str, cursor: Optional[str] = None) -> dict[str, Any]:
         """
-        Execute a GraphQL request with comprehensive error handling.
+        Execute a GraphQL request with comprehensive error handling and retry logic.
 
         This method handles authentication automatically, including OAuth2 token
         refresh when needed. For OAuth2 users, expired tokens are automatically
         refreshed transparently. Environment token users see no changes in behavior.
+
+        Includes automatic retry logic for GraphQL throttling errors with exponential backoff.
 
         Args:
             query: GraphQL query string to execute
@@ -787,105 +788,120 @@ class JobberClient:
         Raises:
             ConfigurationError: If authentication configuration is invalid
                                or OAuth2 token refresh fails
-            JobberApiError: If API communication fails
+            JobberApiError: If API communication fails after all retries
         """
-        try:
-            # Get authentication headers with automatic OAuth2 token refresh
-            # This may raise ConfigurationError or OAuth2Error
-            headers = self.auth_provider.get_headers()
+        max_retries = 5
+        base_delay = 2.0
 
-        except ConfigurationError:
-            # Re-raise configuration errors as-is (includes OAuth2 auth failures)
-            raise
+        for attempt in range(max_retries + 1):
+            try:
+                # Get authentication headers with automatic OAuth2 token refresh
+                # This may raise ConfigurationError or OAuth2Error
+                headers = self.auth_provider.get_headers()
 
-        except OAuth2Error as e:
-            # Convert OAuth2 errors to user-friendly configuration errors
-            raise ConfigurationError(
-                f"OAuth2 authentication failed: {e}. "
-                "Please re-authorize using 'tightbeam oauth init' or set JOBBER_TOKEN."
-            ) from None
+            except ConfigurationError:
+                # Re-raise configuration errors as-is (includes OAuth2 auth failures)
+                raise
 
-        except Exception as e:
-            # Catch any other unexpected authentication errors
-            raise ConfigurationError(
-                f"Authentication failed: {e}. "
-                "Please verify your authentication configuration."
-            ) from e
+            except OAuth2Error as e:
+                # Convert OAuth2 errors to user-friendly configuration errors
+                raise ConfigurationError(
+                    f"OAuth2 authentication failed: {e}. "
+                    "Please re-authorize using 'tightbeam oauth init' or set JOBBER_TOKEN."
+                ) from None
 
-        # Add required API version header - this is mandatory for all
-        # Jobber API requests
-        headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
+            except Exception as e:
+                # Catch any other unexpected authentication errors
+                raise ConfigurationError(
+                    f"Authentication failed: {e}. " "Please verify your authentication configuration."
+                ) from e
 
-        # Debug log headers (mask sensitive data)
-        debug_headers = headers.copy()
-        if "Authorization" in debug_headers:
-            auth_value = debug_headers["Authorization"]
-            if auth_value.startswith("Bearer "):
-                debug_headers["Authorization"] = f"Bearer {'*' * 10}..."
-        debug_print(f"[DEBUG] Request headers: {debug_headers}")
+            # Add required API version header - this is mandatory for all
+            # Jobber API requests
+            headers["X-JOBBER-GRAPHQL-VERSION"] = self.API_VERSION
 
-        # Prepare GraphQL payload
-        payload = {"query": query, "variables": {"cursor": cursor}}
+            # Debug log headers (mask sensitive data)
+            debug_headers = headers.copy()
+            if "Authorization" in debug_headers:
+                auth_value = debug_headers["Authorization"]
+                if auth_value.startswith("Bearer "):
+                    debug_headers["Authorization"] = f"Bearer {'*' * 10}..."
+            debug_print(f"[DEBUG] Request headers: {debug_headers}")
 
-        debug_print(f"[DEBUG] GraphQL Query Length: {len(query)} characters")
-        debug_print(f"[DEBUG] GraphQL Query Preview: {query[:200]}...")
-        if cursor:
-            debug_print(f"[DEBUG] Using cursor: {cursor}")
+            # Prepare GraphQL payload
+            payload = {"query": query, "variables": {"cursor": cursor}}
 
-        # Use shared HttpClient for HTTP communication with optional header tracking
-        response_data: dict[str, Any]
-        if self.metrics_collector:
-            result = self.http_client.post(
-                url=self.API_URL, headers=headers, json=payload, return_headers=True
-            )
+            debug_print(f"[DEBUG] GraphQL Query Length: {len(query)} characters")
+            debug_print(f"[DEBUG] GraphQL Query Preview: {query[:200]}...")
+            if cursor:
+                debug_print(f"[DEBUG] Using cursor: {cursor}")
 
-            # Handle tuple unpacking for metrics-enabled path
-            # When return_headers=True, result is guaranteed to be a tuple
-            assert isinstance(result, tuple), "Expected tuple when return_headers=True"
-            response_data, rate_limit_headers = result
+            try:
+                # Use shared HttpClient for HTTP communication with optional header tracking
+                response_data: dict[str, Any]
+                if self.metrics_collector:
+                    result = self.http_client.post(url=self.API_URL, headers=headers, json=payload, return_headers=True)
 
-            # Track rate limit headers if available
-            remaining = rate_limit_headers.get("x-ratelimit-remaining")
-            reset_time = rate_limit_headers.get("x-ratelimit-reset")
-            if remaining is not None:
-                try:
-                    remaining_int = int(remaining)
-                    reset_int = int(reset_time) if reset_time else None
-                    self.metrics_collector.record_rate_limit_headers(
-                        remaining_int, reset_int
+                    # Handle tuple unpacking for metrics-enabled path
+                    # When return_headers=True, result is guaranteed to be a tuple
+                    assert isinstance(result, tuple), "Expected tuple when return_headers=True"
+                    response_data, rate_limit_headers = result
+
+                    # Track rate limit headers if available
+                    remaining = rate_limit_headers.get("x-ratelimit-remaining")
+                    reset_time = rate_limit_headers.get("x-ratelimit-reset")
+                    if remaining is not None:
+                        try:
+                            remaining_int = int(remaining)
+                            reset_int = int(reset_time) if reset_time else None
+                            self.metrics_collector.record_rate_limit_headers(remaining_int, reset_int)
+                        except (ValueError, TypeError):
+                            # Gracefully handle invalid header values
+                            pass
+
+                    # Extract and record GraphQL cost information
+                    self._record_graphql_cost(response_data, query, self._extract_query_type(query))
+                else:
+                    # When return_headers=False (default), result is guaranteed to be a dict
+                    result = self.http_client.post(url=self.API_URL, headers=headers, json=payload)
+                    assert isinstance(result, dict), "Expected dict when return_headers=False"
+                    response_data = result
+
+                debug_print(f"[DEBUG] GraphQL Response Keys: {list(response_data.keys())}")
+                if "errors" in response_data:
+                    debug_print(f"[DEBUG] GraphQL Errors: {response_data['errors']}")
+                    for error in response_data.get("errors", []):
+                        if "extensions" in error:
+                            debug_print(f"[DEBUG] Error extensions: {error['extensions']}")
+                            if "documentation" in error.get("extensions", {}):
+                                doc_url = error["extensions"]["documentation"]
+                                debug_print(f"[DEBUG] API Documentation: {doc_url}")
+                if "extensions" in response_data:
+                    debug_print(f"[DEBUG] Response extensions: {response_data['extensions']}")
+
+                # Validate response structure and check for GraphQL errors
+                self._validate_graphql_response(response_data)
+
+                return response_data
+
+            except JobberApiError as e:
+                # Check if this is a throttling error and we have retries left
+                if self._is_throttling_error(e) and attempt < max_retries:
+                    delay = base_delay * (2**attempt)  # Exponential backoff
+                    debug_print(
+                        f"[DEBUG] GraphQL throttling detected, attempt {attempt + 1}/{max_retries + 1}. Retrying in {delay}s..."
                     )
-                except (ValueError, TypeError):
-                    # Gracefully handle invalid header values
-                    pass
+                    print(
+                        f"⏳ GraphQL throttling detected, retrying in {delay:.1f}s... (attempt {attempt + 1}/{max_retries + 1})"
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    # Not a throttling error or out of retries
+                    raise
 
-            # Extract and record GraphQL cost information
-            self._record_graphql_cost(
-                response_data, query, self._extract_query_type(query)
-            )
-        else:
-            # When return_headers=False (default), result is guaranteed to be a dict
-            result = self.http_client.post(
-                url=self.API_URL, headers=headers, json=payload
-            )
-            assert isinstance(result, dict), "Expected dict when return_headers=False"
-            response_data = result
-
-        debug_print(f"[DEBUG] GraphQL Response Keys: {list(response_data.keys())}")
-        if "errors" in response_data:
-            debug_print(f"[DEBUG] GraphQL Errors: {response_data['errors']}")
-            for error in response_data.get("errors", []):
-                if "extensions" in error:
-                    debug_print(f"[DEBUG] Error extensions: {error['extensions']}")
-                    if "documentation" in error.get("extensions", {}):
-                        doc_url = error["extensions"]["documentation"]
-                        debug_print(f"[DEBUG] API Documentation: {doc_url}")
-        if "extensions" in response_data:
-            debug_print(f"[DEBUG] Response extensions: {response_data['extensions']}")
-
-        # Validate response structure and check for GraphQL errors
-        self._validate_graphql_response(response_data)
-
-        return response_data
+        # This should never be reached due to the raise in the except block
+        raise JobberApiError(f"GraphQL request failed after {max_retries} retries")
 
     def _validate_graphql_response(self, response_data: dict[str, Any]) -> None:
         """
@@ -914,15 +930,27 @@ class JobberClient:
                     else:
                         error_messages.append(str(error))
 
-                raise JobberApiError(
-                    f"GraphQL errors in response: {'; '.join(error_messages)}"
-                )
+                raise JobberApiError(f"GraphQL errors in response: {'; '.join(error_messages)}")
 
         # Check for data field
         if "data" not in response_data:
             raise JobberApiError("Invalid GraphQL response: missing 'data' field")
 
         # Data can be None for some valid GraphQL responses, so we don't check for that
+
+    def _is_throttling_error(self, error: JobberApiError) -> bool:
+        """
+        Check if a JobberApiError is caused by GraphQL throttling.
+
+        Args:
+            error: JobberApiError to check
+
+        Returns:
+            bool: True if the error is caused by throttling
+        """
+        error_message = str(error).lower()
+        throttling_patterns = ["throttled", "throttle", "rate limit", "too many requests"]
+        return any(pattern in error_message for pattern in throttling_patterns)
 
     def fetch_clients(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -944,18 +972,11 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(
-                self._get_clients_query(), cursor
-            )
+            response_data = self._execute_graphql_request(self._get_clients_query(), cursor)
 
             # Validate that clients data exists in response
-            if (
-                response_data.get("data") is not None
-                and "clients" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'clients' field in data"
-                )
+            if response_data.get("data") is not None and "clients" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'clients' field in data")
 
             return response_data
 
@@ -986,18 +1007,11 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(
-                self._get_invoices_query(), cursor
-            )
+            response_data = self._execute_graphql_request(self._get_invoices_query(), cursor)
 
             # Validate that invoices data exists in response
-            if (
-                response_data.get("data") is not None
-                and "invoices" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'invoices' field in data"
-                )
+            if response_data.get("data") is not None and "invoices" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'invoices' field in data")
 
             return response_data
 
@@ -1006,9 +1020,7 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching invoices: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching invoices: {e}") from e
 
     def fetch_quotes(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -1030,18 +1042,11 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(
-                self._get_quotes_query(), cursor
-            )
+            response_data = self._execute_graphql_request(self._get_quotes_query(), cursor)
 
             # Validate that quotes data exists in response
-            if (
-                response_data.get("data") is not None
-                and "quotes" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'quotes' field in data"
-                )
+            if response_data.get("data") is not None and "quotes" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'quotes' field in data")
 
             return response_data
 
@@ -1112,18 +1117,11 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(
-                self.ATTACHMENTS_QUERY, cursor
-            )
+            response_data = self._execute_graphql_request(self.ATTACHMENTS_QUERY, cursor)
 
             # Validate that attachments data exists in response
-            if (
-                response_data.get("data") is not None
-                and "noteFiles" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'noteFiles' field in data"
-                )
+            if response_data.get("data") is not None and "noteFiles" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'noteFiles' field in data")
 
             return response_data
 
@@ -1132,9 +1130,7 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching attachments: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching attachments: {e}") from e
 
     def fetch_jobs(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -1159,13 +1155,8 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.JOBS_QUERY, cursor)
 
             # Validate that jobs data exists in response
-            if (
-                response_data.get("data") is not None
-                and "jobs" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'jobs' field in data"
-                )
+            if response_data.get("data") is not None and "jobs" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'jobs' field in data")
 
             return response_data
 
@@ -1199,13 +1190,8 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.PROPERTIES_QUERY, cursor)
 
             # Validate that properties data exists in response
-            if (
-                response_data.get("data") is not None
-                and "properties" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'properties' field in data"
-                )
+            if response_data.get("data") is not None and "properties" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'properties' field in data")
 
             return response_data
 
@@ -1214,9 +1200,7 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching properties: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching properties: {e}") from e
 
     def fetch_requests(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -1242,13 +1226,8 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.REQUESTS_QUERY, cursor)
 
             # Validate that requests data exists in response
-            if (
-                response_data.get("data") is not None
-                and "requests" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'requests' field in data"
-                )
+            if response_data.get("data") is not None and "requests" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'requests' field in data")
 
             return response_data
 
@@ -1257,9 +1236,7 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching requests: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching requests: {e}") from e
 
     def fetch_users(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -1284,13 +1261,8 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.USERS_QUERY, cursor)
 
             # Validate that users data exists in response
-            if (
-                response_data.get("data") is not None
-                and "users" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'users' field in data"
-                )
+            if response_data.get("data") is not None and "users" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'users' field in data")
 
             return response_data
 
@@ -1324,13 +1296,8 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.EXPENSES_QUERY, cursor)
 
             # Validate that expenses data exists in response
-            if (
-                response_data.get("data") is not None
-                and "expenses" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'expenses' field in data"
-                )
+            if response_data.get("data") is not None and "expenses" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'expenses' field in data")
 
             return response_data
 
@@ -1339,9 +1306,7 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching expenses: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching expenses: {e}") from e
 
     def fetch_visits(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -1366,13 +1331,8 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.VISITS_QUERY, cursor)
 
             # Validate that visits data exists in response
-            if (
-                response_data.get("data") is not None
-                and "visits" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'visits' field in data"
-                )
+            if response_data.get("data") is not None and "visits" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'visits' field in data")
 
             return response_data
 
@@ -1404,15 +1364,10 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(
-                self.TIMESHEET_ENTRIES_QUERY, cursor
-            )
+            response_data = self._execute_graphql_request(self.TIMESHEET_ENTRIES_QUERY, cursor)
 
             # Validate that timesheet entries data exists in response
-            if (
-                response_data.get("data") is not None
-                and "timesheetEntries" not in response_data["data"]
-            ):
+            if response_data.get("data") is not None and "timesheetEntries" not in response_data["data"]:
                 raise JobberApiError(
                     "Invalid response structure: missing 'timesheetEntries' field in data"  # noqa: E501
                 )
@@ -1424,9 +1379,7 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching timesheet entries: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching timesheet entries: {e}") from e
 
     def fetch_products_services(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -1449,15 +1402,10 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(
-                self.PRODUCTS_SERVICES_QUERY, cursor
-            )
+            response_data = self._execute_graphql_request(self.PRODUCTS_SERVICES_QUERY, cursor)
 
             # Validate that products and services data exists in response
-            if (
-                response_data.get("data") is not None
-                and "productsAndServices" not in response_data["data"]
-            ):
+            if response_data.get("data") is not None and "productsAndServices" not in response_data["data"]:
                 raise JobberApiError(
                     "Invalid response structure: missing 'productsAndServices' field in data"  # noqa: E501
                 )
@@ -1469,9 +1417,7 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching products and services: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching products and services: {e}") from e
 
     def fetch_tax_rates(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -1496,13 +1442,8 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.TAX_RATES_QUERY, cursor)
 
             # Validate that tax rates data exists in response
-            if (
-                response_data.get("data") is not None
-                and "taxRates" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'taxRates' field in data"
-                )
+            if response_data.get("data") is not None and "taxRates" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'taxRates' field in data")
 
             return response_data
 
@@ -1511,9 +1452,7 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching tax rates: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching tax rates: {e}") from e
 
     def fetch_note_by_id(self, note_id: str) -> dict[str, Any]:
         """
@@ -1543,9 +1482,7 @@ class JobberClient:
 
             # Use shared HttpClient for HTTP communication
             # When return_headers=False (default), result is guaranteed to be a dict
-            result = self.http_client.post(
-                url=self.API_URL, headers=headers, json=payload
-            )
+            result = self.http_client.post(url=self.API_URL, headers=headers, json=payload)
             assert isinstance(result, dict), "Expected dict when return_headers=False"
             response_data = result
 
@@ -1553,13 +1490,8 @@ class JobberClient:
             self._validate_graphql_response(response_data)
 
             # Validate that note data exists in response
-            if (
-                response_data.get("data") is not None
-                and "node" not in response_data["data"]
-            ):
-                raise JobberApiError(
-                    "Invalid response structure: missing 'node' field in data"
-                )
+            if response_data.get("data") is not None and "node" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'node' field in data")
 
             # Check if note was found
             node_data = response_data.get("data", {}).get("node")
@@ -1573,6 +1505,4 @@ class JobberClient:
             raise
         except Exception as e:
             # Catch any unexpected errors and wrap them
-            raise JobberApiError(
-                f"Unexpected error while fetching note {note_id}: {e}"
-            ) from e
+            raise JobberApiError(f"Unexpected error while fetching note {note_id}: {e}") from e

@@ -23,7 +23,9 @@ class Note:
     """
 
     id: str  # EncodedId! - The unique identifier
-    entity_type: str  # Discriminator for polymorphic relationship ('client'/'job'/'quote'/'invoice'/'request')  # noqa: E501
+    entity_type: (
+        str  # Discriminator for polymorphic relationship ('client'/'job'/'quote'/'invoice'/'request')  # noqa: E501
+    )
     entity_id: str  # Foreign key ID referencing the entity this note belongs to
     message: str  # The note content/message text
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string

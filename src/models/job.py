@@ -26,9 +26,7 @@ class Job:
     title: str  # title: String! - The description of the job
     description: str  # description: String - Detailed job description
     status: str  # status: String! - Job status (e.g., pending, in_progress, completed)
-    scheduled_start_at: (
-        str  # scheduledStartAt: ISO8601DateTime - When work is scheduled
-    )
+    scheduled_start_at: str  # scheduledStartAt: ISO8601DateTime - When work is scheduled
     scheduled_end_at: str  # scheduledEndAt: ISO8601DateTime - When work should complete
     completed_at: str  # completedAt: ISO8601DateTime - When job was completed
     total: int  # amounts.total converted to cents for precision

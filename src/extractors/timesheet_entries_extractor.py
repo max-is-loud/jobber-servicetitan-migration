@@ -60,9 +60,7 @@ class TimesheetEntriesExtractor(BaseExtractor[TimeSheetEntry]):
         """
         return self._jobber_client.fetch_timesheet_entries(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -128,9 +126,7 @@ class TimesheetEntriesExtractor(BaseExtractor[TimeSheetEntry]):
         # If API provides totalCount, use it
         total_count = timesheet_data.get("totalCount")
         if total_count is not None:
-            self._logger.debug(
-                f"API reported total timesheet entry count: {total_count}"
-            )
+            self._logger.debug(f"API reported total timesheet entry count: {total_count}")
             return int(total_count)
 
         # Otherwise estimate from first page
@@ -144,7 +140,5 @@ class TimesheetEntriesExtractor(BaseExtractor[TimeSheetEntry]):
             return page_size
 
         # Can't determine exact count without pagination
-        self._logger.info(
-            "Cannot determine exact timesheet entry count without full pagination"
-        )
+        self._logger.info("Cannot determine exact timesheet entry count without full pagination")
         return -1  # Indicate unknown count

@@ -46,9 +46,7 @@ class ExponentialBackoffStrategy:
         self.multiplier = multiplier
         self.jitter_factor = jitter_factor
 
-    def calculate_delay(
-        self, attempt: int, retry_after: Optional[float] = None
-    ) -> float:
+    def calculate_delay(self, attempt: int, retry_after: Optional[float] = None) -> float:
         """Calculate the delay for a retry attempt.
 
         Calculates exponential backoff delay with jitter and optionally honors
@@ -108,9 +106,7 @@ class ExponentialBackoffStrategy:
         jittered_delay = delay * jitter_multiplier
         return max(0.0, jittered_delay)
 
-    def get_sequence(
-        self, max_attempts: int, retry_after: Optional[float] = None
-    ) -> list[float]:
+    def get_sequence(self, max_attempts: int, retry_after: Optional[float] = None) -> list[float]:
         """Get a sequence of delays for multiple retry attempts.
 
         Useful for testing, monitoring, or pre-calculating retry schedules.
@@ -122,14 +118,9 @@ class ExponentialBackoffStrategy:
         Returns:
             list[float]: List of calculated delays for each attempt
         """
-        return [
-            self.calculate_delay(attempt, retry_after)
-            for attempt in range(max_attempts)
-        ]
+        return [self.calculate_delay(attempt, retry_after) for attempt in range(max_attempts)]
 
-    def get_total_delay(
-        self, max_attempts: int, retry_after: Optional[float] = None
-    ) -> float:
+    def get_total_delay(self, max_attempts: int, retry_after: Optional[float] = None) -> float:
         """Calculate total time for all retry attempts.
 
         Args:

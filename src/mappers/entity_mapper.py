@@ -306,9 +306,7 @@ class EntityMapper:
 
             # Generate local file path following convention:
             # ./attachments/{note_id}/{filename}
-            local_file_path = (
-                f"./attachments/{note_id}/{file_name}" if file_name else ""
-            )
+            local_file_path = f"./attachments/{note_id}/{file_name}" if file_name else ""
 
             # Extract file size
             file_size = data.get("fileSize", 0)
@@ -369,12 +367,8 @@ class EntityMapper:
             status = data.get("status", "")
 
             # Extract scheduling information
-            scheduled_start_at = MapperUtils.format_iso_datetime(
-                data.get("scheduledStartAt")
-            )
-            scheduled_end_at = MapperUtils.format_iso_datetime(
-                data.get("scheduledEndAt")
-            )
+            scheduled_start_at = MapperUtils.format_iso_datetime(data.get("scheduledStartAt"))
+            scheduled_end_at = MapperUtils.format_iso_datetime(data.get("scheduledEndAt"))
             completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
 
             # Extract and convert total amount to cents
@@ -438,20 +432,14 @@ class EntityMapper:
             address_line1 = MapperUtils.safe_get_nested(address, "line1", default="")
             address_line2 = MapperUtils.safe_get_nested(address, "line2", default="")
             city = MapperUtils.safe_get_nested(address, "city", default="")
-            state_province = MapperUtils.safe_get_nested(
-                address, "stateProvince", default=""
-            )
+            state_province = MapperUtils.safe_get_nested(address, "stateProvince", default="")
             postal_code = MapperUtils.safe_get_nested(address, "postalCode", default="")
             country = MapperUtils.safe_get_nested(address, "country", default="")
 
             # Extract GPS coordinates
             coordinates = data.get("coordinates", {})
-            latitude = str(
-                MapperUtils.safe_get_nested(coordinates, "latitude", default="")
-            )
-            longitude = str(
-                MapperUtils.safe_get_nested(coordinates, "longitude", default="")
-            )
+            latitude = str(MapperUtils.safe_get_nested(coordinates, "latitude", default=""))
+            longitude = str(MapperUtils.safe_get_nested(coordinates, "longitude", default=""))
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -512,12 +500,8 @@ class EntityMapper:
             assigned_to = data.get("assignedTo", "")
 
             # Extract conversion relationships
-            converted_to_quote_id = MapperUtils.extract_id_from_relationship(
-                data.get("convertedToQuote")
-            )
-            converted_to_job_id = MapperUtils.extract_id_from_relationship(
-                data.get("convertedToJob")
-            )
+            converted_to_quote_id = MapperUtils.extract_id_from_relationship(data.get("convertedToQuote"))
+            converted_to_job_id = MapperUtils.extract_id_from_relationship(data.get("convertedToJob"))
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -591,9 +575,7 @@ class EntityMapper:
 
             # Extract timezone
             timezone_obj = data.get("timezone", {})
-            timezone = MapperUtils.safe_get_nested(
-                timezone_obj, "identifier", default=""
-            )
+            timezone = MapperUtils.safe_get_nested(timezone_obj, "identifier", default="")
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -729,18 +711,14 @@ class EntityMapper:
 
             # Extract duration
             duration = data.get("duration", 0)
-            duration_minutes = (
-                int(duration) if isinstance(duration, (int, float)) else 0
-            )
+            duration_minutes = int(duration) if isinstance(duration, (int, float)) else 0
 
             # Format ISO datetimes
             start_at = MapperUtils.format_iso_datetime(data.get("startAt"))
             end_at = MapperUtils.format_iso_datetime(data.get("endAt"))
             completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
-            updated_at = MapperUtils.format_iso_datetime(
-                data.get("createdAt")
-            )  # Use createdAt for updated_at
+            updated_at = MapperUtils.format_iso_datetime(data.get("createdAt"))  # Use createdAt for updated_at
 
             return Visit(
                 id=visit_id,
@@ -793,9 +771,7 @@ class EntityMapper:
 
             # Extract optional relationship IDs
             visit_id = MapperUtils.extract_id_from_relationship(data.get("visit"))
-            approved_by_id = MapperUtils.extract_id_from_relationship(
-                data.get("approvedBy")
-            )
+            approved_by_id = MapperUtils.extract_id_from_relationship(data.get("approvedBy"))
             paid_by_id = MapperUtils.extract_id_from_relationship(data.get("paidBy"))
 
             # Extract timesheet details
@@ -805,15 +781,11 @@ class EntityMapper:
 
             # Extract duration information
             final_duration = data.get("finalDuration", 0)
-            final_duration_seconds = (
-                int(final_duration) if isinstance(final_duration, (int, float)) else 0
-            )
+            final_duration_seconds = int(final_duration) if isinstance(final_duration, (int, float)) else 0
 
             visit_duration_total = data.get("visitDurationTotal", 0)
             visit_duration_total_seconds = (
-                int(visit_duration_total)
-                if isinstance(visit_duration_total, (int, float))
-                else 0
+                int(visit_duration_total) if isinstance(visit_duration_total, (int, float)) else 0
             )
 
             # Extract status flags
@@ -889,25 +861,17 @@ class EntityMapper:
 
             # Extract service configuration
             duration_minutes = data.get("durationMinutes", 0)
-            duration_minutes = (
-                int(duration_minutes)
-                if isinstance(duration_minutes, (int, float))
-                else 0
-            )
+            duration_minutes = int(duration_minutes) if isinstance(duration_minutes, (int, float)) else 0
 
             # Extract flags
             taxable = str(data.get("taxable", False)).lower()
             visible = str(data.get("visible", True)).lower()
-            online_booking_enabled = str(
-                data.get("onlineBookingEnabled", False)
-            ).lower()
+            online_booking_enabled = str(data.get("onlineBookingEnabled", False)).lower()
 
             # Extract ordering
             online_booking_sort_order = data.get("onlineBookingSortOrder", 0)
             online_booking_sort_order = (
-                int(online_booking_sort_order)
-                if isinstance(online_booking_sort_order, (int, float))
-                else 0
+                int(online_booking_sort_order) if isinstance(online_booking_sort_order, (int, float)) else 0
             )
 
             # Derive active status from visible flag
@@ -971,9 +935,7 @@ class EntityMapper:
 
             # Extract display configuration
             display_order = data.get("displayOrder", 0)
-            display_order = (
-                int(display_order) if isinstance(display_order, (int, float)) else 0
-            )
+            display_order = int(display_order) if isinstance(display_order, (int, float)) else 0
 
             default_for_region = str(data.get("defaultForRegion", False)).lower()
 

@@ -15,9 +15,7 @@ class Quote:
 
     id: str  # EncodedId! - The unique identifier
     client_id: str  # client.id - Client relationship ID for foreign key
-    quote_number: (
-        str  # quoteNumber: String! - A non-unique number assigned to the quote
-    )
+    quote_number: str  # quoteNumber: String! - A non-unique number assigned to the quote
     title: str  # title: String - The description of the quote
     total: int  # amounts.total converted to cents for precision
     subtotal: int  # amounts.subtotal converted to cents for precision

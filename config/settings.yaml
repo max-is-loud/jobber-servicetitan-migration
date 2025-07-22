@@ -15,10 +15,10 @@ rate_limits:
   
   # Moderate: Default balanced settings (recommended)  
   moderate:
-    capacity: 400          # Balanced capacity
-    refill_rate: 360       # 6 req/sec effective rate
-    initial_tokens: 60     # Good startup burst
-    safety_margin: 0.28    # 28% safety margin
+    capacity: 600          # Increased capacity for better burst handling
+    refill_rate: 600       # 10 req/sec effective rate - rely on page delays for actual pacing
+    initial_tokens: 150    # Higher startup burst since retry works
+    safety_margin: 0.10    # Reduced safety margin since retry handles throttling
   
   # Aggressive: Maximum performance (requires valid OAuth & stable connection)
   aggressive:
@@ -33,7 +33,7 @@ rate_limits:
 # Lower values = more requests but more reliable
 # Recommended range: 20-50 items per page
 pagination:
-  clients: 30              # Client entities per page
+  clients: 44              # Client entities per page
   invoices: 30             # Invoice entities per page  
   quotes: 30               # Quote entities per page (increased from hardcoded 5)
   jobs: 30                 # Job entities per page
@@ -50,7 +50,7 @@ pagination:
 # Timing and delay configuration
 # Controls delays between operations to prevent API overload
 delays:
-  page_delay: 1.0          # Delay between pagination requests (seconds)
+  page_delay: 1.0          # Delay between pagination requests (seconds) - increased to prevent burst throttling
   request_timeout: 30.0    # HTTP request timeout (seconds)
   retry_base_delay: 2.0    # Base delay for retry attempts (seconds)
 
@@ -66,9 +66,9 @@ backoff:
 # Logging configuration
 # Controls application logging behavior and verbosity
 logging:
-  verbose_cost_monitoring: false  # Enable detailed cost tracking
-  performance_logging: true       # Enable performance metrics
-  level: "INFO"                   # Log level: DEBUG, INFO, WARNING, ERROR
+  verbose_cost_monitoring: true  # Enable detailed cost tracking
+  performance_logging: true      # Enable performance metrics
+  level: "DEBUG"                 # Log level: DEBUG, INFO, WARNING, ERROR
 
 # Database configuration  
 # Controls SQLite database settings and behavior

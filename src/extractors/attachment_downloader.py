@@ -47,6 +47,7 @@ class AttachmentDownloader:
         max_retries: int = 3,
         chunk_size: int = 8192,
         config_manager: ConfigManagerImpl | None = None,
+        skip_existing_entities: bool = False,
     ) -> None:
         """Initialize AttachmentDownloader with required dependencies.
 
@@ -59,6 +60,7 @@ class AttachmentDownloader:
             max_retries: Maximum retry attempts for failed downloads
             chunk_size: Chunk size in bytes for streaming downloads
             config_manager: Optional ConfigManager for delays and pagination settings
+            skip_existing_entities: Whether to skip entities that already exist in database
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
@@ -68,6 +70,7 @@ class AttachmentDownloader:
         self._max_retries = max_retries
         self._chunk_size = chunk_size
         self._config_manager = config_manager or ConfigManagerImpl()
+        self._skip_existing_entities = skip_existing_entities
 
         # Setup HTTP session with retry logic
         self._session = requests.Session()
@@ -320,8 +323,8 @@ class AttachmentDownloader:
             cursor = result["end_cursor"]
 
         self._logger.info(
-            f"Complete attachments extraction finished: {len(all_attachments)} attachments"  # noqa: E501
-        )
+            f"Complete attachments extraction finished: {len(all_attachments)} attachments"
+        )  # noqa: E501
         return all_attachments
 
     def get_entity_count(self) -> int:

@@ -11,6 +11,7 @@ from ..models import (
     GraphQLCost,
     Invoice,
     Job,
+    MigrationState,
     Note,
     ProductService,
     Property,
@@ -58,33 +59,23 @@ class Repository:
             clients_columns = {row[1] for row in cursor.fetchall()}
 
             if "additional_emails" not in clients_columns:
-                cursor.execute(
-                    "ALTER TABLE clients ADD COLUMN additional_emails TEXT DEFAULT '[]'"
-                )
+                cursor.execute("ALTER TABLE clients ADD COLUMN additional_emails TEXT DEFAULT '[]'")
 
             if "additional_phones" not in clients_columns:
-                cursor.execute(
-                    "ALTER TABLE clients ADD COLUMN additional_phones TEXT DEFAULT '[]'"
-                )
+                cursor.execute("ALTER TABLE clients ADD COLUMN additional_phones TEXT DEFAULT '[]'")
 
             # Check and add new columns to invoices table
             cursor.execute("PRAGMA table_info(invoices)")
             invoices_columns = {row[1] for row in cursor.fetchall()}
 
             if "due_date" not in invoices_columns:
-                cursor.execute(
-                    "ALTER TABLE invoices ADD COLUMN due_date TEXT DEFAULT ''"
-                )
+                cursor.execute("ALTER TABLE invoices ADD COLUMN due_date TEXT DEFAULT ''")
 
             if "subtotal" not in invoices_columns:
-                cursor.execute(
-                    "ALTER TABLE invoices ADD COLUMN subtotal INTEGER DEFAULT 0"
-                )
+                cursor.execute("ALTER TABLE invoices ADD COLUMN subtotal INTEGER DEFAULT 0")
 
             if "line_items" not in invoices_columns:
-                cursor.execute(
-                    "ALTER TABLE invoices ADD COLUMN line_items TEXT DEFAULT '[]'"
-                )
+                cursor.execute("ALTER TABLE invoices ADD COLUMN line_items TEXT DEFAULT '[]'")
 
             cursor.close()
 
@@ -398,25 +389,23 @@ class Repository:
             """
             cursor.execute(tax_rates_schema)
 
+            # Create migration_state table for tracking cursor positions per entity type
+            migration_state_schema = """
+                CREATE TABLE IF NOT EXISTS migration_state (
+                    entity_type TEXT PRIMARY KEY,
+                    last_cursor TEXT,
+                    updated_at TEXT NOT NULL
+                )
+            """
+            cursor.execute(migration_state_schema)
+
             # Create indexes for foreign keys to improve query performance
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_properties_client_id ON properties(client_id)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_jobs_client_id ON jobs(client_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_jobs_property_id ON jobs(property_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_jobs_quote_id ON jobs(quote_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_requests_client_id ON requests(client_id)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_requests_property_id ON requests(property_id)"  # noqa: E501
-            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_properties_client_id ON properties(client_id)")  # noqa: E501
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_client_id ON jobs(client_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_property_id ON jobs(property_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_quote_id ON jobs(quote_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_client_id ON requests(client_id)")  # noqa: E501
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_requests_property_id ON requests(property_id)")  # noqa: E501
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_requests_converted_to_quote_id ON requests(converted_to_quote_id)"  # noqa: E501
             )
@@ -425,35 +414,19 @@ class Repository:
             )
 
             # Also add indexes for existing foreign keys if not already present
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_quotes_client_id ON quotes(client_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_notes_entity ON notes(entity_type, entity_id)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_attachments_note_id ON attachments(note_id)"  # noqa: E501
-            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id)")  # noqa: E501
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_quotes_client_id ON quotes(client_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_notes_entity ON notes(entity_type, entity_id)")  # noqa: E501
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_attachments_note_id ON attachments(note_id)")  # noqa: E501
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_note_references_entity ON note_references(entity_type, entity_id)"  # noqa: E501
             )
 
             # Add indexes for new entity foreign keys
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_expenses_job_id ON expenses(job_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_visits_job_id ON visits(job_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_visits_client_id ON visits(client_id)"
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_visits_property_id ON visits(property_id)"  # noqa: E501
-            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_job_id ON expenses(job_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_visits_job_id ON visits(job_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_visits_client_id ON visits(client_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_visits_property_id ON visits(property_id)")  # noqa: E501
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_visits_assigned_user_id ON visits(assigned_user_id)"  # noqa: E501
             )
@@ -661,9 +634,7 @@ class Repository:
 
     def read(
         self, entity_type: type, entity_id: str
-    ) -> Optional[
-        Union[Client, Invoice, Quote, Note, Attachment, Job, Property, Request]
-    ]:
+    ) -> Optional[Union[Client, Invoice, Quote, Note, Attachment, Job, Property, Request]]:
         """Read a single entity by ID.
 
         Generic method supporting all entity types.
@@ -1886,9 +1857,7 @@ class Repository:
             reference_data = [
                 (ref.get("note_id"), ref.get("entity_type"), ref.get("entity_id"))
                 for ref in references
-                if all(
-                    [ref.get("note_id"), ref.get("entity_type"), ref.get("entity_id")]
-                )
+                if all([ref.get("note_id"), ref.get("entity_type"), ref.get("entity_id")])
             ]
 
             if reference_data:
@@ -1904,9 +1873,7 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to save note references: {e}") from e
 
-    def get_note_references(
-        self, limit: int = 1000, offset: int = 0
-    ) -> List[dict[str, str]]:
+    def get_note_references(self, limit: int = 1000, offset: int = 0) -> List[dict[str, str]]:
         """Retrieve note references from temporary storage with pagination.
 
         Supports batch processing of large reference collections by providing
@@ -1983,9 +1950,7 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to clear note references: {e}") from e
 
-    def save_oauth_tokens(
-        self, access_token: str, refresh_token: str, expires_at: str
-    ) -> None:
+    def save_oauth_tokens(self, access_token: str, refresh_token: str, expires_at: str) -> None:
         """Save OAuth2 tokens to the database.
 
         Stores access token, refresh token, and expiration information in the oauth_tokens
@@ -2171,3 +2136,94 @@ class Repository:
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve all GraphQL costs: {e}") from e
+
+    def entity_exists(self, table_name: str, entity_id: str) -> bool:
+        """Check if an entity exists in the specified table using fast primary key lookup.
+
+        Uses SELECT 1 FROM {table} WHERE id = ? LIMIT 1 pattern for O(log n) performance.
+        This method provides fast existence checking for skip logic during migrations.
+
+        Args:
+            table_name: Name of the table to check (e.g., 'clients', 'invoices')
+            entity_id: Primary key ID of the entity to check
+
+        Returns:
+            True if entity exists, False otherwise
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+
+            # Use parameterized query for security and direct primary key lookup for performance
+            cursor.execute(f"SELECT 1 FROM {table_name} WHERE id = ? LIMIT 1", (entity_id,))
+            result = cursor.fetchone()
+            cursor.close()
+
+            return result is not None
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to check entity existence in {table_name}: {e}") from e
+
+    def save_migration_state(self, entity_type: str, last_cursor: Optional[str]) -> None:
+        """Save migration state for cursor-based resumption.
+
+        Stores the last processed cursor position for the specified entity type.
+        Uses INSERT OR REPLACE for upsert behavior following Repository patterns.
+
+        Args:
+            entity_type: Type of entity being migrated (e.g., 'clients', 'invoices')
+            last_cursor: Last processed cursor position, None if starting fresh
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute(
+                """INSERT OR REPLACE INTO migration_state
+                   (entity_type, last_cursor, updated_at)
+                   VALUES (?, ?, datetime('now'))""",
+                (entity_type, last_cursor),
+            )
+
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to save migration state for {entity_type}: {e}") from e
+
+    def get_migration_state(self, entity_type: str) -> Optional[MigrationState]:
+        """Retrieve migration state for the specified entity type.
+
+        Gets the last processed cursor position for resuming migrations from
+        the last processed position.
+
+        Args:
+            entity_type: Type of entity to get state for (e.g., 'clients', 'invoices')
+
+        Returns:
+            MigrationState instance if found, None if no state exists
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+
+            cursor.execute(
+                "SELECT entity_type, last_cursor, updated_at FROM migration_state WHERE entity_type = ?",
+                (entity_type,),
+            )
+            row = cursor.fetchone()
+            cursor.close()
+
+            if row:
+                return MigrationState(entity_type=row[0], last_cursor=row[1], updated_at=row[2])
+
+            return None
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to get migration state for {entity_type}: {e}") from e
