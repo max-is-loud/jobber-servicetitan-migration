@@ -8,6 +8,11 @@ observability in TightBeam v2 Jobber API operations.
 import threading
 import time
 from collections import deque
+from typing import TYPE_CHECKING, Optional
+
+# Import Repository for type hints and dependency injection
+if TYPE_CHECKING:
+    from ..repositories.repository import Repository
 
 
 class MetricsCollector:
@@ -27,14 +32,26 @@ class MetricsCollector:
     most recent 100 entries to prevent unbounded growth during long operations.
     """
 
-    def __init__(self, max_response_times: int = 100):
+    def __init__(
+        self,
+        max_response_times: int = 100,
+        max_cost_history: int = 100,
+        repository: Optional["Repository"] = None,
+    ):
         """Initialize the metrics collector.
 
         Args:
             max_response_times: Maximum number of response times to keep for
                                average calculations (default: 100)
+            max_cost_history: Maximum number of GraphQL cost entries to keep
+                             for analysis (default: 100)
+            repository: Optional Repository instance for persistent storage
+                       of GraphQL cost data (default: None)
         """
         self._lock = threading.Lock()
+
+        # Repository dependency for persistent storage (optional)
+        self._repository = repository
 
         # Request tracking
         self._total_requests = 0
@@ -44,9 +61,7 @@ class MetricsCollector:
 
         # Timing tracking
         self._start_time = time.time()
-        self._response_times = deque(
-            maxlen=max_response_times
-        )  # Efficient fixed-size queue
+        self._response_times = deque(maxlen=max_response_times)  # Efficient fixed-size queue
 
         # Throttling and delay tracking
         self._total_throttle_time = 0.0  # Total time spent waiting due to rate limiting
@@ -55,6 +70,13 @@ class MetricsCollector:
         # Advanced metrics
         self._retry_attempts = 0  # Total number of retry attempts
         self._successful_retries = 0  # Retries that eventually succeeded
+
+        # GraphQL cost tracking
+        self._graphql_costs = deque(maxlen=max_cost_history)  # Efficient fixed-size queue for cost history
+
+        # Rate limit header tracking
+        self._rate_limit_remaining = None  # Current remaining quota
+        self._rate_limit_reset = None  # Reset timestamp
 
     def record_request(self, response_time: float) -> None:
         """Record a successful API request completion.
@@ -94,6 +116,76 @@ class MetricsCollector:
             self._retry_attempts += 1
             if successful:
                 self._successful_retries += 1
+
+    def record_graphql_cost(
+        self,
+        requested_cost: int,
+        actual_cost: int,
+        query_type: str = "unknown",
+        batch_size: int = 0,
+    ) -> None:
+        """Record GraphQL query cost information.
+
+        Args:
+            requested_cost: The cost requested/estimated for the query
+            actual_cost: The actual cost returned in response extensions
+            query_type: Type of GraphQL query (e.g., 'fetch_clients', 'fetch_invoices')
+            batch_size: Number of records requested in the batch
+        """
+        with self._lock:
+            timestamp = time.time()
+            cost_difference = actual_cost - requested_cost
+
+            # Maintain existing in-memory deque storage for immediate access
+            self._graphql_costs.append(
+                {
+                    "requested": requested_cost,
+                    "actual": actual_cost,
+                    "timestamp": timestamp,
+                    "difference": cost_difference,
+                    "query_type": query_type,
+                    "batch_size": batch_size,
+                }
+            )
+
+            # Persist to database when Repository is available
+            if self._repository is not None:
+                try:
+                    # Create ISO format timestamp for database storage
+                    from datetime import datetime
+
+                    created_at = datetime.fromtimestamp(timestamp).isoformat() + "Z"
+
+                    cost_data = {
+                        "query_type": query_type,
+                        "batch_size": batch_size,
+                        "requested_cost": requested_cost,
+                        "actual_cost": actual_cost,
+                        "cost_difference": cost_difference,
+                        "timestamp": timestamp,
+                        "created_at": created_at,
+                    }
+
+                    # Save to database using repository
+                    self._repository.save_graphql_costs([cost_data])
+
+                except Exception:
+                    # Log error but don't interrupt the metrics collection flow
+                    # This ensures that database issues don't break the application
+                    pass  # Silent failure to maintain application stability
+
+    def record_rate_limit_headers(self, remaining: int | None = None, reset_time: int | None = None) -> None:
+        """Record rate limiting header values from API responses.
+
+        Args:
+            remaining: Number of requests remaining in current window
+            reset_time: Timestamp when rate limit window resets
+        """
+        with self._lock:
+            if remaining is not None:
+                self._rate_limit_remaining = remaining
+            if reset_time is not None:
+                self._rate_limit_reset = reset_time
 
     def get_requests_per_minute(self) -> float:
         """Calculate current requests per minute rate.
@@ -187,6 +279,57 @@ class MetricsCollector:
         with self._lock:
             return time.time() - self._start_time
 
+    def get_cost_statistics(self) -> dict[str, float | int]:
+        """Get GraphQL cost statistics summary.
+
+        Returns:
+            dict: Cost statistics including averages, min/max, and trends
+        """
+        with self._lock:
+            if not self._graphql_costs:
+                return {
+                    "total_queries": 0,
+                    "avg_requested_cost": 0.0,
+                    "avg_actual_cost": 0.0,
+                    "min_actual_cost": 0,
+                    "max_actual_cost": 0,
+                    "avg_cost_difference": 0.0,
+                    "cost_accuracy_percentage": 0.0,
+                }
+
+            requested_costs = [entry["requested"] for entry in self._graphql_costs]
+            actual_costs = [entry["actual"] for entry in self._graphql_costs]
+            differences = [entry["difference"] for entry in self._graphql_costs]
+
+            # Calculate accuracy (how close requested was to actual)
+            total_accuracy = sum(
+                100 - abs(diff / actual) * 100 if actual > 0 else 100 for diff, actual in zip(differences, actual_costs)
+            )
+            avg_accuracy = total_accuracy / len(self._graphql_costs) if self._graphql_costs else 0
+
+            return {
+                "total_queries": len(self._graphql_costs),
+                "avg_requested_cost": sum(requested_costs) / len(requested_costs),
+                "avg_actual_cost": sum(actual_costs) / len(actual_costs),
+                "min_actual_cost": min(actual_costs),
+                "max_actual_cost": max(actual_costs),
+                "avg_cost_difference": sum(differences) / len(differences),
+                "cost_accuracy_percentage": avg_accuracy,
+            }
+
+    def get_rate_limit_status(self) -> dict[str, int | float | None]:
+        """Get current rate limit status from headers.
+
+        Returns:
+            dict: Current rate limit status including remaining quota and reset time
+        """
+        with self._lock:
+            return {
+                "remaining_requests": self._rate_limit_remaining,
+                "reset_timestamp": self._rate_limit_reset,
+                "seconds_until_reset": (self._rate_limit_reset - time.time() if self._rate_limit_reset else None),
+            }
+
     def get_summary(self) -> dict[str, float | int]:
         """Get comprehensive metrics summary as dictionary.
 
@@ -198,8 +341,10 @@ class MetricsCollector:
         """
         with self._lock:
             uptime = self.get_uptime_seconds()
+            cost_stats = self.get_cost_statistics()
+            rate_limit_status = self.get_rate_limit_status()
 
-            return {
+            summary = {
                 # Request statistics
                 "total_requests": self._total_requests,
                 "successful_requests": self._successful_requests,
@@ -226,6 +371,30 @@ class MetricsCollector:
                 "uptime_seconds": uptime,
                 "start_time": self._start_time,
             }
+
+            # Add GraphQL cost statistics
+            summary.update(
+                {
+                    "graphql_total_queries": cost_stats["total_queries"],
+                    "graphql_avg_requested_cost": cost_stats["avg_requested_cost"],
+                    "graphql_avg_actual_cost": cost_stats["avg_actual_cost"],
+                    "graphql_min_actual_cost": cost_stats["min_actual_cost"],
+                    "graphql_max_actual_cost": cost_stats["max_actual_cost"],
+                    "graphql_avg_cost_difference": cost_stats["avg_cost_difference"],
+                    "graphql_cost_accuracy_percentage": cost_stats["cost_accuracy_percentage"],
+                }
+            )
+
+            # Add rate limit status
+            summary.update(
+                {
+                    "rate_limit_remaining": rate_limit_status["remaining_requests"],
+                    "rate_limit_reset_timestamp": rate_limit_status["reset_timestamp"],
+                    "rate_limit_seconds_until_reset": rate_limit_status["seconds_until_reset"],
+                }
+            )
+
+            return summary
 
     def get_human_readable_summary(self) -> dict[str, str]:
         """Get human-readable metrics summary.
@@ -273,6 +442,11 @@ class MetricsCollector:
             self._max_throttle_time = 0.0
             self._retry_attempts = 0
             self._successful_retries = 0
+            # Reset GraphQL cost tracking
+            self._graphql_costs.clear()
+            # Reset rate limit header tracking
+            self._rate_limit_remaining = None
+            self._rate_limit_reset = None
 
     def __repr__(self) -> str:
         """Return string representation of the metrics collector."""

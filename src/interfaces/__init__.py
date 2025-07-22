@@ -1,6 +1,8 @@
 from typing import Any, Optional, Protocol
 
 from ..exceptions import ConfigurationError, JobberApiError
+from .base_extractor import BaseExtractor
+from .config_manager import ConfigManager
 from .logger import Logger
 
 """
@@ -31,7 +33,8 @@ class IHttpClient(Protocol):
         headers: dict[str, str],
         json: Optional[dict[str, Any]] = None,
         data: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
+        return_headers: bool = False,
+    ) -> dict[str, Any] | tuple[dict[str, Any], dict[str, Optional[str]]]:
         """
         Execute HTTP POST request with comprehensive error handling.
 
@@ -40,9 +43,12 @@ class IHttpClient(Protocol):
             headers: HTTP headers to include in the request
             json: Optional JSON payload for the request body
             data: Optional form data for the request body (mutually exclusive with json)
+            return_headers: If True, return tuple (response_data, rate_limit_headers)
 
         Returns:
-            Dictionary containing parsed JSON response
+            Dictionary containing parsed JSON response, or tuple (response_data, headers)
+            if return_headers=True. Rate limit headers include 'x-ratelimit-remaining'
+            and 'x-ratelimit-reset' values (None if not present).
 
         Raises:
             ConfigurationError: If authentication is invalid (401/403 responses)
@@ -51,4 +57,4 @@ class IHttpClient(Protocol):
         ...
 
 
-__all__ = ["IHttpClient", "Logger"]
+__all__ = ["BaseExtractor", "ConfigManager", "IHttpClient", "Logger"]

@@ -35,7 +35,7 @@ def _simulate_oauth_manager_exchange_code_for_tokens(
         "access_token": f"access_token_for_{authorization_code[:10]}",
         "refresh_token": f"refresh_token_for_{authorization_code[:10]}",
         "token_type": "Bearer",
-        "scope": "read write"
+        "scope": "read write",
         # NOTE: expires_in field may be missing from Jobber API
     }
 
@@ -48,21 +48,15 @@ def _simulate_oauth_manager_exchange_code_for_tokens(
     return token_response
 
 
-def _simulate_repository_save_oauth_tokens(
-    access_token: str, refresh_token: str, expires_at: str
-) -> None:
+def _simulate_repository_save_oauth_tokens(access_token: str, refresh_token: str, expires_at: str) -> None:
     """Simulate Repository.save_oauth_tokens method."""
-    print(
-        f"[Simulated] Saving tokens: access_token={access_token[:20]}..., expires_at={expires_at}"
-    )
+    print(f"[Simulated] Saving tokens: access_token={access_token[:20]}..., expires_at={expires_at}")
 
 
 @oauth_app.command("callback")
 def oauth_callback_fixed(
     code: str = typer.Option(..., help="Authorization code from OAuth2 callback"),
-    db: Optional[Path] = typer.Option(
-        None, help="SQLite database path for token storage"
-    ),
+    db: Optional[Path] = typer.Option(None, help="SQLite database path for token storage"),
 ) -> None:
     """
     Handle OAuth2 callback and exchange authorization code for tokens.
@@ -89,14 +83,10 @@ def oauth_callback_fixed(
         #     raise OAuth2Error("Invalid or missing 'expires_in' field in token data.")
         #
         # AFTER (fixed):
-        expires_in = token_data.get(
-            "expires_in", 3600
-        )  # Default to 1 hour if not provided
+        expires_in = token_data.get("expires_in", 3600)  # Default to 1 hour if not provided
         # ========================================================================
 
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        ).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
         _simulate_repository_save_oauth_tokens(
             access_token=token_data["access_token"],
@@ -105,13 +95,9 @@ def oauth_callback_fixed(
         )
 
         if "expires_in" in token_data:
-            typer.echo(
-                f"✅ OAuth2 tokens stored successfully! (expires in {expires_in} seconds)"
-            )
+            typer.echo(f"✅ OAuth2 tokens stored successfully! (expires in {expires_in} seconds)")
         else:
-            typer.echo(
-                f"✅ OAuth2 tokens stored successfully! (used default expiration: {expires_in} seconds)"
-            )
+            typer.echo(f"✅ OAuth2 tokens stored successfully! (used default expiration: {expires_in} seconds)")
 
         typer.echo("You can now use the migration tool with OAuth2 authentication.")
 
@@ -156,13 +142,11 @@ def test_expires_in_scenarios() -> None:
     typer.echo(f"   ✅ Used provided expires_in: {expires_in} seconds")
 
     # Scenario 2: Token response WITHOUT expires_in field (the issue!)
-    typer.echo(
-        "\n📋 Scenario 2: Token response missing expires_in field (causes issue #4)"
-    )
+    typer.echo("\n📋 Scenario 2: Token response missing expires_in field (causes issue #4)")
     token_missing_expires = {
         "access_token": "test_token_456",
         "refresh_token": "refresh_456",
-        "token_type": "Bearer"
+        "token_type": "Bearer",
         # expires_in is MISSING!
     }
 
@@ -170,9 +154,7 @@ def test_expires_in_scenarios() -> None:
     typer.echo("   🚨 Problematic approach:")
     expires_in_problematic = token_missing_expires.get("expires_in")
     if expires_in_problematic is None:
-        typer.echo(
-            "      ❌ Would raise OAuth2Error: 'Invalid or missing expires_in field'"
-        )
+        typer.echo("      ❌ Would raise OAuth2Error: 'Invalid or missing expires_in field'")
 
     # Show the fixed approach
     typer.echo("   ✅ Fixed approach:")
@@ -180,9 +162,7 @@ def test_expires_in_scenarios() -> None:
     typer.echo(f"      ✅ Used default expires_in: {expires_in_fixed} seconds")
 
     typer.echo()
-    typer.echo(
-        "🎉 Fix successfully prevents crashes when Jobber API omits expires_in field!"
-    )
+    typer.echo("🎉 Fix successfully prevents crashes when Jobber API omits expires_in field!")
     typer.echo("💡 Default expiration of 3600 seconds (1 hour) is used as fallback.")
 
 
@@ -202,7 +182,7 @@ def demonstrate_fix():
     token_missing_expires = {
         "access_token": "token_456",
         "refresh_token": "refresh_456",
-        "token_type": "Bearer"
+        "token_type": "Bearer",
         # expires_in missing!
     }
 

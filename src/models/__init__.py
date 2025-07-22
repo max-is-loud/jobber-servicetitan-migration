@@ -1,7 +1,39 @@
 """Data models for Jobber entities."""
 
+from .attachment import Attachment
 from .client import Client
+from .expense import Expense
+from .graphql_cost import GraphQLCost
 from .invoice import Invoice
+from .job import Job
+from .migration_state import MigrationState
 from .migration_summary import MigrationSummary
+from .note import Note
+from .product_service import ProductService
+from .property import Property
+from .quote import Quote
+from .request import Request
+from .tax_rate import TaxRate
+from .timesheet_entry import TimeSheetEntry
+from .user import User
+from .visit import Visit
 
-__all__ = ["Client", "Invoice", "MigrationSummary"]
+__all__ = [
+    "Attachment",
+    "Client",
+    "Expense",
+    "GraphQLCost",
+    "Invoice",
+    "Job",
+    "MigrationState",
+    "MigrationSummary",
+    "Note",
+    "ProductService",
+    "Property",
+    "Quote",
+    "Request",
+    "TaxRate",
+    "TimeSheetEntry",
+    "User",
+    "Visit",
+]

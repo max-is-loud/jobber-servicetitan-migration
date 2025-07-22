@@ -32,7 +32,8 @@ class HttpClient:
         headers: dict[str, str],
         json: Optional[dict[str, Any]] = None,
         data: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
+        return_headers: bool = False,
+    ) -> dict[str, Any] | tuple[dict[str, Any], dict[str, Optional[str]]]:
         """
         Execute HTTP POST request with comprehensive error handling.
 
@@ -41,9 +42,12 @@ class HttpClient:
             headers: HTTP headers to include in the request
             json: Optional JSON payload for the request body
             data: Optional form data for the request body (mutually exclusive with json)
+            return_headers: If True, return tuple (response_data, rate_limit_headers)
 
         Returns:
-            Dictionary containing parsed JSON response
+            Dictionary containing parsed JSON response, or tuple (response_data, headers)
+            if return_headers=True. Rate limit headers include 'x-ratelimit-remaining'
+            and 'x-ratelimit-reset' values (None if not present).
 
         Raises:
             ConfigurationError: If authentication is invalid (401/403 responses)
@@ -97,5 +101,14 @@ class HttpClient:
             raise JobberApiError(
                 f"Invalid JSON response from API. Response: {response.text[:200]}..."
             ) from e
+
+        # Return response data with optional headers
+        if return_headers:
+            # Extract rate limiting headers for performance monitoring
+            rate_limit_headers = {
+                "x-ratelimit-remaining": response.headers.get("x-ratelimit-remaining"),
+                "x-ratelimit-reset": response.headers.get("x-ratelimit-reset"),
+            }
+            return response_data, rate_limit_headers
 
         return response_data

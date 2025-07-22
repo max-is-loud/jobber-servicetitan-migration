@@ -1,0 +1,47 @@
+rate_limits:
+  conservative:
+    capacity: 250
+    refill_rate: 240
+    initial_tokens: 40
+    safety_margin: 0.52
+  moderate:
+    capacity: 600
+    refill_rate: 600
+    initial_tokens: 150
+    safety_margin: 0.1
+  aggressive:
+    capacity: 500
+    refill_rate: 480
+    initial_tokens: 100
+    safety_margin: 0.04
+pagination:
+  clients: 39
+  invoices: 40
+  quotes: 50
+  jobs: 30
+  properties: 30
+  requests: 30
+  users: 30
+  expenses: 30
+  visits: 30
+  timesheet_entries: 30
+  product_services: 30
+  tax_rates: 30
+  default: 30
+delays:
+  page_delay: 0.5
+  request_timeout: 30.0
+  retry_base_delay: 2.0
+backoff:
+  initial_delay: 5.0
+  max_delay: 300.0
+  multiplier: 2.0
+  jitter_factor: 0.2
+logging:
+  verbose_cost_monitoring: true
+  performance_logging: true
+  level: DEBUG
+database:
+  default_path: tightbeam.db
+  timeout: 30.0
+  wal_mode: true
