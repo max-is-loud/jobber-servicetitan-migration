@@ -6,6 +6,7 @@ to resolve GraphQL throttling issues in TightBeam v2 Jobber API operations.
 """
 
 import threading
+import time
 from typing import List
 
 from ..interfaces import Logger
@@ -72,15 +73,10 @@ class NoteReferenceCollector:
             )
 
             # Auto-flush to persistent storage if batch size reached
-            if (
-                self._enable_persistence
-                and len(self._note_references) >= self._batch_size
-            ):
+            if self._enable_persistence and len(self._note_references) >= self._batch_size:
                 self._flush_to_storage()
 
-    def collect_note_ids_from_edges(
-        self, note_edges: List[dict], entity_type: str, entity_id: str
-    ) -> None:
+    def collect_note_ids_from_edges(self, note_edges: List[dict], entity_type: str, entity_id: str) -> None:
         """Collect multiple note IDs from GraphQL edges structure.
 
         Convenience method for processing the common GraphQL edges/node pattern
@@ -145,36 +141,42 @@ class NoteReferenceCollector:
             # If persistence is enabled, also get references from storage
             if self._enable_persistence:
                 try:
-                    self._logger.info("Loading note references from storage...")
-                    # Get all references from storage in batches
-                    offset = 0
+                    storage_count = self._repository.get_note_references_count()
+                    self._logger.info(
+                        f"Loading {storage_count} note references from storage (using efficient cursor-based pagination)..."
+                    )
+                    # Get all references from storage using efficient cursor-based batches
+                    last_id = 0
                     batch_size = 1000
                     total_from_storage = 0
                     batch_count = 0
+                    estimated_batches = (storage_count // batch_size) + 1
+
                     while True:
                         batch_count += 1
-                        self._logger.info(
-                            f"Loading batch {batch_count} (offset {offset})..."
+                        batch_start = time.time()
+                        self._logger.info(f"Loading batch {batch_count}/{estimated_batches} (last_id: {last_id})...")
+                        storage_refs, last_id = self._repository.get_note_references_cursor_based(
+                            limit=batch_size, last_id=last_id
                         )
-                        storage_refs = self._repository.get_note_references(
-                            limit=batch_size, offset=offset
-                        )
+                        batch_elapsed = time.time() - batch_start
                         if not storage_refs:
                             break
                         references.extend(storage_refs)
                         total_from_storage += len(storage_refs)
-                        offset += batch_size
                         self._logger.info(
-                            f"Loaded {len(storage_refs)} references from batch {batch_count} (total from storage: {total_from_storage})"
+                            f"Loaded {len(storage_refs)} references from batch {batch_count} in {batch_elapsed:.2f}s (total from storage: {total_from_storage})"
                         )
+                        if batch_elapsed > 0.5:  # Log batches that take >500ms (should be much faster now)
+                            self._logger.info(
+                                f"⚠️  Batch {batch_count} took {batch_elapsed:.2f}s - unexpected slow performance"
+                            )
 
                     self._logger.info(
                         f"Completed loading {total_from_storage} references from storage in {batch_count - 1} batches"
                     )
                 except Exception as e:
-                    self._logger.error(
-                        f"Failed to retrieve references from storage: {e}"
-                    )
+                    self._logger.error(f"Failed to retrieve references from storage: {e}")
 
             total_references = len(references)
             self._logger.info(f"Total references loaded: {total_references}")
@@ -210,11 +212,7 @@ class NoteReferenceCollector:
             List of note references for the specified entity type
         """
         with self._lock:
-            return [
-                ref
-                for ref in self._note_references
-                if ref["entity_type"] == entity_type
-            ]
+            return [ref for ref in self._note_references if ref["entity_type"] == entity_type]
 
     def clear_references(self) -> None:
         """Clear all collected note references.
@@ -236,9 +234,7 @@ class NoteReferenceCollector:
                 except Exception as e:
                     self._logger.error(f"Failed to clear storage references: {e}")
 
-            self._logger.debug(
-                f"Cleared {references_count} note references from collector"
-            )
+            self._logger.debug(f"Cleared {references_count} note references from collector")
 
     def get_unique_note_ids(self) -> List[str]:
         """Get list of unique note IDs from all collected references.

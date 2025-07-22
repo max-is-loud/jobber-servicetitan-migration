@@ -1913,6 +1913,52 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve note references: {e}") from e
 
+    def get_note_references_cursor_based(self, limit: int = 1000, last_id: int = 0) -> tuple[List[dict[str, str]], int]:
+        """Retrieve note references using cursor-based pagination for better performance.
+
+        Uses cursor-based pagination with 'WHERE id > last_id' instead of OFFSET,
+        providing O(log n) performance instead of O(n) for large datasets.
+
+        Args:
+            limit: Maximum number of references to retrieve (default: 1000)
+            last_id: ID of the last processed record (default: 0)
+
+        Returns:
+            Tuple of (list of references, last_id for next batch)
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                """SELECT id, note_id, entity_type, entity_id
+                   FROM note_references
+                   WHERE id > ?
+                   ORDER BY id
+                   LIMIT ?""",
+                (last_id, limit),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            references = [
+                {
+                    "note_id": row[1],
+                    "entity_type": row[2],
+                    "entity_id": row[3],
+                }
+                for row in rows
+            ]
+
+            # Get the last ID for next batch
+            next_last_id = rows[-1][0] if rows else last_id
+
+            return references, next_last_id
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve note references: {e}") from e
+
     def get_note_references_count(self) -> int:
         """Get total count of note references in temporary storage.
 
