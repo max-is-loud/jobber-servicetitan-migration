@@ -26,9 +26,7 @@ class TaxRate:
 
     id: str  # EncodedId! - The unique identifier
     name: str  # name: String! - Display name for the tax rate (e.g., "HST", "GST+PST")
-    rate_percentage: (
-        str  # rate: Float! - Tax rate percentage (stored as string for precision)
-    )
+    rate_percentage: str  # rate: Float! - Tax rate percentage (stored as string for precision)
     region: str  # region: String - Geographic region or jurisdiction
     compound: str  # compound: Boolean - Whether tax compounds with others
     active: str  # active: Boolean - Whether tax rate is currently active

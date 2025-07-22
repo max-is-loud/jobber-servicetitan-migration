@@ -67,9 +67,7 @@ app.add_typer(migrate_app, name="migrate")
 def migrate_callback(
     ctx: typer.Context,
     db: Annotated[Optional[Path], typer.Option(help="SQLite database path")] = None,
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
     deferred_notes: Annotated[
         bool,
         typer.Option(
@@ -117,6 +115,13 @@ def migrate_callback(
             ),
         ),
     ] = False,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database (for resuming interrupted migrations)",
+        ),
+    ] = False,
 ) -> None:
     """
     Data migration commands for TightBeam.
@@ -128,7 +133,7 @@ def migrate_callback(
         config_manager = ConfigManagerImpl()
     except ConfigurationError as e:
         typer.echo(f"Error: Configuration loading failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     # Validate optimization level using ConfigManager
     try:
@@ -136,10 +141,9 @@ def migrate_callback(
     except ConfigurationError:
         available_levels = ["conservative", "moderate", "aggressive"]
         typer.echo(
-            f"Error: Invalid optimization level '{optimization_level}'. "
-            f"Choose from: {', '.join(available_levels)}"
+            f"Error: Invalid optimization level '{optimization_level}'. " f"Choose from: {', '.join(available_levels)}"
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Store shared configuration in context for subcommands
     ctx.ensure_object(dict)
@@ -152,12 +156,14 @@ def migrate_callback(
             "optimization_level": optimization_level,
             "enable_cost_monitoring": enable_cost_monitoring,
             "cost_monitoring_verbose": cost_monitoring_verbose,
+            "resume": resume,
         }
     )
 
     if ctx.invoked_subcommand is None:
         # Default to 'all' command when no subcommand is specified
         migrate_all(
+            ctx=ctx,
             db=ctx.obj["db"],
             verbose=verbose,
             deferred_notes=deferred_notes,
@@ -165,6 +171,7 @@ def migrate_callback(
             optimization_level=optimization_level,
             enable_cost_monitoring=enable_cost_monitoring,
             cost_monitoring_verbose=cost_monitoring_verbose,
+            resume=resume,
         )
 
 
@@ -221,17 +228,13 @@ def _get_oauth2_config() -> tuple[str, str, str]:
     redirect_uri = os.environ.get("JOBBER_REDIRECT_URI")
 
     if not client_id:
-        raise ConfigurationError(
-            "JOBBER_CLIENT_ID environment variable is required for OAuth2 operations"
-        )
+        raise ConfigurationError("JOBBER_CLIENT_ID environment variable is required for OAuth2 operations")
     if not client_secret:
         raise ConfigurationError(
             "JOBBER_CLIENT_SECRET environment variable is required for OAuth2 operations"  # noqa: E501
         )
     if not redirect_uri:
-        raise ConfigurationError(
-            "JOBBER_REDIRECT_URI environment variable is required for OAuth2 operations"
-        )
+        raise ConfigurationError("JOBBER_REDIRECT_URI environment variable is required for OAuth2 operations")
 
     return client_id, client_secret, redirect_uri
 
@@ -283,9 +286,7 @@ def _create_repository(db_path: Optional[Path] = None) -> Repository:
 
 @oauth_app.command("init")
 def oauth_init(
-    db: Annotated[
-        Optional[Path], typer.Option(help="SQLite database path for token storage")
-    ] = None,
+    db: Annotated[Optional[Path], typer.Option(help="SQLite database path for token storage")] = None,
     port: Annotated[int, typer.Option(help="Local callback server port")] = 8080,
     auto_complete: Annotated[
         bool,
@@ -392,9 +393,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
     server = HTTPServer(("localhost", port), CallbackHandler)
 
     # Start server in background thread
-    server_thread = threading.Thread(
-        target=server.serve_forever, name="oauth-callback-server"
-    )
+    server_thread = threading.Thread(target=server.serve_forever, name="oauth-callback-server")
     server_thread.daemon = True
     server_thread.start()
 
@@ -420,9 +419,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         typer.echo(f"URL: {auth_url}")
         typer.echo()
         typer.echo("⏳ Waiting for authorization... (this will happen automatically)")
-        typer.echo(
-            "   Complete the authorization in your browser, then come back here!"
-        )
+        typer.echo("   Complete the authorization in your browser, then come back here!")
 
         # Open browser
         try:
@@ -443,15 +440,11 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
                     typer.echo("✅ Browser opened via Windows")
                 except subprocess.CalledProcessError:
                     typer.echo("⚠️ Could not open browser automatically", err=True)
-                    typer.echo(
-                        "🔗 Please manually copy and paste this URL into your browser:"
-                    )
+                    typer.echo("🔗 Please manually copy and paste this URL into your browser:")
                     typer.echo(f"   {auth_url}")
             else:
                 typer.echo(f"⚠️ Could not open browser: {e}", err=True)
-                typer.echo(
-                    "🔗 Please manually copy and paste this URL into your browser:"
-                )
+                typer.echo("🔗 Please manually copy and paste this URL into your browser:")
                 typer.echo(f"   {auth_url}")
 
         # Wait for callback (with timeout)
@@ -468,9 +461,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
             sys.exit(1)
         elif not auth_result["code"]:
             typer.echo(f"\n⏰ Authorization timed out after {timeout} seconds")
-            typer.echo(
-                "Please try again or use manual mode: tightbeam oauth init --no-auto"
-            )
+            typer.echo("Please try again or use manual mode: tightbeam oauth init --no-auto")
             sys.exit(1)
 
         # Verify state parameter
@@ -478,7 +469,9 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
             typer.echo("\n🔒 Security Error: State parameter mismatch")
             sys.exit(1)
 
-        typer.echo(f"\n🎉 Authorization code received: {auth_result['code'][:20]}...")
+        code = auth_result["code"]
+        code_display = code[:20] if code and isinstance(code, str) else "None"  # pylint: disable=unsubscriptable-object
+        typer.echo(f"\n🎉 Authorization code received: {code_display}...")
         typer.echo("🔄 Exchanging authorization code for tokens...")
 
         # Automatically complete the OAuth2 flow
@@ -491,12 +484,8 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         from datetime import datetime, timedelta, timezone
 
         # Handle missing expires_in field (Jobber API doesn't always include it)
-        expires_in = token_data.get(
-            "expires_in", 3600
-        )  # Default to 1 hour if not provided
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        ).isoformat()
+        expires_in = token_data.get("expires_in", 3600)  # Default to 1 hour if not provided
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
         repository.save_oauth_tokens(
             access_token=token_data["access_token"],
@@ -567,9 +556,7 @@ def _oauth_init_manual(db: Optional[Path]) -> None:
                 typer.echo("✅ Browser opened via Windows")
             except subprocess.CalledProcessError:
                 typer.echo("⚠️ Could not open browser automatically", err=True)
-                typer.echo(
-                    "🔗 Please manually copy and paste this URL into your browser:"
-                )
+                typer.echo("🔗 Please manually copy and paste this URL into your browser:")
                 typer.echo(f"   {auth_url}")
         else:
             typer.echo(f"⚠️ Could not open browser: {e}", err=True)
@@ -580,9 +567,7 @@ def _oauth_init_manual(db: Optional[Path]) -> None:
 @oauth_app.command("callback")
 def oauth_callback(
     code: Annotated[str, typer.Option(help="Authorization code from OAuth2 callback")],
-    db: Annotated[
-        Optional[Path], typer.Option(help="SQLite database path for token storage")
-    ] = None,
+    db: Annotated[Optional[Path], typer.Option(help="SQLite database path for token storage")] = None,
 ) -> None:
     """
     Handle OAuth2 callback and exchange authorization code for tokens.
@@ -605,9 +590,7 @@ def oauth_callback(
         expires_in = token_data.get("expires_in")
         if not isinstance(expires_in, int) or expires_in <= 0:
             raise OAuth2Error("Invalid or missing 'expires_in' field in token data.")
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        ).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
         repository.save_oauth_tokens(
             access_token=token_data["access_token"],
@@ -735,12 +718,8 @@ def oauth_status() -> None:
 
 @oauth_app.command("clear")
 def oauth_clear(
-    db: Annotated[
-        Optional[Path], typer.Option(help="SQLite database path for token storage")
-    ] = None,
-    confirm: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip confirmation prompt")
-    ] = False,
+    db: Annotated[Optional[Path], typer.Option(help="SQLite database path for token storage")] = None,
+    confirm: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt")] = False,
 ) -> None:
     """
     Clear stored OAuth2 tokens from database.
@@ -783,12 +762,9 @@ def oauth_clear(
 
 @migrate_app.command("all")
 def migrate_all(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
+    ctx: typer.Context,
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
     deferred_notes: Annotated[
         bool,
         typer.Option(
@@ -803,6 +779,13 @@ def migrate_all(
             help="Enable temporary storage for note references (for very large migrations)",
         ),
     ] = False,
+    resume: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database (for resuming interrupted migrations)",
+        ),
+    ] = None,
     optimization_level: str = "moderate",
     enable_cost_monitoring: bool = True,
     cost_monitoring_verbose: bool = False,
@@ -821,6 +804,12 @@ def migrate_all(
     - Prevents GraphQL throttling on large datasets
     - Use --immediate-notes to disable (legacy mode)
 
+    Resume Mode (--resume):
+    - Skips entities that already exist in the database
+    - Enables resuming interrupted migrations without duplicate processing
+    - Uses fast primary key lookups for efficient existence checking
+    - Works with all entity types including clients, invoices, quotes, notes, and attachments
+
     Authentication options:
     1. Set JOBBER_TOKEN environment variable with a valid Jobber API token
     2. Configure OAuth2 variables (JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, JOBBER_REDIRECT_URI)
@@ -831,17 +820,33 @@ def migrate_all(
         verbose: Enable verbose logging output for debugging
         deferred_notes: Use deferred notes loading to prevent throttling (default: True)
         enable_notes_persistence: Enable temporary storage for very large migrations (default: False)
+        resume: Skip entities that already exist in database (default: False)
     """  # noqa: E501
+    # Get shared configuration from context (group-level flags take precedence)
+    config = ctx.obj or {}
+
+    # Resolve actual parameter values (context values override local defaults)
+    actual_db = config.get("db", db)
+    actual_verbose = config.get("verbose", verbose)
+    actual_deferred_notes = config.get("deferred_notes", deferred_notes)
+    actual_enable_notes_persistence = config.get("enable_notes_persistence", enable_notes_persistence)
+    actual_optimization_level = config.get("optimization_level", optimization_level)
+    actual_enable_cost_monitoring = config.get("enable_cost_monitoring", enable_cost_monitoring)
+    actual_cost_monitoring_verbose = config.get("cost_monitoring_verbose", cost_monitoring_verbose)
+
+    # Special handling for resume: command-level explicit value > group-level > default False
+    actual_resume = resume if resume is not None else config.get("resume", False)
+
     connection = None
 
     try:
         # Create database connection
-        logger = ConsoleLogger(verbose=verbose)
-        logger.info(f"Connecting to database: {db}")
+        logger = ConsoleLogger(verbose=actual_verbose)
+        logger.info(f"Connecting to database: {actual_db}")
 
         # Ensure parent directory exists
-        db.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.Connection(str(db))
+        actual_db.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.Connection(str(actual_db))
 
         # Dependency injection - wire up all components
         logger.debug("Initializing application components")
@@ -872,9 +877,7 @@ def migrate_all(
         config_manager = ConfigManagerImpl()
 
         # Initialize metrics collector for cost monitoring if enabled
-        metrics_collector = (
-            MetricsCollector(repository=repository) if enable_cost_monitoring else None
-        )
+        metrics_collector = MetricsCollector(repository=repository) if enable_cost_monitoring else None
         jobber_client = JobberClient(
             auth_provider,
             metrics_collector=metrics_collector,
@@ -882,19 +885,17 @@ def migrate_all(
         )
 
         # Initialize rate limiting components with dynamic optimization settings
-        rate_config = config_manager.get_rate_limit_config(optimization_level)
+        rate_config = config_manager.get_rate_limit_config(actual_optimization_level)
         capacity = rate_config["capacity"]
         refill_rate = rate_config["refill_rate"]
         initial_tokens = rate_config["initial_tokens"]
         requests_per_second = refill_rate / 60
         logger.info(
-            f"Setting up {optimization_level.upper()} rate limiting "
+            f"Setting up {actual_optimization_level.upper()} rate limiting "
             f"({capacity} tokens, {refill_rate}/minute, ~{requests_per_second:.0f} req/sec)"
         )
         # Dynamic optimization for Jobber GraphQL API based on user selection
-        rate_limiter = TokenBucketRateLimiter(
-            capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens
-        )
+        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
         # Use backoff strategy from configuration for GraphQL throttling
         backoff_config = config_manager.get_backoff_config()
         backoff_strategy = ExponentialBackoffStrategy(
@@ -941,14 +942,12 @@ def migrate_all(
         note_reference_collector = None
         notes_extractor = None
 
-        if deferred_notes:
-            logger.info(
-                "🔄 Deferred notes loading enabled - preventing GraphQL throttling"
-            )
+        if actual_deferred_notes:
+            logger.info("🔄 Deferred notes loading enabled - preventing GraphQL throttling")
             note_reference_collector = NoteReferenceCollector(
                 repository=repository,
                 logger=logger,
-                enable_persistence=enable_notes_persistence,
+                enable_persistence=actual_enable_notes_persistence,
                 batch_size=1000,
             )
             notes_extractor = NotesExtractor(
@@ -957,9 +956,10 @@ def migrate_all(
                 repository,
                 logger,
                 config_manager=config_manager,
+                skip_existing_entities=actual_resume,
             )
 
-            if enable_notes_persistence:
+            if actual_enable_notes_persistence:
                 logger.info("💾 Notes persistence enabled for large migration volumes")
         else:
             logger.info("⚡ Immediate notes processing enabled (legacy mode)")
@@ -970,6 +970,7 @@ def migrate_all(
             repository,
             logger,
             config_manager=config_manager,
+            skip_existing_entities=actual_resume,
         )
         attachment_downloader = AttachmentDownloader(
             jobber_client,
@@ -978,9 +979,15 @@ def migrate_all(
             logger,
             base_download_path="./attachments",
             config_manager=config_manager,
+            skip_existing_entities=actual_resume,
         )
 
         # Create migration coordinator with all dependencies including optional extractors  # noqa: E501
+        if actual_resume:
+            logger.info("🔄 Resume mode ENABLED - will skip existing entities and use saved cursors")
+        else:
+            logger.info("🆕 Full migration mode - processing all entities from beginning")
+
         migration_coordinator = MigrationCoordinator(
             jobber_client=jobber_client,
             entity_mapper=entity_mapper,
@@ -991,6 +998,7 @@ def migrate_all(
             quotes_extractor=quotes_extractor,
             attachment_downloader=attachment_downloader,
             config_manager=config_manager,
+            resume=actual_resume,
         )
 
         # Execute migration workflow
@@ -998,28 +1006,24 @@ def migrate_all(
 
         # Enhanced startup logging for optimization configuration
         logger.info("🚀 Performance Configuration:")
-        logger.info(f"   • Optimization level: {optimization_level.upper()}")
+        logger.info(f"   • Optimization level: {actual_optimization_level.upper()}")
         logger.info(f"   • Target rate: {requests_per_second:.0f} requests/sec")
 
         # Calculate safety margin
         api_limit_per_sec = 500 / 60  # 500 req/min = ~8.33 req/sec
-        safety_margin = (
-            (api_limit_per_sec - requests_per_second) / api_limit_per_sec
-        ) * 100
+        safety_margin = ((api_limit_per_sec - requests_per_second) / api_limit_per_sec) * 100
         logger.info(f"   • Safety margin: {safety_margin:.0f}% below API limits")
 
         # Cost monitoring status
-        if enable_cost_monitoring:
+        if actual_enable_cost_monitoring:
             logger.info("   • GraphQL cost monitoring: ENABLED")
-            if cost_monitoring_verbose:
+            if actual_cost_monitoring_verbose:
                 logger.info("   • Verbose cost monitoring: ENABLED")
         else:
             logger.info("   • GraphQL cost monitoring: DISABLED")
 
         logger.info("🔍 Rate Limiter Status:")
-        logger.info(
-            f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Refill rate: {rate_limiter.get_refill_rate()}/min (~{rate_limiter.get_refill_rate()/60:.1f}/sec)"
         )
@@ -1039,12 +1043,8 @@ def migrate_all(
         )
         if summary.duration_seconds > 0:
             entities_per_minute = (total_entities / summary.duration_seconds) * 60
-            logger.info(
-                f"   • Migration speed: {entities_per_minute:.1f} entities/minute"
-            )
-            logger.info(
-                f"   • Total entities: {total_entities} in {summary.duration_seconds:.1f}s"
-            )
+            logger.info(f"   • Migration speed: {entities_per_minute:.1f} entities/minute")
+            logger.info(f"   • Total entities: {total_entities} in {summary.duration_seconds:.1f}s")
 
         # Enhanced rate limiting and cost metrics display
         if metrics_collector:
@@ -1056,29 +1056,19 @@ def migrate_all(
             if cost_monitoring_verbose and cost_stats["total_queries"] > 0:
                 logger.info("🧮 GraphQL Cost Analysis:")
                 logger.info(f"   • Total queries: {cost_stats['total_queries']}")
-                logger.info(
-                    f"   • Avg requested cost: {cost_stats['avg_requested_cost']:.0f}"
-                )
-                logger.info(
-                    f"   • Avg actual cost: {cost_stats['avg_actual_cost']:.0f}"
-                )
-                logger.info(
-                    f"   • Cost accuracy: {cost_stats['cost_accuracy_percentage']:.1f}%"
-                )
+                logger.info(f"   • Avg requested cost: {cost_stats['avg_requested_cost']:.0f}")
+                logger.info(f"   • Avg actual cost: {cost_stats['avg_actual_cost']:.0f}")
+                logger.info(f"   • Cost accuracy: {cost_stats['cost_accuracy_percentage']:.1f}%")
 
             # Rate limit status
             if rate_limit_status["remaining_requests"] is not None:
                 logger.info("🔄 Rate Limit Status:")
-                logger.info(
-                    f"   • Remaining requests: {rate_limit_status['remaining_requests']}"
-                )
+                logger.info(f"   • Remaining requests: {rate_limit_status['remaining_requests']}")
                 if (
                     rate_limit_status["seconds_until_reset"] is not None
                     and rate_limit_status["seconds_until_reset"] > 0
                 ):
-                    logger.info(
-                        f"   • Reset in: {rate_limit_status['seconds_until_reset']:.0f}s"
-                    )
+                    logger.info(f"   • Reset in: {rate_limit_status['seconds_until_reset']:.0f}s")
         else:
             logger.info("   • Cost monitoring: DISABLED")
             rate_metrics = {
@@ -1098,12 +1088,11 @@ def migrate_all(
             "download_failures": summary.download_failures,
             "duration": summary.format_duration(),
             "errors_count": len(summary.errors),
-            "status": (
-                "SUCCESS" if len(summary.errors) == 0 else "COMPLETED_WITH_ERRORS"
-            ),
+            "status": ("SUCCESS" if len(summary.errors) == 0 else "COMPLETED_WITH_ERRORS"),
             # Add migration mode information
-            "deferred_notes_enabled": deferred_notes,
-            "notes_persistence_enabled": enable_notes_persistence,
+            "deferred_notes_enabled": actual_deferred_notes,
+            "notes_persistence_enabled": actual_enable_notes_persistence,
+            "resume_mode_enabled": actual_resume,
             # Add rate limiting metrics
             "rate_limiting": {
                 "requests_per_minute": rate_metrics["requests_per_minute"],
@@ -1118,28 +1107,20 @@ def migrate_all(
         logger.log_summary(summary_data)
 
         # Display deferred notes performance information
-        if deferred_notes and summary.note_references_collected > 0:
+        if actual_deferred_notes and summary.note_references_collected > 0:
             logger.info("📊 Deferred Notes Processing Performance:")
-            logger.info(
-                f"   • Note references collected: {summary.note_references_collected:,}"
-            )
+            logger.info(f"   • Note references collected: {summary.note_references_collected:,}")
             logger.info(f"   • Notes processed separately: {summary.notes_processed:,}")
             throttle_rate = float(rate_metrics["throttle_rate"].rstrip("%"))
             if throttle_rate < 5.0:  # Less than 5% throttling
                 logger.info("   ✅ GraphQL throttling successfully minimized!")
             else:
-                logger.info(
-                    f"   ⚠️  Some throttling occurred: {rate_metrics['throttle_rate']} of requests"
-                )
-            logger.info(
-                "   🎯 Trading complex nested queries for simple individual queries"
-            )
+                logger.info(f"   ⚠️  Some throttling occurred: {rate_metrics['throttle_rate']} of requests")
+            logger.info("   🎯 Trading complex nested queries for simple individual queries")
 
         # Display final token status and rate limiting effectiveness
         logger.info("🔍 Final Token Status:")
-        logger.info(
-            f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Total requests: {rate_metrics['total_requests']} "
             f"(avg: {rate_metrics['requests_per_minute']}/min)"
@@ -1153,15 +1134,11 @@ def migrate_all(
         elif float(rate_metrics["throttle_rate"].rstrip("%")) < 5.0:
             logger.info("   ⚠️  Minor throttling - rate limiting working well")
         else:
-            logger.info(
-                "   🔴 Significant throttling - consider further rate limit tuning"
-            )
+            logger.info("   🔴 Significant throttling - consider further rate limit tuning")
 
         # Display errors if any
         if summary.errors:
-            logger.error(
-                f"Migration completed with {len(summary.errors)} non-fatal errors:"
-            )
+            logger.error(f"Migration completed with {len(summary.errors)} non-fatal errors:")
             for i, error in enumerate(summary.errors, 1):
                 logger.error(f"  {i}. {error}")
 
@@ -1174,9 +1151,7 @@ def migrate_all(
         # Configuration/environment issues
         typer.echo(f"Configuration Error: {e}", err=True)
         typer.echo("To configure authentication, you can either:", err=True)
-        typer.echo(
-            "  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True
-        )  # noqa: E501
+        typer.echo("  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True)  # noqa: E501
         typer.echo("  2. Manually set the following environment variables:", err=True)
         typer.echo("     - JOBBER_CLIENT_ID", err=True)
         typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
@@ -1188,9 +1163,7 @@ def migrate_all(
     except JobberApiError as e:
         # API communication issues
         typer.echo(f"API Error: {e}", err=True)
-        typer.echo(
-            "Please check your internet connection and OAuth2 token validity.", err=True
-        )
+        typer.echo("Please check your internet connection and OAuth2 token validity.", err=True)
         sys.exit(2)
 
     except MappingError as e:
@@ -1228,9 +1201,14 @@ def migrate_all(
 @migrate_app.command("quotes")
 def migrate_quotes(
     ctx: typer.Context,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database",
+        ),
+    ] = False,
 ) -> None:
     """
     Extract quote data from Jobber API to SQLite database.
@@ -1244,6 +1222,7 @@ def migrate_quotes(
 
     Args:
         page_limit: Optional limit on number of pages to process (for testing)
+        resume: Skip entities that already exist in database (for resuming interrupted migrations)
     """  # noqa: E501
     # Get shared configuration from context
     config = ctx.obj or {}
@@ -1258,18 +1237,24 @@ def migrate_quotes(
         verbose=config.get("verbose", False),
         page_limit=page_limit,
         optimization_level=config.get("optimization_level", "moderate"),
+        resume=resume,
     )
 
 
 @migrate_app.command("attachments")
 def migrate_attachments(
     ctx: typer.Context,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     download_path: Annotated[
         str, typer.Option("--download-path", help="Base path for attachment downloads")
     ] = "./attachments",
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database",
+        ),
+    ] = False,
 ) -> None:
     """
     Extract attachment data and download files from Jobber API to local storage.
@@ -1293,15 +1278,21 @@ def migrate_attachments(
         page_limit=page_limit,
         download_path=download_path,
         optimization_level=config.get("optimization_level", "moderate"),
+        resume=resume,
     )
 
 
 @migrate_app.command("users")
 def migrate_users(
     ctx: typer.Context,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database",
+        ),
+    ] = False,
 ) -> None:
     """
     Extract user data from Jobber API to SQLite database.
@@ -1323,20 +1314,22 @@ def migrate_users(
         verbose=config.get("verbose", False),
         page_limit=page_limit,
         optimization_level=config.get("optimization_level", "moderate"),
+        resume=resume,
     )
 
 
 @migrate_app.command("expenses")
 def migrate_expenses(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database",
+        ),
     ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
 ) -> None:
     """
     Extract expense data from Jobber API to SQLite database.
@@ -1357,20 +1350,22 @@ def migrate_expenses(
         db=db,
         verbose=verbose,
         page_limit=page_limit,
+        resume=resume,
     )
 
 
 @migrate_app.command("visits")
 def migrate_visits(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database",
+        ),
     ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
 ) -> None:
     """
     Extract visit data from Jobber API to SQLite database.
@@ -1390,20 +1385,22 @@ def migrate_visits(
         db=db,
         verbose=verbose,
         page_limit=page_limit,
+        resume=resume,
     )
 
 
 @migrate_app.command("timesheet-entries")
 def migrate_timesheet_entries(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database",
+        ),
     ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
 ) -> None:
     """
     Extract timesheet entry data from Jobber API to SQLite database.
@@ -1423,20 +1420,22 @@ def migrate_timesheet_entries(
         db=db,
         verbose=verbose,
         page_limit=page_limit,
+        resume=resume,
     )
 
 
 @migrate_app.command("products")
 def migrate_products(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database",
+        ),
     ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
 ) -> None:
     """
     Extract product/service data from Jobber API to SQLite database.
@@ -1456,20 +1455,22 @@ def migrate_products(
         db=db,
         verbose=verbose,
         page_limit=page_limit,
+        resume=resume,
     )
 
 
 @migrate_app.command("tax-rates")
 def migrate_tax_rates(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Skip entities that already exist in database",
+        ),
     ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
 ) -> None:
     """
     Extract tax rate data from Jobber API to SQLite database.
@@ -1489,6 +1490,7 @@ def migrate_tax_rates(
         db=db,
         verbose=verbose,
         page_limit=page_limit,
+        resume=resume,
     )
 
 
@@ -1499,6 +1501,7 @@ def _execute_entity_extraction(
     page_limit: Optional[int] = None,
     download_path: str = "./attachments",
     optimization_level: str = "moderate",
+    resume: bool = False,
 ) -> None:
     """
     Common entity extraction workflow for all supported entity types.
@@ -1510,6 +1513,8 @@ def _execute_entity_extraction(
         verbose: Enable verbose logging
         page_limit: Optional limit on number of pages to process
         download_path: Base directory for attachment downloads (attachments only)
+        optimization_level: Rate limiting optimization level ('conservative', 'moderate', 'aggressive')
+        resume: Skip entities that already exist in database
     """
     connection = None
 
@@ -1559,9 +1564,7 @@ def _execute_entity_extraction(
             f"Setting up {optimization_level.upper()} rate limiting for entity extraction "
             f"({capacity} tokens, {refill_rate}/minute, ~{requests_per_second:.0f} req/sec)"
         )
-        rate_limiter = TokenBucketRateLimiter(
-            capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens
-        )
+        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
         backoff_config = config_manager.get_backoff_config()
         backoff_strategy = ExponentialBackoffStrategy(
             initial_delay=backoff_config["initial_delay"],
@@ -1593,6 +1596,7 @@ def _execute_entity_extraction(
                 repository,
                 logger,
                 config_manager=config_manager,
+                skip_existing_entities=resume,
             )
 
         elif entity_type == "attachments":
@@ -1605,46 +1609,70 @@ def _execute_entity_extraction(
                 logger,
                 base_download_path=download_path,
                 config_manager=config_manager,
+                skip_existing_entities=resume,
             )
 
         elif entity_type == "users":
             from .extractors import UsersExtractor
 
-            extractor = UsersExtractor(jobber_client, entity_mapper, repository, logger)
+            extractor = UsersExtractor(
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
+                skip_existing_entities=resume,
+            )
 
         elif entity_type == "expenses":
             from .extractors import ExpensesExtractor
 
             extractor = ExpensesExtractor(
-                jobber_client, entity_mapper, repository, logger
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
+                skip_existing_entities=resume,
             )
 
         elif entity_type == "visits":
             from .extractors import VisitsExtractor
 
             extractor = VisitsExtractor(
-                jobber_client, entity_mapper, repository, logger
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
+                skip_existing_entities=resume,
             )
 
         elif entity_type == "timesheet-entries":
             from .extractors import TimesheetEntriesExtractor
 
             extractor = TimesheetEntriesExtractor(
-                jobber_client, entity_mapper, repository, logger
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
             )
 
         elif entity_type == "products":
             from .extractors import ProductServicesExtractor
 
             extractor = ProductServicesExtractor(
-                jobber_client, entity_mapper, repository, logger
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
             )
 
         elif entity_type == "tax-rates":
             from .extractors import TaxRatesExtractor
 
             extractor = TaxRatesExtractor(
-                jobber_client, entity_mapper, repository, logger
+                jobber_client,
+                entity_mapper,
+                repository,
+                logger,
             )
 
         else:
@@ -1657,9 +1685,7 @@ def _execute_entity_extraction(
         # Execute extraction
         logger.info(f"Starting {entity_type} extraction workflow")
         logger.info("🔍 Initial Token Status:")
-        logger.info(
-            f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         start_time = time.time()
 
         result = extractor.extract(page_limit=page_limit)
@@ -1673,12 +1699,8 @@ def _execute_entity_extraction(
         logger.info(f"\n📊 {entity_type.title()} Extraction Analysis:")
         if extraction_time > 0:
             entities_per_minute = (result["entities_processed"] / extraction_time) * 60
-            logger.info(
-                f"   • Extraction speed: {entities_per_minute:.1f} entities/minute"
-            )
-            logger.info(
-                f"   • Total entities: {result['entities_processed']} in {extraction_time:.1f}s"
-            )
+            logger.info(f"   • Extraction speed: {entities_per_minute:.1f} entities/minute")
+            logger.info(f"   • Total entities: {result['entities_processed']} in {extraction_time:.1f}s")
 
         # Create default rate metrics if metrics_collector is None (moderate default)
         rate_metrics = {
@@ -1694,11 +1716,7 @@ def _execute_entity_extraction(
             "pages_processed": result["pages_processed"],
             "extraction_time": extraction_time,
             "has_next_page": result["has_next_page"],
-            "status": (
-                "SUCCESS"
-                if extraction_summary["error_count"] == 0
-                else "COMPLETED_WITH_ERRORS"
-            ),
+            "status": ("SUCCESS" if extraction_summary["error_count"] == 0 else "COMPLETED_WITH_ERRORS"),
             "errors_count": extraction_summary["error_count"],
             "rate_limiting": {
                 "requests_per_minute": rate_metrics["requests_per_minute"],
@@ -1723,9 +1741,7 @@ def _execute_entity_extraction(
 
         # Display final token status and rate limiting effectiveness
         logger.info("🔍 Final Token Status:")
-        logger.info(
-            f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Throttling rate: {rate_metrics['throttle_rate']} "
             f"({rate_metrics['throttled_requests']} throttled)"
@@ -1735,22 +1751,16 @@ def _execute_entity_extraction(
         elif float(rate_metrics["throttle_rate"].rstrip("%")) < 5.0:
             logger.info("   ⚠️  Minor throttling - rate limiting working well")
         else:
-            logger.info(
-                "   🔴 Significant throttling - consider further rate limit tuning"
-            )
+            logger.info("   🔴 Significant throttling - consider further rate limit tuning")
 
         # Display results
         logger.log_summary(summary_data)
 
         # Log entity-specific success messages
         if entity_type == "quotes":
-            logger.info(
-                f"✅ Quote extraction completed: {result['entities_processed']} quotes processed"  # noqa: E501
-            )
+            logger.info(f"✅ Quote extraction completed: {result['entities_processed']} quotes processed")  # noqa: E501
         elif entity_type == "notes":
-            logger.info(
-                f"✅ Note extraction completed: {result['entities_processed']} notes processed"  # noqa: E501
-            )
+            logger.info(f"✅ Note extraction completed: {result['entities_processed']} notes processed")  # noqa: E501
         elif entity_type == "attachments":
             files_downloaded = result.get("files_downloaded", 0)
             total_bytes = result.get("total_bytes_downloaded", 0)
@@ -1759,17 +1769,13 @@ def _execute_entity_extraction(
                 f"{files_downloaded} files downloaded ({total_bytes} bytes)"
             )
         elif entity_type == "users":
-            logger.info(
-                f"✅ User extraction completed: {result['entities_processed']} users processed"  # noqa: E501
-            )
+            logger.info(f"✅ User extraction completed: {result['entities_processed']} users processed")  # noqa: E501
         elif entity_type == "expenses":
             logger.info(
                 f"✅ Expense extraction completed: {result['entities_processed']} expenses processed"  # noqa: E501
             )
         elif entity_type == "visits":
-            logger.info(
-                f"✅ Visit extraction completed: {result['entities_processed']} visits processed"  # noqa: E501
-            )
+            logger.info(f"✅ Visit extraction completed: {result['entities_processed']} visits processed")  # noqa: E501
         elif entity_type == "timesheet-entries":
             logger.info(
                 f"✅ Timesheet entry extraction completed: {result['entities_processed']} timesheet entries processed"  # noqa: E501
@@ -1785,24 +1791,18 @@ def _execute_entity_extraction(
 
         # Handle continuation if more pages available
         if result["has_next_page"] and page_limit is None:
-            logger.info(
-                f"📄 More {entity_type} pages available. Run again to continue extraction."  # noqa: E501
-            )
+            logger.info(f"📄 More {entity_type} pages available. Run again to continue extraction.")  # noqa: E501
             logger.info(f"Next cursor: {result.get('end_cursor', 'N/A')}")
 
         # Exit with appropriate code
         exit_code = 0 if extraction_summary["error_count"] == 0 else 1
-        logger.info(
-            f"{entity_type.capitalize()} extraction completed with exit code {exit_code}"  # noqa: E501
-        )
+        logger.info(f"{entity_type.capitalize()} extraction completed with exit code {exit_code}")  # noqa: E501
         sys.exit(exit_code)
 
     except ConfigurationError as e:
         typer.echo(f"Configuration Error: {e}", err=True)
         typer.echo("To configure authentication, you can either:", err=True)
-        typer.echo(
-            "  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True
-        )
+        typer.echo("  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True)
         typer.echo("  2. Manually set the following environment variables:", err=True)
         typer.echo("     - JOBBER_CLIENT_ID", err=True)
         typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
@@ -1812,9 +1812,7 @@ def _execute_entity_extraction(
 
     except JobberApiError as e:
         typer.echo(f"API Error: {e}", err=True)
-        typer.echo(
-            "Please check your internet connection and OAuth2 token validity.", err=True
-        )
+        typer.echo("Please check your internet connection and OAuth2 token validity.", err=True)
         sys.exit(2)
 
     except MappingError as e:
@@ -1831,9 +1829,7 @@ def _execute_entity_extraction(
         sys.exit(4)
 
     except KeyboardInterrupt:
-        typer.echo(
-            f"\n{entity_type.capitalize()} extraction interrupted by user.", err=True
-        )
+        typer.echo(f"\n{entity_type.capitalize()} extraction interrupted by user.", err=True)
         sys.exit(130)
 
     except Exception as e:

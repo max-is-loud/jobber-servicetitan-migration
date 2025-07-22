@@ -40,6 +40,7 @@ class MigrationCoordinator:
         quotes_extractor: Optional[QuotesExtractor] = None,
         attachment_downloader: Optional[AttachmentDownloader] = None,
         config_manager: Optional[ConfigManagerImpl] = None,
+        resume: bool = False,
     ) -> None:
         """Initialize MigrationCoordinator with required dependencies.
 
@@ -53,12 +54,14 @@ class MigrationCoordinator:
             quotes_extractor: Optional extractor for Quote entities
             attachment_downloader: Optional downloader for Attachment files
             config_manager: Optional ConfigManager for delays and pagination settings
+            resume: Whether to skip entities that already exist in database
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
         self._repository = repository
         self._logger = logger
         self._config_manager = config_manager or ConfigManagerImpl()
+        self._resume = resume
 
         # Note reference collector for deferred note processing
         self._note_reference_collector = note_reference_collector
@@ -132,34 +135,24 @@ class MigrationCoordinator:
                     self._logger.info("Starting quote migration")
                     summary.quotes_processed = self._migrate_quotes(summary)
                 else:
-                    self._logger.debug(
-                        "Quote extraction skipped - no extractor provided"
-                    )
+                    self._logger.debug("Quote extraction skipped - no extractor provided")
 
                 # Process collected note references using deferred processing
                 if self._notes_extractor and self._note_reference_collector:
                     self._logger.info("Starting deferred note migration")
                     summary.notes_processed = self._migrate_deferred_notes(summary)
                 else:
-                    self._logger.debug(
-                        "Deferred note extraction skipped - no extractor or collector provided"
-                    )
+                    self._logger.debug("Deferred note extraction skipped - no extractor or collector provided")
 
                 if self._attachment_downloader:
-                    self._logger.info(
-                        "Starting attachment migration with file downloads"
-                    )
+                    self._logger.info("Starting attachment migration with file downloads")
                     attachment_results = self._migrate_attachments(summary)
                     summary.attachments_processed = attachment_results["entities"]
                     summary.files_downloaded = attachment_results["files_downloaded"]
-                    summary.total_bytes_downloaded = attachment_results[
-                        "bytes_downloaded"
-                    ]
+                    summary.total_bytes_downloaded = attachment_results["bytes_downloaded"]
                     summary.download_failures = attachment_results["download_failures"]
                 else:
-                    self._logger.debug(
-                        "Attachment extraction skipped - no downloader provided"
-                    )
+                    self._logger.debug("Attachment extraction skipped - no downloader provided")
             else:
                 self._logger.info(
                     "Extended entity migration disabled - using legacy Client/Invoice only mode"  # noqa: E501
@@ -176,16 +169,12 @@ class MigrationCoordinator:
         finally:
             # Calculate final timing
             end_time = time.time()
-            summary.end_time = time.strftime(
-                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(end_time)
-            )
+            summary.end_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(end_time))
             summary.duration_seconds = end_time - start_time
 
             # Update note reference count if collector was used
             if self._note_reference_collector:
-                summary.note_references_collected = (
-                    self._note_reference_collector.get_reference_count()
-                )
+                summary.note_references_collected = self._note_reference_collector.get_reference_count()
 
             # Log comprehensive completion summary
             self._logger.info("Migration workflow completed")
@@ -205,12 +194,66 @@ class MigrationCoordinator:
         """
         return self.migrate(include_extended_entities=False)
 
+    def _get_resume_cursor(self, entity_type: str) -> Optional[str]:
+        """Get resume cursor for the specified entity type.
+
+        Args:
+            entity_type: Entity type name (e.g., 'clients', 'invoices')
+
+        Returns:
+            Last saved cursor position, or None if no saved state exists
+        """
+        if not self._resume:
+            return None
+
+        try:
+            migration_state = self._repository.get_migration_state(entity_type)
+            if migration_state:
+                self._logger.info(f"🔄 Found saved cursor for {entity_type}: {migration_state.last_cursor}")
+                return migration_state.last_cursor
+            return None
+        except Exception as e:
+            self._logger.debug(f"Failed to get resume cursor for {entity_type}: {e}")
+            return None
+
+    def _save_cursor_progress(self, entity_type: str, cursor: Optional[str]) -> None:
+        """Save cursor progress for resumption.
+
+        Args:
+            entity_type: Entity type name (e.g., 'clients', 'invoices')
+            cursor: Current cursor position to save
+        """
+        if not self._resume:
+            return
+
+        try:
+            self._repository.save_migration_state(entity_type, cursor)
+            self._logger.debug(f"Saved cursor progress for {entity_type}: {cursor}")
+        except Exception as e:
+            self._logger.debug(f"Failed to save cursor progress for {entity_type}: {e}")
+
+    def _cleanup_cursor_state(self, entity_type: str) -> None:
+        """Clean up cursor state after successful completion.
+
+        Args:
+            entity_type: Entity type name (e.g., 'clients', 'invoices')
+        """
+        if not self._resume:
+            return
+
+        try:
+            self._repository.save_migration_state(entity_type, None)
+            self._logger.debug(f"Cleaned up cursor state for {entity_type}")
+        except Exception as e:
+            self._logger.debug(f"Failed to cleanup cursor state for {entity_type}: {e}")
+
     def _migrate_clients(self, summary: MigrationSummary) -> int:
         """
         Migrate all clients using cursor-based pagination.
 
         Implements GraphQL Connection specification cursor pagination to process
         all clients in batches, mapping and persisting each batch.
+        Supports cursor resumption when resume mode is enabled.
 
         Args:
             summary: Migration summary for error tracking
@@ -223,8 +266,21 @@ class MigrationCoordinator:
             MappingError: If client data transformation fails
             RepositoryError: If database operations fail
         """
-        total_processed = 0
-        cursor = None
+        # Initialize counter - if resuming, start from current database count
+        cursor = self._get_resume_cursor("clients") if self._resume else None
+        if self._resume and cursor:
+            try:
+                # Get current count from database when resuming
+                existing_count = self._repository._connection.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
+                total_processed = existing_count
+                self._logger.info(f"🔄 Resuming client migration from saved cursor: {cursor}")
+                self._logger.info(f"📊 Starting from {existing_count:,} existing clients in database")
+            except Exception as e:
+                self._logger.error(f"Could not get existing client count: {e}")
+                total_processed = 0
+        else:
+            total_processed = 0
+
         page_number = 1
 
         while True:
@@ -258,9 +314,7 @@ class MigrationCoordinator:
                                 client_notes, "client", client.id
                             )
                     except MappingError as e:
-                        error_msg = (
-                            f"Failed to map client {node.get('id', 'unknown')}: {e}"
-                        )
+                        error_msg = f"Failed to map client {node.get('id', 'unknown')}: {e}"
                         self._logger.error(error_msg)
                         summary.add_error(error_msg)
 
@@ -268,39 +322,36 @@ class MigrationCoordinator:
                 if clients:
                     self._repository.save_clients(clients)
                     total_processed += len(clients)
-                    self._logger.info(
-                        f"Processed {len(clients)} clients (total: {total_processed})"
-                    )
+                    self._logger.info(f"Processed {len(clients)} clients (total: {total_processed})")
 
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
+                cursor = page_info.get("endCursor")
+
+                # Save cursor progress after successful page processing
+                if self._resume and cursor:
+                    self._save_cursor_progress("clients", cursor)
+
                 if not has_next_page:
                     self._logger.debug("Reached last page of clients")
                     break
 
-                # Update cursor for next iteration
-                cursor = page_info.get("endCursor")
                 page_number += 1
 
-                # Add configurable delay between pages to prevent API overload
+                # Add delay between pages
                 page_delay = self._config_manager.get_delay_config("page_delay")
                 time.sleep(page_delay)
-                self._logger.debug(
-                    f"Added {page_delay}s delay before page {page_number}"
-                )
 
-            except JobberApiError as e:
-                error_msg = f"API error during client migration page {page_number}: {e}"
+            except (JobberApiError, MappingError, RepositoryError) as e:
+                error_msg = f"Error processing clients page {page_number}: {e}"
                 self._logger.error(error_msg)
                 summary.add_error(error_msg)
                 raise
-            except RepositoryError as e:
-                error_msg = (
-                    f"Database error during client migration page {page_number}: {e}"
-                )
-                self._logger.error(error_msg)
-                summary.add_error(error_msg)
-                raise
+
+        # Clean up cursor state after successful completion
+        if self._resume:
+            self._cleanup_cursor_state("clients")
+            self._logger.debug("✅ Completed client migration - cursor state cleaned up")
 
         return total_processed
 
@@ -310,6 +361,7 @@ class MigrationCoordinator:
 
         Implements GraphQL Connection specification cursor pagination to process
         all invoices in batches, mapping and persisting each batch.
+        Supports cursor resumption when resume mode is enabled.
 
         Args:
             summary: Migration summary for error tracking
@@ -322,8 +374,21 @@ class MigrationCoordinator:
             MappingError: If invoice data transformation fails
             RepositoryError: If database operations fail
         """
-        total_processed = 0
-        cursor = None
+        # Initialize counter - if resuming, start from current database count
+        cursor = self._get_resume_cursor("invoices") if self._resume else None
+        if self._resume and cursor:
+            try:
+                # Get current count from database when resuming
+                existing_count = self._repository._connection.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
+                total_processed = existing_count
+                self._logger.info(f"🔄 Resuming invoice migration from saved cursor: {cursor}")
+                self._logger.info(f"📊 Starting from {existing_count:,} existing invoices in database")
+            except Exception as e:
+                self._logger.error(f"Could not get existing invoice count: {e}")
+                total_processed = 0
+        else:
+            total_processed = 0
+
         page_number = 1
 
         while True:
@@ -357,9 +422,7 @@ class MigrationCoordinator:
                                 invoice_notes, "invoice", invoice.id
                             )
                     except MappingError as e:
-                        error_msg = (
-                            f"Failed to map invoice {node.get('id', 'unknown')}: {e}"
-                        )
+                        error_msg = f"Failed to map invoice {node.get('id', 'unknown')}: {e}"
                         self._logger.error(error_msg)
                         summary.add_error(error_msg)
 
@@ -367,67 +430,60 @@ class MigrationCoordinator:
                 if invoices:
                     self._repository.save_invoices(invoices)
                     total_processed += len(invoices)
-                    self._logger.info(
-                        f"Processed {len(invoices)} invoices (total: {total_processed})"
-                    )
+                    self._logger.info(f"Processed {len(invoices)} invoices (total: {total_processed})")
 
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
+                cursor = page_info.get("endCursor")
+
+                # Save cursor progress after successful page processing
+                if self._resume and cursor:
+                    self._save_cursor_progress("invoices", cursor)
+
                 if not has_next_page:
                     self._logger.debug("Reached last page of invoices")
                     break
 
-                # Update cursor for next iteration
-                cursor = page_info.get("endCursor")
                 page_number += 1
 
-                # Add configurable delay between pages to prevent API overload
+                # Add delay between pages
                 page_delay = self._config_manager.get_delay_config("page_delay")
                 time.sleep(page_delay)
-                self._logger.debug(
-                    f"Added {page_delay}s delay before invoice page {page_number}"
-                )
 
-            except JobberApiError as e:
-                error_msg = (
-                    f"API error during invoice migration page {page_number}: {e}"
-                )
+            except (JobberApiError, MappingError, RepositoryError) as e:
+                error_msg = f"Error processing invoices page {page_number}: {e}"
                 self._logger.error(error_msg)
                 summary.add_error(error_msg)
                 raise
-            except RepositoryError as e:
-                error_msg = (
-                    f"Database error during invoice migration page {page_number}: {e}"
-                )
-                self._logger.error(error_msg)
-                summary.add_error(error_msg)
-                raise
+
+        # Clean up cursor state after successful completion
+        if self._resume:
+            self._cleanup_cursor_state("invoices")
+            self._logger.debug("✅ Completed invoice migration - cursor state cleaned up")
 
         return total_processed
 
     def _migrate_deferred_notes(self, summary: MigrationSummary) -> int:
         """
-        Migrate notes using deferred processing from collected references.
+        Process collected note references using deferred processing.
 
-        Uses the injected NotesExtractor to process notes from the collected
-        note references, avoiding the nested GraphQL query complexity that
-        causes API throttling.
+        This method processes notes that were collected as ID references during
+        client and invoice migrations to avoid GraphQL throttling caused by
+        nested queries. Enhanced with skip functionality to avoid unnecessary
+        API calls for already-processed notes.
 
         Args:
-            summary: Migration summary for error tracking
+            summary: Migration summary for error tracking and skip counts
 
         Returns:
-            Total number of notes processed
+            Total number of notes processed (not including skipped)
 
         Raises:
             JobberApiError: If API communication fails
-            MappingError: If note data transformation fails
             RepositoryError: If database operations fail
         """
         if not self._notes_extractor or not self._note_reference_collector:
-            self._logger.info(
-                "Deferred note migration requested but extractor or collector not provided"
-            )
+            self._logger.debug("Deferred note migration skipped - missing extractor or collector")
             return 0
 
         try:
@@ -435,22 +491,29 @@ class MigrationCoordinator:
             note_references = self._note_reference_collector.get_references()
 
             if not note_references:
-                self._logger.info(
-                    "No note references collected for deferred processing"
-                )
+                self._logger.info("No note references collected for deferred processing")
                 return 0
 
-            # Process notes using deferred processing
-            notes_processed = self._notes_extractor.extract_deferred_notes(
-                note_references
-            )
+            # Process notes using deferred processing with skip tracking
+            result = self._notes_extractor.extract_deferred_notes(note_references)
+
+            notes_processed = result["processed"]
+            notes_skipped = result["skipped"]
+
+            # Update summary with skip counts
+            summary.notes_skipped += notes_skipped
 
             # Clear references after successful processing
             self._note_reference_collector.clear_references()
 
-            self._logger.info(
-                f"Deferred note migration completed: {notes_processed} notes processed"
-            )
+            if self._resume and notes_skipped > 0:
+                self._logger.info(
+                    f"✅ Deferred note migration completed: {notes_processed} notes processed, "
+                    f"{notes_skipped} skipped"
+                )
+            else:
+                self._logger.info(f"✅ Deferred note migration completed: {notes_processed} notes processed")
+
             return notes_processed
 
         except Exception as e:
@@ -478,9 +541,7 @@ class MigrationCoordinator:
             RepositoryError: If database operations fail
         """
         if not self._quotes_extractor:
-            self._logger.info(
-                "Quote migration requested but no QuotesExtractor provided"
-            )
+            self._logger.info("Quote migration requested but no QuotesExtractor provided")
             return 0
 
         try:
@@ -491,12 +552,10 @@ class MigrationCoordinator:
             extractor_summary = self._quotes_extractor.get_extraction_summary()
             if extractor_summary["error_count"] > 0:
                 summary.add_error(
-                    f"Quote extraction completed with {extractor_summary['error_count']} recoverable errors"  # noqa: E501
+                    f"Quote extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
-            self._logger.info(
-                f"Quote migration completed: {result['entities_processed']} quotes processed"  # noqa: E501
-            )
+            self._logger.info(f"Quote migration completed: {result['entities_processed']} quotes processed")
             return result["entities_processed"]
 
         except Exception as e:
@@ -529,9 +588,7 @@ class MigrationCoordinator:
             RepositoryError: If database operations fail
         """
         if not self._attachment_downloader:
-            self._logger.info(
-                "Attachment migration requested but no AttachmentDownloader provided"
-            )
+            self._logger.info("Attachment migration requested but no AttachmentDownloader provided")
             return {
                 "entities": 0,
                 "files_downloaded": 0,

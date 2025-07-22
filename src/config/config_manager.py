@@ -1,9 +1,14 @@
-"""ConfigManager implementation for centralized configuration management."""
+"""Configuration manager implementation for TightBeam v2."""
 
+import os
+import threading
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from ..exceptions import ConfigurationError
 from .config_models import (
@@ -17,6 +22,29 @@ from .config_models import (
 )
 
 
+class ConfigFileHandler(FileSystemEventHandler):
+    """File system event handler for configuration file changes."""
+
+    def __init__(self, config_manager: "ConfigManagerImpl", config_file_path: str):
+        super().__init__()
+        self.config_manager = config_manager
+        self.config_file_path = config_file_path
+        self._last_reload = 0
+        self._reload_cooldown = 1.0  # Minimum 1 second between reloads
+
+    def on_modified(self, event):
+        """Handle file modification events."""
+        if event.is_directory:
+            return
+
+        if event.src_path == self.config_file_path:
+            current_time = time.time()
+            if current_time - self._last_reload > self._reload_cooldown:
+                self._last_reload = current_time
+                # Use a small delay to ensure file write is complete
+                threading.Timer(0.1, self.config_manager._reload_config).start()
+
+
 class ConfigManagerImpl:
     """ConfigManager implementation for loading YAML-based configuration.
 
@@ -25,12 +53,13 @@ class ConfigManagerImpl:
     dependency injection architecture.
     """
 
-    def __init__(self, config_dir: str = "config", environment: str | None = None):
+    def __init__(self, config_dir: str = "config", environment: str | None = None, enable_hot_reload: bool = True):
         """Initialize ConfigManager with configuration directory and environment.
 
         Args:
             config_dir: Directory containing configuration files (default: "config")
             environment: Environment override (dev, prod), or None for base config only
+            enable_hot_reload: Enable automatic configuration reloading (default: True)
 
         Raises:
             ConfigurationError: If config files cannot be loaded or are invalid
@@ -38,7 +67,15 @@ class ConfigManagerImpl:
         self.config_dir = Path(config_dir)
         self.environment = environment
         self.config: AppConfig | None = None
+        self.enable_hot_reload = enable_hot_reload
+        self._config_lock = threading.Lock()
+        self._observer: Optional[Observer] = None
+        self._reload_callbacks = []
         self._load_config()
+
+        # Start file watcher if hot reload is enabled
+        if self.enable_hot_reload:
+            self._start_file_watcher()
 
     def _load_config(self) -> None:
         """Load and validate configuration from YAML files.
@@ -50,9 +87,7 @@ class ConfigManagerImpl:
             # Load base configuration
             base_config_path = self.config_dir / "settings.yaml"
             if not base_config_path.exists():
-                raise ConfigurationError(
-                    f"Base config file not found: {base_config_path}"
-                )
+                raise ConfigurationError(f"Base config file not found: {base_config_path}")
 
             with open(base_config_path) as f:
                 config_data = yaml.safe_load(f)
@@ -75,9 +110,7 @@ class ConfigManagerImpl:
         except (ValueError, TypeError) as e:
             raise ConfigurationError(f"Invalid configuration values: {e}") from e
 
-    def _merge_configs(
-        self, base: dict[str, Any], override: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _merge_configs(self, base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
         """Merge environment-specific overrides into base configuration.
 
         Args:
@@ -89,11 +122,7 @@ class ConfigManagerImpl:
         """
         result = base.copy()
         for key, value in override.items():
-            if (
-                key in result
-                and isinstance(result[key], dict)
-                and isinstance(value, dict)
-            ):
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                 result[key] = self._merge_configs(result[key], value)
             else:
                 result[key] = value
@@ -192,9 +221,7 @@ class ConfigManagerImpl:
 
         if optimization_level not in self.config.rate_limits:
             available = list(self.config.rate_limits.keys())
-            raise ConfigurationError(
-                f"Invalid optimization level '{optimization_level}'. Available: {available}"
-            )
+            raise ConfigurationError(f"Invalid optimization level '{optimization_level}'. Available: {available}")
 
         rate_config = self.config.rate_limits[optimization_level]
         return {
@@ -221,9 +248,7 @@ class ConfigManagerImpl:
             if hasattr(self.config.pagination, snake_case):
                 return getattr(self.config.pagination, snake_case)
             else:
-                raise ConfigurationError(
-                    f"Invalid entity type '{entity_type}'. Using default pagination size."
-                )
+                raise ConfigurationError(f"Invalid entity type '{entity_type}'. Using default pagination size.")
 
     def get_delay_config(self, delay_type: str) -> float:
         """Get delay configuration for the specified type."""
@@ -234,9 +259,7 @@ class ConfigManagerImpl:
             return getattr(self.config.delays, delay_type)
         else:
             available = ["page_delay", "request_timeout", "retry_base_delay"]
-            raise ConfigurationError(
-                f"Invalid delay type '{delay_type}'. Available: {available}"
-            )
+            raise ConfigurationError(f"Invalid delay type '{delay_type}'. Available: {available}")
 
     def get_backoff_config(self) -> dict[str, Any]:
         """Get exponential backoff strategy configuration."""
@@ -277,3 +300,63 @@ class ConfigManagerImpl:
         if environment is not None:
             self.environment = environment
         self._load_config()
+
+    def _start_file_watcher(self) -> None:
+        """Start file system watcher for configuration files."""
+        try:
+            self._observer = Observer()
+            config_file_path = str(self.config_dir / "settings.yaml")
+            handler = ConfigFileHandler(self, config_file_path)
+
+            # Watch the config directory for changes
+            self._observer.schedule(handler, str(self.config_dir), recursive=False)
+            self._observer.start()
+        except Exception as e:
+            # Silently disable hot reload if watchdog is not available
+            self.enable_hot_reload = False
+
+    def _reload_config(self) -> None:
+        """Internal method to reload configuration with thread safety."""
+        with self._config_lock:
+            try:
+                old_config = self.config
+                self._load_config()
+
+                # Notify callbacks of configuration change
+                for callback in self._reload_callbacks:
+                    try:
+                        callback(old_config, self.config)
+                    except Exception:
+                        # Don't let callback errors break the reload
+                        pass
+
+                print(f"🔄 Configuration reloaded from {self.config_dir / 'settings.yaml'}")
+
+            except Exception as e:
+                print(f"❌ Failed to reload configuration: {e}")
+
+    def add_reload_callback(self, callback) -> None:
+        """Add a callback to be called when configuration is reloaded.
+
+        Args:
+            callback: Function that takes (old_config, new_config) as arguments
+        """
+        self._reload_callbacks.append(callback)
+
+    def stop_file_watcher(self) -> None:
+        """Stop the file system watcher."""
+        if self._observer and self._observer.is_alive():
+            self._observer.stop()
+            self._observer.join()
+
+    def __del__(self):
+        """Cleanup file watcher on destruction."""
+        self.stop_file_watcher()
+
+    def get_current_page_delay(self) -> float:
+        """Get current page delay setting for hot-reload updates."""
+        return self.get_delay_config("page_delay")
+
+    def get_current_rate_limit_settings(self, optimization_level: str) -> dict[str, Any]:
+        """Get current rate limiting settings for hot-reload updates."""
+        return self.get_rate_limit_config(optimization_level)

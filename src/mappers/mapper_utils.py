@@ -61,9 +61,7 @@ class MapperUtils:
         return ""
 
     @staticmethod
-    def extract_all_fields(
-        field_list: List[dict[str, Any]], field_name: str = "value"
-    ) -> List[str]:
+    def extract_all_fields(field_list: List[dict[str, Any]], field_name: str = "value") -> List[str]:
         """Extract all field values from a list of field objects.
 
         Args:
@@ -104,9 +102,7 @@ class MapperUtils:
             return 0
 
     @staticmethod
-    def extract_id_from_relationship(
-        relationship: Optional[dict[str, Any]], id_field: str = "id"
-    ) -> str:
+    def extract_id_from_relationship(relationship: Optional[dict[str, Any]], id_field: str = "id") -> str:
         """Extract ID from a relationship object.
 
         Common pattern for extracting IDs from nested relationships.

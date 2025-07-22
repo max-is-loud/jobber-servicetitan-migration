@@ -18,9 +18,7 @@ class BaseExtractor(Protocol):
     extraction implementations.
     """
 
-    def extract(
-        self, cursor: Optional[str] = None, page_limit: Optional[int] = None
-    ) -> dict[str, Any]:
+    def extract(self, cursor: Optional[str] = None, page_limit: Optional[int] = None) -> dict[str, Any]:
         """Extract entities from Jobber GraphQL API with cursor-based pagination.
 
         Performs complete extraction workflow including:

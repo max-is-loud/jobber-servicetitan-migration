@@ -61,9 +61,7 @@ class MetricsCollector:
 
         # Timing tracking
         self._start_time = time.time()
-        self._response_times = deque(
-            maxlen=max_response_times
-        )  # Efficient fixed-size queue
+        self._response_times = deque(maxlen=max_response_times)  # Efficient fixed-size queue
 
         # Throttling and delay tracking
         self._total_throttle_time = 0.0  # Total time spent waiting due to rate limiting
@@ -74,9 +72,7 @@ class MetricsCollector:
         self._successful_retries = 0  # Retries that eventually succeeded
 
         # GraphQL cost tracking
-        self._graphql_costs = deque(
-            maxlen=max_cost_history
-        )  # Efficient fixed-size queue for cost history
+        self._graphql_costs = deque(maxlen=max_cost_history)  # Efficient fixed-size queue for cost history
 
         # Rate limit header tracking
         self._rate_limit_remaining = None  # Current remaining quota
@@ -178,9 +174,7 @@ class MetricsCollector:
                     # This ensures that database issues don't break the application
                     pass  # Silent failure to maintain application stability
 
-    def record_rate_limit_headers(
-        self, remaining: int | None = None, reset_time: int | None = None
-    ) -> None:
+    def record_rate_limit_headers(self, remaining: int | None = None, reset_time: int | None = None) -> None:
         """Record rate limiting header values from API responses.
 
         Args:
@@ -309,12 +303,9 @@ class MetricsCollector:
 
             # Calculate accuracy (how close requested was to actual)
             total_accuracy = sum(
-                100 - abs(diff / actual) * 100 if actual > 0 else 100
-                for diff, actual in zip(differences, actual_costs)
+                100 - abs(diff / actual) * 100 if actual > 0 else 100 for diff, actual in zip(differences, actual_costs)
             )
-            avg_accuracy = (
-                total_accuracy / len(self._graphql_costs) if self._graphql_costs else 0
-            )
+            avg_accuracy = total_accuracy / len(self._graphql_costs) if self._graphql_costs else 0
 
             return {
                 "total_queries": len(self._graphql_costs),
@@ -336,11 +327,7 @@ class MetricsCollector:
             return {
                 "remaining_requests": self._rate_limit_remaining,
                 "reset_timestamp": self._rate_limit_reset,
-                "seconds_until_reset": (
-                    self._rate_limit_reset - time.time()
-                    if self._rate_limit_reset
-                    else None
-                ),
+                "seconds_until_reset": (self._rate_limit_reset - time.time() if self._rate_limit_reset else None),
             }
 
     def get_summary(self) -> dict[str, float | int]:
@@ -394,9 +381,7 @@ class MetricsCollector:
                     "graphql_min_actual_cost": cost_stats["min_actual_cost"],
                     "graphql_max_actual_cost": cost_stats["max_actual_cost"],
                     "graphql_avg_cost_difference": cost_stats["avg_cost_difference"],
-                    "graphql_cost_accuracy_percentage": cost_stats[
-                        "cost_accuracy_percentage"
-                    ],
+                    "graphql_cost_accuracy_percentage": cost_stats["cost_accuracy_percentage"],
                 }
             )
 
@@ -405,9 +390,7 @@ class MetricsCollector:
                 {
                     "rate_limit_remaining": rate_limit_status["remaining_requests"],
                     "rate_limit_reset_timestamp": rate_limit_status["reset_timestamp"],
-                    "rate_limit_seconds_until_reset": rate_limit_status[
-                        "seconds_until_reset"
-                    ],
+                    "rate_limit_seconds_until_reset": rate_limit_status["seconds_until_reset"],
                 }
             )
 

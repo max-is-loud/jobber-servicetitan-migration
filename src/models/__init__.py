@@ -6,6 +6,7 @@ from .expense import Expense
 from .graphql_cost import GraphQLCost
 from .invoice import Invoice
 from .job import Job
+from .migration_state import MigrationState
 from .migration_summary import MigrationSummary
 from .note import Note
 from .product_service import ProductService
@@ -24,6 +25,7 @@ __all__ = [
     "GraphQLCost",
     "Invoice",
     "Job",
+    "MigrationState",
     "MigrationSummary",
     "Note",
     "ProductService",

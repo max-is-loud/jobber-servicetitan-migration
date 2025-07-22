@@ -29,6 +29,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        skip_existing_entities: bool = False,
     ) -> None:
         """Initialize VisitsExtractor with required dependencies.
 
@@ -37,6 +38,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            skip_existing_entities: Whether to skip entities that already exist in database
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -45,6 +47,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
             logger=logger,
             entity_type=Visit,
             entity_name="visit",
+            skip_existing_entities=skip_existing_entities,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Visit] = []
@@ -60,9 +63,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
         """
         return self._jobber_client.fetch_visits(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -97,9 +98,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: Visit
-    ) -> dict[str, List[Any]]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Visit) -> dict[str, List[Any]]:
         """Extract notes related to the visit.
 
         Args:
@@ -124,9 +123,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
                         note = self._entity_mapper.map_note(note_node)
                         notes.append(note)
                     except MappingError as e:
-                        self._logger.debug(
-                            f"Failed to map note for visit {primary_entity.id}: {e}"
-                        )
+                        self._logger.debug(f"Failed to map note for visit {primary_entity.id}: {e}")
             if notes:
                 related["notes"] = notes
 

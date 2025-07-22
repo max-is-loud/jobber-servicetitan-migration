@@ -29,6 +29,7 @@ class ExpensesExtractor(BaseExtractor[Expense]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        skip_existing_entities: bool = False,
     ) -> None:
         """Initialize ExpensesExtractor with required dependencies.
 
@@ -37,6 +38,7 @@ class ExpensesExtractor(BaseExtractor[Expense]):
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            skip_existing_entities: Whether to skip entities that already exist in database
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -45,6 +47,7 @@ class ExpensesExtractor(BaseExtractor[Expense]):
             logger=logger,
             entity_type=Expense,
             entity_name="expense",
+            skip_existing_entities=skip_existing_entities,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Expense] = []
