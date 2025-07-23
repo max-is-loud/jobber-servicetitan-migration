@@ -30,6 +30,7 @@
             ]
         },
         "crawl4ai-rag": {
+            "transport": "sse",
             "url": "http://localhost:8051/sse"
         },
         "obsidian-mcp-server": {

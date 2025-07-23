@@ -49,16 +49,10 @@ def open_browser(auth_url: str, console: Optional[Console] = None) -> None:
                 console.print("✅ [green]Browser opened via Windows[/green]")
             except subprocess.CalledProcessError:
                 console.print("⚠️ [yellow]Could not open browser automatically[/yellow]")
-                console.print(
-                    f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n"
-                    f"   {auth_url}"
-                )
+                console.print(f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n" f"   {auth_url}")
         else:
             console.print(f"⚠️ [yellow]Could not open browser: {e}[/yellow]")
-            console.print(
-                f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n"
-                f"   {auth_url}"
-            )
+            console.print(f"🔗 [blue]Please manually copy and paste this URL:[/blue]\n" f"   {auth_url}")
 
 
 def complete_oauth_flow(
@@ -98,9 +92,7 @@ def complete_oauth_flow(
     expires_in = token_data.get("expires_in", expires_in_default)
 
     # Calculate expiration timestamp
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-    ).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
     # Store tokens in repository
     repository.save_oauth_tokens(
@@ -112,9 +104,7 @@ def complete_oauth_flow(
     return token_data
 
 
-def display_manual_auth_instructions(
-    auth_url: str, state: str, console: Optional[Console] = None
-) -> None:
+def display_manual_auth_instructions(auth_url: str, state: str, console: Optional[Console] = None) -> None:
     """Display Rich UI panel with manual authorization instructions.
 
     Shows formatted instructions for manual OAuth2 authorization including
@@ -140,16 +130,10 @@ def display_manual_auth_instructions(
 
 [bold dim]State parameter (for verification): {state}[/bold dim]"""
 
-    console.print(
-        Panel(
-            manual_content, title="🔐 OAuth2 Manual Authorization", border_style="blue"
-        )
-    )
+    console.print(Panel(manual_content, title="🔐 OAuth2 Manual Authorization", border_style="blue"))
 
 
-def display_server_auth_info(
-    auth_url: str, port: int, console: Optional[Console] = None
-) -> None:
+def display_server_auth_info(auth_url: str, port: int, console: Optional[Console] = None) -> None:
     """Display Rich UI panel with local callback server authorization info.
 
     Shows formatted information for OAuth2 authorization with local callback
@@ -183,7 +167,7 @@ def display_server_auth_info(
 
 
 def display_oauth_success(
-    mode: str = "callback", console: Optional[Console] = None
+    mode: str = "callback", console: Optional[Console] = None, db_path: Optional[str] = None
 ) -> None:
     """Display Rich UI panel with OAuth2 completion success message.
 
@@ -193,6 +177,7 @@ def display_oauth_success(
     Args:
         mode: OAuth2 completion mode ('callback' or 'server')
         console: Optional Rich Console for formatted output
+        db_path: The actual database path used for token storage
     """
     if console is None:
         console = Console()
@@ -200,10 +185,12 @@ def display_oauth_success(
     from rich.panel import Panel
 
     if mode == "server":
-        success_content = """[bold green]✅ OAuth2 tokens stored successfully![/bold green]
+        # Use the actual database path if provided, otherwise default to the CLI default
+        db_display = db_path if db_path else "tightbeam.sqlite"
+        success_content = f"""[bold green]✅ OAuth2 tokens stored successfully![/bold green]
 
 [bold cyan]🚀 You're all set! You can now run:[/bold cyan]
-   [bold]tightbeam migrate --db ./your_data.sqlite[/bold]"""
+   [bold]tightbeam migrate --db {db_display}[/bold]"""
         title = "🎉 OAuth2 Setup Complete"
     else:  # callback mode
         success_content = """[bold green]✅ OAuth2 tokens stored successfully![/bold green]
