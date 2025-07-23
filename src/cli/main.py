@@ -1,16 +1,15 @@
-"""Main CLI entry point for TightBeam v2 - Thin Orchestrator.
+"""Main CLI entry point for TightBeam v2.
 
-This module serves as the main CLI entry point that registers
+This module serves as the new modular CLI entry point, registering
 subcommand modules using Typer's add_typer functionality.
-It's designed to be minimal and maintainable.
 """
 
 import typer
 from dotenv import load_dotenv
 
-from src.cli.migrate import migrate_app
-from src.cli.oauth import oauth_app
-from src.cli.services import ServiceFactory
+from .migrate import migrate_app
+from .oauth import oauth_app
+from .services import ServiceFactory
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,7 +24,7 @@ app = typer.Typer(
     add_completion=False,
 )
 
-# Register subcommand modules using add_typer
+# Register subcommand modules
 app.add_typer(oauth_app, name="oauth")
 app.add_typer(migrate_app, name="migrate")
 
