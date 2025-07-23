@@ -80,9 +80,7 @@ app.add_typer(migrate_app, name="migrate")
 def migrate_callback(
     ctx: typer.Context,
     db: Annotated[Optional[Path], typer.Option(help="SQLite database path")] = None,
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
     deferred_notes: Annotated[
         bool,
         typer.Option(
@@ -163,8 +161,7 @@ def migrate_callback(
     except ConfigurationError:
         available_levels = ["conservative", "moderate", "aggressive"]
         typer.echo(
-            f"Error: Invalid optimization level '{optimization_level}'. "
-            f"Choose from: {', '.join(available_levels)}"
+            f"Error: Invalid optimization level '{optimization_level}'. " f"Choose from: {', '.join(available_levels)}"
         )
         raise typer.Exit(1) from None
 
@@ -228,9 +225,7 @@ def init() -> None:
 [bold blue]For more information on obtaining these credentials, visit:[/bold blue]
 📖 https://developer.getjobber.com/docs/authentication"""  # noqa: E501
 
-    console.print(
-        Panel(setup_content, title="🔧 TightBeam OAuth Setup", border_style="blue")
-    )
+    console.print(Panel(setup_content, title="🔧 TightBeam OAuth Setup", border_style="blue"))
 
 
 # OAuth2 command subgroup is already defined above
@@ -265,9 +260,7 @@ def _create_repository(db: Optional[Path] = None) -> Repository:
 
 @oauth_app.command("init")
 def oauth_init(
-    db: Annotated[
-        Optional[Path], typer.Option(help="SQLite database path for token storage")
-    ] = None,
+    db: Annotated[Optional[Path], typer.Option(help="SQLite database path for token storage")] = None,
     port: Annotated[int, typer.Option(help="Local callback server port")] = 8080,
     auto_complete: Annotated[
         bool,
@@ -298,8 +291,7 @@ def oauth_init(
     except ConfigurationError as e:
         console.print(f"[red]Configuration Error:[/red] {e}")
         console.print(
-            "[yellow]Please ensure JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, "
-            "and JOBBER_REDIRECT_URI are set.[/yellow]"
+            "[yellow]Please ensure JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, " "and JOBBER_REDIRECT_URI are set.[/yellow]"
         )
         sys.exit(1)
 
@@ -337,9 +329,7 @@ the following environment variables:
 [bold blue]For more information on obtaining these credentials, visit:[/bold blue]
 📖 https://developer.getjobber.com/docs/authentication"""  # noqa: E501
 
-    console.print(
-        Panel(setup_content, title="🔧 TightBeam OAuth Setup", border_style="blue")
-    )
+    console.print(Panel(setup_content, title="🔧 TightBeam OAuth Setup", border_style="blue"))
 
 
 def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
@@ -410,9 +400,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
     server = HTTPServer(("localhost", port), CallbackHandler)
 
     # Start server in background thread
-    server_thread = threading.Thread(
-        target=server.serve_forever, name="oauth-callback-server"
-    )
+    server_thread = threading.Thread(target=server.serve_forever, name="oauth-callback-server")
     server_thread.daemon = True
     server_thread.start()
 
@@ -438,9 +426,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         typer.echo(f"URL: {auth_url}")
         typer.echo()
         typer.echo("⏳ Waiting for authorization... (this will happen automatically)")
-        typer.echo(
-            "   Complete the authorization in your browser, then come back here!"
-        )
+        typer.echo("   Complete the authorization in your browser, then come back here!")
 
         # Display Rich UI for OAuth setup
         display_server_auth_info(auth_url, port, console)
@@ -452,27 +438,18 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         timeout = 300  # 5 minutes
         start_time = time.time()
 
-        with Status(
-            "[bold green]Waiting for authorization...", console=console, spinner="dots"
-        ):
+        with Status("[bold green]Waiting for authorization...", console=console, spinner="dots"):
             while time.time() - start_time < timeout:
                 if auth_result["code"] or auth_result["error"]:
                     break
                 time.sleep(1)
 
         if auth_result["error"]:
-            console.print(
-                f"\n❌ [red]Authorization failed:[/red] {auth_result['error']}"
-            )
+            console.print(f"\n❌ [red]Authorization failed:[/red] {auth_result['error']}")
             sys.exit(1)
         elif not auth_result["code"]:
-            console.print(
-                f"\n⏰ [yellow]Authorization timed out after {timeout} seconds[/yellow]"
-            )
-            console.print(
-                "[dim]Please try again or use manual mode: "
-                "tightbeam oauth init --no-auto[/dim]"
-            )
+            console.print(f"\n⏰ [yellow]Authorization timed out after {timeout} seconds[/yellow]")
+            console.print("[dim]Please try again or use manual mode: " "tightbeam oauth init --no-auto[/dim]")
 
             sys.exit(1)
 
@@ -488,9 +465,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
             else auth_result["code"]
         )
 
-        console.print(
-            f"\n🎉 [green]Authorization code received:[/green] {code_display}"
-        )
+        console.print(f"\n🎉 [green]Authorization code received:[/green] {code_display}")
 
         # Automatically complete the OAuth2 flow
         with Status(
@@ -501,12 +476,11 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
             repository = _create_repository(db)
 
             # Complete OAuth flow using helper function
-            complete_oauth_flow(
-                auth_result["code"], oauth_manager, repository, 3600, console
-            )
+            complete_oauth_flow(auth_result["code"], oauth_manager, repository, 3600, console)
 
-        # Display success message using helper function
-        display_oauth_success("server", console)
+        # Display success message using helper function with actual database path
+        db_path_used = str(db) if db is not None else "tightbeam.sqlite"
+        display_oauth_success("server", console, db_path_used)
 
         # Explicit clean exit after successful OAuth completion
         sys.exit(0)
@@ -535,9 +509,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
             if server_thread.is_alive():
                 server_thread.join(timeout=2.0)
                 if server_thread.is_alive():
-                    console.print(
-                        "[dim]Warning: OAuth server thread did not terminate cleanly[/dim]"
-                    )
+                    console.print("[dim]Warning: OAuth server thread did not terminate cleanly[/dim]")
         except Exception:
             # Ignore thread join errors
             pass
@@ -561,9 +533,7 @@ def _oauth_init_manual(db: Optional[Path]) -> None:
 @oauth_app.command("callback")
 def oauth_callback(
     code: Annotated[str, typer.Option(help="Authorization code from OAuth2 callback")],
-    db: Annotated[
-        Optional[Path], typer.Option(help="SQLite database path for token storage")
-    ] = None,
+    db: Annotated[Optional[Path], typer.Option(help="SQLite database path for token storage")] = None,
 ) -> None:
     """
     Handle OAuth2 callback and exchange authorization code for tokens.
@@ -589,8 +559,9 @@ def oauth_callback(
                 console=console,
             )
 
-        # Display success message using helper function
-        display_oauth_success("callback", console)
+        # Display success message using helper function with actual database path
+        db_path_used = str(db) if db is not None else "tightbeam.sqlite"
+        display_oauth_success("callback", console, db_path_used)
 
     except ConfigurationError as e:
         console.print(f"[red]Configuration Error:[/red] {e}")
@@ -598,10 +569,7 @@ def oauth_callback(
 
     except OAuth2Error as e:
         console.print(f"[red]OAuth2 Error:[/red] {e}")
-        console.print(
-            "[yellow]Please try the authorization flow again with "
-            "'tightbeam oauth init'[/yellow]"
-        )
+        console.print("[yellow]Please try the authorization flow again with " "'tightbeam oauth init'[/yellow]")
         sys.exit(1)
 
     except RepositoryError as e:
@@ -660,9 +628,7 @@ def oauth_status() -> None:
                 """
             }
 
-            with Status(
-                "[bold green]Testing API connection...", console=console, spinner="dots"
-            ):
+            with Status("[bold green]Testing API connection...", console=console, spinner="dots"):
                 response = http_client.post(
                     url="https://api.getjobber.com/api/graphql",
                     headers=headers,
@@ -688,9 +654,7 @@ def oauth_status() -> None:
                 )
 
         except Exception as e:
-            status_table.add_row(
-                "Token Validation", "[red]❌ Failed[/red]", f"Error: {e}"
-            )
+            status_table.add_row("Token Validation", "[red]❌ Failed[/red]", f"Error: {e}")
 
         console.print(status_table)
         return
@@ -710,9 +674,7 @@ def oauth_status() -> None:
         stored_tokens = repository.get_oauth_tokens()
 
         if stored_tokens:
-            status_table.add_row(
-                "Token Storage", "[green]✅ Found[/green]", "OAuth2 tokens are stored"
-            )
+            status_table.add_row("Token Storage", "[green]✅ Found[/green]", "OAuth2 tokens are stored")
 
             # Test token validity
             try:
@@ -735,18 +697,14 @@ def oauth_status() -> None:
                     "Authentication working correctly",
                 )
             except Exception as e:
-                status_table.add_row(
-                    "Token Validation", "[red]⚠️ Failed[/red]", f"Error: {e}"
-                )
+                status_table.add_row("Token Validation", "[red]⚠️ Failed[/red]", f"Error: {e}")
                 status_table.add_row(
                     "Recommendation",
                     "[yellow]💡 Action Needed[/yellow]",
                     "Run 'tightbeam oauth init' to re-authorize",
                 )
         else:
-            status_table.add_row(
-                "Token Storage", "[yellow]⚠️ Missing[/yellow]", "No tokens stored yet"
-            )
+            status_table.add_row("Token Storage", "[yellow]⚠️ Missing[/yellow]", "No tokens stored yet")
             status_table.add_row(
                 "Recommendation",
                 "[yellow]💡 Action Needed[/yellow]",
@@ -759,9 +717,7 @@ def oauth_status() -> None:
             "[red]❌ Not Configured[/red]",
             "No authentication method available",
         )
-        status_table.add_row(
-            "Option 1", "[blue]Environment Token[/blue]", "Set JOBBER_TOKEN variable"
-        )
+        status_table.add_row("Option 1", "[blue]Environment Token[/blue]", "Set JOBBER_TOKEN variable")
         status_table.add_row(
             "Option 2",
             "[blue]OAuth2 Setup[/blue]",
@@ -773,12 +729,8 @@ def oauth_status() -> None:
 
 @oauth_app.command("clear")
 def oauth_clear(
-    db: Annotated[
-        Optional[Path], typer.Option(help="SQLite database path for token storage")
-    ] = None,
-    confirm: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip confirmation prompt")
-    ] = False,
+    db: Annotated[Optional[Path], typer.Option(help="SQLite database path for token storage")] = None,
+    confirm: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt")] = False,
 ) -> None:
     """
     Clear stored OAuth2 tokens from database.
@@ -796,18 +748,14 @@ def oauth_clear(
 
         # Confirmation prompt
         if not confirm:
-            console.print(
-                "[yellow]⚠️ This will log you out from OAuth2 authentication.[/yellow]"
-            )
+            console.print("[yellow]⚠️ This will log you out from OAuth2 authentication.[/yellow]")
             proceed = typer.confirm("Are you sure you want to clear OAuth2 tokens?")
             if not proceed:
                 console.print("[dim]Operation cancelled.[/dim]")
                 return
 
         # Clear tokens
-        with Status(
-            "[bold red]Clearing OAuth2 tokens...", console=console, spinner="dots"
-        ):
+        with Status("[bold red]Clearing OAuth2 tokens...", console=console, spinner="dots"):
             repository.clear_oauth_tokens()
 
         success_content = """[bold green]✅ OAuth2 tokens cleared successfully![/bold green]
@@ -815,9 +763,7 @@ def oauth_clear(
 [bold cyan]💡 To re-authorize:[/bold cyan]
 Run [bold]tightbeam oauth init[/bold] when needed"""  # noqa: E501
 
-        console.print(
-            Panel(success_content, title="🗑️ Tokens Cleared", border_style="red")
-        )
+        console.print(Panel(success_content, title="🗑️ Tokens Cleared", border_style="red"))
 
     except RepositoryError as e:
         console.print(f"[red]Database Error:[/red] {e}")
@@ -831,12 +777,8 @@ Run [bold]tightbeam oauth init[/bold] when needed"""  # noqa: E501
 @migrate_app.command("all")
 def migrate_all(
     ctx: typer.Context,
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
     deferred_notes: Annotated[
         bool,
         typer.Option(
@@ -900,16 +842,10 @@ def migrate_all(
     actual_db = config.get("db", db)
     actual_verbose = config.get("verbose", verbose)
     actual_deferred_notes = config.get("deferred_notes", deferred_notes)
-    actual_enable_notes_persistence = config.get(
-        "enable_notes_persistence", enable_notes_persistence
-    )
+    actual_enable_notes_persistence = config.get("enable_notes_persistence", enable_notes_persistence)
     actual_optimization_level = config.get("optimization_level", optimization_level)
-    actual_enable_cost_monitoring = config.get(
-        "enable_cost_monitoring", enable_cost_monitoring
-    )
-    actual_cost_monitoring_verbose = config.get(
-        "cost_monitoring_verbose", cost_monitoring_verbose
-    )
+    actual_enable_cost_monitoring = config.get("enable_cost_monitoring", enable_cost_monitoring)
+    actual_cost_monitoring_verbose = config.get("cost_monitoring_verbose", cost_monitoring_verbose)
 
     # Special handling for resume: command-level explicit value > group-level > default False
     actual_resume = resume if resume is not None else config.get("resume", False)
@@ -956,11 +892,7 @@ def migrate_all(
         config_manager = ConfigManagerImpl()
 
         # Initialize metrics collector for cost monitoring if enabled
-        metrics_collector = (
-            MetricsCollector(repository=repository)
-            if actual_enable_cost_monitoring
-            else None
-        )
+        metrics_collector = MetricsCollector(repository=repository) if actual_enable_cost_monitoring else None
         jobber_client = JobberClient(
             auth_provider,
             metrics_collector=metrics_collector,
@@ -978,9 +910,7 @@ def migrate_all(
             f"({capacity} tokens, {refill_rate}/minute, ~{requests_per_second:.0f} req/sec)"
         )
         # Dynamic optimization for Jobber GraphQL API based on user selection
-        rate_limiter = TokenBucketRateLimiter(
-            capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens
-        )
+        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
         # Use backoff strategy from configuration for GraphQL throttling
         backoff_config = config_manager.get_backoff_config()
         backoff_strategy = ExponentialBackoffStrategy(
@@ -1028,9 +958,7 @@ def migrate_all(
         notes_extractor = None
 
         if actual_deferred_notes:
-            logger.info(
-                "🔄 Deferred notes loading enabled - preventing GraphQL throttling"
-            )
+            logger.info("🔄 Deferred notes loading enabled - preventing GraphQL throttling")
             note_reference_collector = NoteReferenceCollector(
                 repository=repository,
                 logger=logger,
@@ -1071,13 +999,9 @@ def migrate_all(
 
         # Create migration coordinator with all dependencies including optional extractors  # noqa: E501
         if actual_resume:
-            logger.info(
-                "🔄 Resume mode ENABLED - will skip existing entities and use saved cursors"
-            )
+            logger.info("🔄 Resume mode ENABLED - will skip existing entities and use saved cursors")
         else:
-            logger.info(
-                "🆕 Full migration mode - processing all entities from beginning"
-            )
+            logger.info("🆕 Full migration mode - processing all entities from beginning")
 
         # Create Rich migration coordinator with basic dependencies
         # Note: For now using basic coordinator, could be enhanced to support extractors
@@ -1096,17 +1020,13 @@ def migrate_all(
         logger.info(f"   • Optimization level: {actual_optimization_level.upper()}")
         logger.info(f"   • Target rate: {requests_per_second:.0f} requests/sec")
         if enable_adaptive_optimization:
-            logger.info(
-                "   • Adaptive optimization: ENABLED (will auto-tune performance)"
-            )
+            logger.info("   • Adaptive optimization: ENABLED (will auto-tune performance)")
         else:
             logger.info("   • Adaptive optimization: DISABLED (using static settings)")
 
         # Calculate safety margin
         api_limit_per_sec = 500 / 60  # 500 req/min = ~8.33 req/sec
-        safety_margin = (
-            (api_limit_per_sec - requests_per_second) / api_limit_per_sec
-        ) * 100
+        safety_margin = ((api_limit_per_sec - requests_per_second) / api_limit_per_sec) * 100
         logger.info(f"   • Safety margin: {safety_margin:.0f}% below API limits")
 
         # Cost monitoring status
@@ -1118,9 +1038,7 @@ def migrate_all(
             logger.info("   • GraphQL cost monitoring: DISABLED")
 
         logger.info("🔍 Rate Limiter Status:")
-        logger.info(
-            f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Refill rate: {rate_limiter.get_refill_rate()}/min (~{rate_limiter.get_refill_rate()/60:.1f}/sec)"
         )
@@ -1140,12 +1058,8 @@ def migrate_all(
         )
         if summary.duration_seconds > 0:
             entities_per_minute = (total_entities / summary.duration_seconds) * 60
-            logger.info(
-                f"   • Migration speed: {entities_per_minute:.1f} entities/minute"
-            )
-            logger.info(
-                f"   • Total entities: {total_entities} in {summary.duration_seconds:.1f}s"
-            )
+            logger.info(f"   • Migration speed: {entities_per_minute:.1f} entities/minute")
+            logger.info(f"   • Total entities: {total_entities} in {summary.duration_seconds:.1f}s")
 
         # Enhanced rate limiting and cost metrics display
         if metrics_collector:
@@ -1157,29 +1071,19 @@ def migrate_all(
             if actual_cost_monitoring_verbose and cost_stats["total_queries"] > 0:
                 logger.info("🧮 GraphQL Cost Analysis:")
                 logger.info(f"   • Total queries: {cost_stats['total_queries']}")
-                logger.info(
-                    f"   • Avg requested cost: {cost_stats['avg_requested_cost']:.0f}"
-                )
-                logger.info(
-                    f"   • Avg actual cost: {cost_stats['avg_actual_cost']:.0f}"
-                )
-                logger.info(
-                    f"   • Cost accuracy: {cost_stats['cost_accuracy_percentage']:.1f}%"
-                )
+                logger.info(f"   • Avg requested cost: {cost_stats['avg_requested_cost']:.0f}")
+                logger.info(f"   • Avg actual cost: {cost_stats['avg_actual_cost']:.0f}")
+                logger.info(f"   • Cost accuracy: {cost_stats['cost_accuracy_percentage']:.1f}%")
 
             # Rate limit status
             if rate_limit_status["remaining_requests"] is not None:
                 logger.info("🔄 Rate Limit Status:")
-                logger.info(
-                    f"   • Remaining requests: {rate_limit_status['remaining_requests']}"
-                )
+                logger.info(f"   • Remaining requests: {rate_limit_status['remaining_requests']}")
                 if (
                     rate_limit_status["seconds_until_reset"] is not None
                     and rate_limit_status["seconds_until_reset"] > 0
                 ):
-                    logger.info(
-                        f"   • Reset in: {rate_limit_status['seconds_until_reset']:.0f}s"
-                    )
+                    logger.info(f"   • Reset in: {rate_limit_status['seconds_until_reset']:.0f}s")
         else:
             logger.info("   • Cost monitoring: DISABLED")
             rate_metrics = {
@@ -1213,9 +1117,7 @@ def migrate_all(
             "download_failures": summary.download_failures,
             "duration": summary.format_duration(),
             "errors_count": len(summary.errors),
-            "status": (
-                "SUCCESS" if len(summary.errors) == 0 else "COMPLETED_WITH_ERRORS"
-            ),
+            "status": ("SUCCESS" if len(summary.errors) == 0 else "COMPLETED_WITH_ERRORS"),
             # Add migration mode information
             "deferred_notes_enabled": actual_deferred_notes,
             "notes_persistence_enabled": actual_enable_notes_persistence,
@@ -1236,26 +1138,18 @@ def migrate_all(
         # Display deferred notes performance information
         if actual_deferred_notes and summary.note_references_collected > 0:
             logger.info("📊 Deferred Notes Processing Performance:")
-            logger.info(
-                f"   • Note references collected: {summary.note_references_collected:,}"
-            )
+            logger.info(f"   • Note references collected: {summary.note_references_collected:,}")
             logger.info(f"   • Notes processed separately: {summary.notes_processed:,}")
             throttle_rate = float(rate_metrics["throttle_rate"].rstrip("%"))
             if throttle_rate < 5.0:  # Less than 5% throttling
                 logger.info("   ✅ GraphQL throttling successfully minimized!")
             else:
-                logger.info(
-                    f"   ⚠️  Some throttling occurred: {rate_metrics['throttle_rate']} of requests"
-                )
-            logger.info(
-                "   🎯 Trading complex nested queries for simple individual queries"
-            )
+                logger.info(f"   ⚠️  Some throttling occurred: {rate_metrics['throttle_rate']} of requests")
+            logger.info("   🎯 Trading complex nested queries for simple individual queries")
 
         # Display final token status and rate limiting effectiveness
         logger.info("🔍 Final Token Status:")
-        logger.info(
-            f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Total requests: {rate_metrics['total_requests']} "
             f"(avg: {rate_metrics['requests_per_minute']}/min)"
@@ -1269,15 +1163,11 @@ def migrate_all(
         elif float(rate_metrics["throttle_rate"].rstrip("%")) < 5.0:
             logger.info("   ⚠️  Minor throttling - rate limiting working well")
         else:
-            logger.info(
-                "   🔴 Significant throttling - consider further rate limit tuning"
-            )
+            logger.info("   🔴 Significant throttling - consider further rate limit tuning")
 
         # Display errors if any
         if summary.errors:
-            logger.error(
-                f"Migration completed with {len(summary.errors)} non-fatal errors:"
-            )
+            logger.error(f"Migration completed with {len(summary.errors)} non-fatal errors:")
             for i, error in enumerate(summary.errors, 1):
                 logger.error(f"  {i}. {error}")
 
@@ -1291,9 +1181,7 @@ def migrate_all(
 
         typer.echo(f"Configuration Error: {e}", err=True)
         typer.echo("To configure authentication, you can either:", err=True)
-        typer.echo(
-            "  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True
-        )  # noqa: E501
+        typer.echo("  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True)  # noqa: E501
         typer.echo("  2. Manually set the following environment variables:", err=True)
         typer.echo("     - JOBBER_CLIENT_ID", err=True)
         typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
@@ -1302,9 +1190,7 @@ def migrate_all(
 
         console.print(f"[red]Configuration Error:[/red] {e}")
         console.print("[yellow]To configure authentication, you can either:[/yellow]")
-        console.print(
-            "  1. Run [bold]tightbeam oauth init[/bold] to set up OAuth authentication"
-        )
+        console.print("  1. Run [bold]tightbeam oauth init[/bold] to set up OAuth authentication")
         console.print("  2. Manually set the following environment variables:")
         console.print("     - JOBBER_CLIENT_ID")
         console.print("     - JOBBER_CLIENT_SECRET")
@@ -1317,33 +1203,23 @@ def migrate_all(
         # API communication issues
 
         typer.echo(f"API Error: {e}", err=True)
-        typer.echo(
-            "Please check your internet connection and OAuth2 token validity.", err=True
-        )
+        typer.echo("Please check your internet connection and OAuth2 token validity.", err=True)
 
         console.print(f"[red]API Error:[/red] {e}")
-        console.print(
-            "[yellow]Please check your internet connection and OAuth2 token "
-            "validity.[/yellow]"
-        )
+        console.print("[yellow]Please check your internet connection and OAuth2 token " "validity.[/yellow]")
 
         sys.exit(2)
 
     except MappingError as e:
         # Data transformation issues
         console.print(f"[red]Data Mapping Error:[/red] {e}")
-        console.print(
-            "[yellow]The API response format may have changed. Please check "
-            "for updates.[/yellow]"
-        )
+        console.print("[yellow]The API response format may have changed. Please check " "for updates.[/yellow]")
         sys.exit(3)
 
     except RepositoryError as e:
         # Database operation issues
         console.print(f"[red]Database Error:[/red] {e}")
-        console.print(
-            "[yellow]Please check database file permissions and disk space.[/yellow]"
-        )
+        console.print("[yellow]Please check database file permissions and disk space.[/yellow]")
         sys.exit(4)
 
     except KeyboardInterrupt:
@@ -1354,9 +1230,7 @@ def migrate_all(
     except Exception as e:
         # Unexpected errors
         console.print(f"[red]Unexpected Error:[/red] {e}")
-        console.print(
-            "[yellow]Please report this issue with the full error message.[/yellow]"
-        )
+        console.print("[yellow]Please report this issue with the full error message.[/yellow]")
         sys.exit(5)
 
     finally:
@@ -1383,16 +1257,10 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
     actual_db = config.get("db", db)
     actual_verbose = config.get("verbose", verbose)
     actual_deferred_notes = config.get("deferred_notes", deferred_notes)
-    actual_enable_notes_persistence = config.get(
-        "enable_notes_persistence", enable_notes_persistence
-    )
+    actual_enable_notes_persistence = config.get("enable_notes_persistence", enable_notes_persistence)
     actual_optimization_level = config.get("optimization_level", optimization_level)
-    actual_enable_cost_monitoring = config.get(
-        "enable_cost_monitoring", enable_cost_monitoring
-    )
-    actual_cost_monitoring_verbose = config.get(
-        "cost_monitoring_verbose", cost_monitoring_verbose
-    )
+    actual_enable_cost_monitoring = config.get("enable_cost_monitoring", enable_cost_monitoring)
+    actual_cost_monitoring_verbose = config.get("cost_monitoring_verbose", cost_monitoring_verbose)
 
     # Special handling for resume: command-level explicit value > group-level > default False
     actual_resume = resume if resume is not None else config.get("resume", False)
@@ -1439,9 +1307,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
         config_manager = ConfigManagerImpl()
 
         # Initialize metrics collector for cost monitoring if enabled
-        metrics_collector = (
-            MetricsCollector(repository=repository) if enable_cost_monitoring else None
-        )
+        metrics_collector = MetricsCollector(repository=repository) if enable_cost_monitoring else None
         jobber_client = JobberClient(
             auth_provider,
             metrics_collector=metrics_collector,
@@ -1459,9 +1325,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
             f"({capacity} tokens, {refill_rate}/minute, ~{requests_per_second:.0f} req/sec)"
         )
         # Dynamic optimization for Jobber GraphQL API based on user selection
-        rate_limiter = TokenBucketRateLimiter(
-            capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens
-        )
+        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
         # Use backoff strategy from configuration for GraphQL throttling
         backoff_config = config_manager.get_backoff_config()
         backoff_strategy = ExponentialBackoffStrategy(
@@ -1509,9 +1373,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
         notes_extractor = None
 
         if actual_deferred_notes:
-            logger.info(
-                "🔄 Deferred notes loading enabled - preventing GraphQL throttling"
-            )
+            logger.info("🔄 Deferred notes loading enabled - preventing GraphQL throttling")
             note_reference_collector = NoteReferenceCollector(
                 repository=repository,
                 logger=logger,
@@ -1552,13 +1414,9 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
 
         # Create migration coordinator with all dependencies including optional extractors  # noqa: E501
         if actual_resume:
-            logger.info(
-                "🔄 Resume mode ENABLED - will skip existing entities and use saved cursors"
-            )
+            logger.info("🔄 Resume mode ENABLED - will skip existing entities and use saved cursors")
         else:
-            logger.info(
-                "🆕 Full migration mode - processing all entities from beginning"
-            )
+            logger.info("🆕 Full migration mode - processing all entities from beginning")
 
         # Create Rich migration coordinator with all dependencies
         migration_coordinator = RichMigrationCoordinator(
@@ -1583,17 +1441,13 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
         logger.info(f"   • Optimization level: {actual_optimization_level.upper()}")
         logger.info(f"   • Target rate: {requests_per_second:.0f} requests/sec")
         if enable_adaptive_optimization:
-            logger.info(
-                "   • Adaptive optimization: ENABLED (will auto-tune performance)"
-            )
+            logger.info("   • Adaptive optimization: ENABLED (will auto-tune performance)")
         else:
             logger.info("   • Adaptive optimization: DISABLED (using static settings)")
 
         # Calculate safety margin
         api_limit_per_sec = 500 / 60  # 500 req/min = ~8.33 req/sec
-        safety_margin = (
-            (api_limit_per_sec - requests_per_second) / api_limit_per_sec
-        ) * 100
+        safety_margin = ((api_limit_per_sec - requests_per_second) / api_limit_per_sec) * 100
         logger.info(f"   • Safety margin: {safety_margin:.0f}% below API limits")
 
         # Cost monitoring status
@@ -1605,9 +1459,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
             logger.info("   • GraphQL cost monitoring: DISABLED")
 
         logger.info("🔍 Rate Limiter Status:")
-        logger.info(
-            f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Refill rate: {rate_limiter.get_refill_rate()}/min (~{rate_limiter.get_refill_rate()/60:.1f}/sec)"
         )
@@ -1627,12 +1479,8 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
         )
         if summary.duration_seconds > 0:
             entities_per_minute = (total_entities / summary.duration_seconds) * 60
-            logger.info(
-                f"   • Migration speed: {entities_per_minute:.1f} entities/minute"
-            )
-            logger.info(
-                f"   • Total entities: {total_entities} in {summary.duration_seconds:.1f}s"
-            )
+            logger.info(f"   • Migration speed: {entities_per_minute:.1f} entities/minute")
+            logger.info(f"   • Total entities: {total_entities} in {summary.duration_seconds:.1f}s")
 
         # Enhanced rate limiting and cost metrics display
         if metrics_collector:
@@ -1644,29 +1492,19 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
             if cost_monitoring_verbose and cost_stats["total_queries"] > 0:
                 logger.info("🧮 GraphQL Cost Analysis:")
                 logger.info(f"   • Total queries: {cost_stats['total_queries']}")
-                logger.info(
-                    f"   • Avg requested cost: {cost_stats['avg_requested_cost']:.0f}"
-                )
-                logger.info(
-                    f"   • Avg actual cost: {cost_stats['avg_actual_cost']:.0f}"
-                )
-                logger.info(
-                    f"   • Cost accuracy: {cost_stats['cost_accuracy_percentage']:.1f}%"
-                )
+                logger.info(f"   • Avg requested cost: {cost_stats['avg_requested_cost']:.0f}")
+                logger.info(f"   • Avg actual cost: {cost_stats['avg_actual_cost']:.0f}")
+                logger.info(f"   • Cost accuracy: {cost_stats['cost_accuracy_percentage']:.1f}%")
 
             # Rate limit status
             if rate_limit_status["remaining_requests"] is not None:
                 logger.info("🔄 Rate Limit Status:")
-                logger.info(
-                    f"   • Remaining requests: {rate_limit_status['remaining_requests']}"
-                )
+                logger.info(f"   • Remaining requests: {rate_limit_status['remaining_requests']}")
                 if (
                     rate_limit_status["seconds_until_reset"] is not None
                     and rate_limit_status["seconds_until_reset"] > 0
                 ):
-                    logger.info(
-                        f"   • Reset in: {rate_limit_status['seconds_until_reset']:.0f}s"
-                    )
+                    logger.info(f"   • Reset in: {rate_limit_status['seconds_until_reset']:.0f}s")
         else:
             logger.info("   • Cost monitoring: DISABLED")
             rate_metrics = {
@@ -1690,9 +1528,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
             "download_failures": summary.download_failures,
             "duration": summary.format_duration(),
             "errors_count": len(summary.errors),
-            "status": (
-                "SUCCESS" if len(summary.errors) == 0 else "COMPLETED_WITH_ERRORS"
-            ),
+            "status": ("SUCCESS" if len(summary.errors) == 0 else "COMPLETED_WITH_ERRORS"),
             # Add migration mode information
             "deferred_notes_enabled": actual_deferred_notes,
             "notes_persistence_enabled": actual_enable_notes_persistence,
@@ -1713,26 +1549,18 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
         # Display deferred notes performance information
         if actual_deferred_notes and summary.note_references_collected > 0:
             logger.info("📊 Deferred Notes Processing Performance:")
-            logger.info(
-                f"   • Note references collected: {summary.note_references_collected:,}"
-            )
+            logger.info(f"   • Note references collected: {summary.note_references_collected:,}")
             logger.info(f"   • Notes processed separately: {summary.notes_processed:,}")
             throttle_rate = float(rate_metrics["throttle_rate"].rstrip("%"))
             if throttle_rate < 5.0:  # Less than 5% throttling
                 logger.info("   ✅ GraphQL throttling successfully minimized!")
             else:
-                logger.info(
-                    f"   ⚠️  Some throttling occurred: {rate_metrics['throttle_rate']} of requests"
-                )
-            logger.info(
-                "   🎯 Trading complex nested queries for simple individual queries"
-            )
+                logger.info(f"   ⚠️  Some throttling occurred: {rate_metrics['throttle_rate']} of requests")
+            logger.info("   🎯 Trading complex nested queries for simple individual queries")
 
         # Display final token status and rate limiting effectiveness
         logger.info("🔍 Final Token Status:")
-        logger.info(
-            f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Total requests: {rate_metrics['total_requests']} "
             f"(avg: {rate_metrics['requests_per_minute']}/min)"
@@ -1746,15 +1574,11 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
         elif float(rate_metrics["throttle_rate"].rstrip("%")) < 5.0:
             logger.info("   ⚠️  Minor throttling - rate limiting working well")
         else:
-            logger.info(
-                "   🔴 Significant throttling - consider further rate limit tuning"
-            )
+            logger.info("   🔴 Significant throttling - consider further rate limit tuning")
 
         # Display errors if any
         if summary.errors:
-            logger.error(
-                f"Migration completed with {len(summary.errors)} non-fatal errors:"
-            )
+            logger.error(f"Migration completed with {len(summary.errors)} non-fatal errors:")
             for i, error in enumerate(summary.errors, 1):
                 logger.error(f"  {i}. {error}")
 
@@ -1768,9 +1592,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
 
         typer.echo(f"Configuration Error: {e}", err=True)
         typer.echo("To configure authentication, you can either:", err=True)
-        typer.echo(
-            "  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True
-        )  # noqa: E501
+        typer.echo("  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True)  # noqa: E501
         typer.echo("  2. Manually set the following environment variables:", err=True)
         typer.echo("     - JOBBER_CLIENT_ID", err=True)
         typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
@@ -1779,9 +1601,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
 
         console.print(f"[red]Configuration Error:[/red] {e}")
         console.print("[yellow]To configure authentication, you can either:[/yellow]")
-        console.print(
-            "  1. Run [bold]tightbeam oauth init[/bold] to set up OAuth authentication"
-        )
+        console.print("  1. Run [bold]tightbeam oauth init[/bold] to set up OAuth authentication")
         console.print("  2. Manually set the following environment variables:")
         console.print("     - JOBBER_CLIENT_ID")
         console.print("     - JOBBER_CLIENT_SECRET")
@@ -1794,33 +1614,23 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
         # API communication issues
 
         typer.echo(f"API Error: {e}", err=True)
-        typer.echo(
-            "Please check your internet connection and OAuth2 token validity.", err=True
-        )
+        typer.echo("Please check your internet connection and OAuth2 token validity.", err=True)
 
         console.print(f"[red]API Error:[/red] {e}")
-        console.print(
-            "[yellow]Please check your internet connection and OAuth2 token "
-            "validity.[/yellow]"
-        )
+        console.print("[yellow]Please check your internet connection and OAuth2 token " "validity.[/yellow]")
 
         sys.exit(2)
 
     except MappingError as e:
         # Data transformation issues
         console.print(f"[red]Data Mapping Error:[/red] {e}")
-        console.print(
-            "[yellow]The API response format may have changed. Please check "
-            "for updates.[/yellow]"
-        )
+        console.print("[yellow]The API response format may have changed. Please check " "for updates.[/yellow]")
         sys.exit(3)
 
     except RepositoryError as e:
         # Database operation issues
         console.print(f"[red]Database Error:[/red] {e}")
-        console.print(
-            "[yellow]Please check database file permissions and disk space.[/yellow]"
-        )
+        console.print("[yellow]Please check database file permissions and disk space.[/yellow]")
         sys.exit(4)
 
     except KeyboardInterrupt:
@@ -1831,9 +1641,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
     except Exception as e:
         # Unexpected errors
         console.print(f"[red]Unexpected Error:[/red] {e}")
-        console.print(
-            "[yellow]Please report this issue with the full error message.[/yellow]"
-        )
+        console.print("[yellow]Please report this issue with the full error message.[/yellow]")
         sys.exit(5)
 
     finally:
@@ -1845,9 +1653,7 @@ def _execute_migration(db: Path, verbose: bool, entity_type: str) -> None:
 @migrate_app.command("quotes")
 def migrate_quotes(
     ctx: typer.Context,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     resume: Annotated[
         bool,
         typer.Option(
@@ -1890,9 +1696,7 @@ def migrate_quotes(
 @migrate_app.command("attachments")
 def migrate_attachments(
     ctx: typer.Context,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     download_path: Annotated[
         str, typer.Option("--download-path", help="Base path for attachment downloads")
     ] = "./attachments",
@@ -1933,9 +1737,7 @@ def migrate_attachments(
 @migrate_app.command("users")
 def migrate_users(
     ctx: typer.Context,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     resume: Annotated[
         bool,
         typer.Option(
@@ -1970,15 +1772,9 @@ def migrate_users(
 
 @migrate_app.command("expenses")
 def migrate_expenses(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     resume: Annotated[
         bool,
         typer.Option(
@@ -2012,15 +1808,9 @@ def migrate_expenses(
 
 @migrate_app.command("visits")
 def migrate_visits(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     resume: Annotated[
         bool,
         typer.Option(
@@ -2053,15 +1843,9 @@ def migrate_visits(
 
 @migrate_app.command("timesheet-entries")
 def migrate_timesheet_entries(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     resume: Annotated[
         bool,
         typer.Option(
@@ -2094,15 +1878,9 @@ def migrate_timesheet_entries(
 
 @migrate_app.command("products")
 def migrate_products(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     resume: Annotated[
         bool,
         typer.Option(
@@ -2135,15 +1913,9 @@ def migrate_products(
 
 @migrate_app.command("tax-rates")
 def migrate_tax_rates(
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path(
-        "tightbeam.db"
-    ),
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Enable verbose logging")
-    ] = False,
-    page_limit: Annotated[
-        Optional[int], typer.Option("--limit", help="Limit number of pages for testing")
-    ] = None,
+    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.db"),
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
     resume: Annotated[
         bool,
         typer.Option(
@@ -2244,9 +2016,7 @@ def _execute_entity_extraction(
             f"Setting up {optimization_level.upper()} rate limiting for entity extraction "
             f"({capacity} tokens, {refill_rate}/minute, ~{requests_per_second:.0f} req/sec)"
         )
-        rate_limiter = TokenBucketRateLimiter(
-            capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens
-        )
+        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
         backoff_config = config_manager.get_backoff_config()
         backoff_strategy = ExponentialBackoffStrategy(
             initial_delay=backoff_config["initial_delay"],
@@ -2367,9 +2137,7 @@ def _execute_entity_extraction(
         # Execute extraction
         logger.info(f"Starting {entity_type} extraction workflow")
         logger.info("🔍 Initial Token Status:")
-        logger.info(
-            f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         start_time = time.time()
 
         result = extractor.extract(page_limit=page_limit)
@@ -2383,12 +2151,8 @@ def _execute_entity_extraction(
         logger.info(f"\n📊 {entity_type.title()} Extraction Analysis:")
         if extraction_time > 0:
             entities_per_minute = (result["entities_processed"] / extraction_time) * 60
-            logger.info(
-                f"   • Extraction speed: {entities_per_minute:.1f} entities/minute"
-            )
-            logger.info(
-                f"   • Total entities: {result['entities_processed']} in {extraction_time:.1f}s"
-            )
+            logger.info(f"   • Extraction speed: {entities_per_minute:.1f} entities/minute")
+            logger.info(f"   • Total entities: {result['entities_processed']} in {extraction_time:.1f}s")
 
         # Create default rate metrics if metrics_collector is None (moderate default)
         rate_metrics = {
@@ -2404,11 +2168,7 @@ def _execute_entity_extraction(
             "pages_processed": result["pages_processed"],
             "extraction_time": extraction_time,
             "has_next_page": result["has_next_page"],
-            "status": (
-                "SUCCESS"
-                if extraction_summary["error_count"] == 0
-                else "COMPLETED_WITH_ERRORS"
-            ),
+            "status": ("SUCCESS" if extraction_summary["error_count"] == 0 else "COMPLETED_WITH_ERRORS"),
             "errors_count": extraction_summary["error_count"],
             "rate_limiting": {
                 "requests_per_minute": rate_metrics["requests_per_minute"],
@@ -2433,9 +2193,7 @@ def _execute_entity_extraction(
 
         # Display final token status and rate limiting effectiveness
         logger.info("🔍 Final Token Status:")
-        logger.info(
-            f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}"
-        )
+        logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Throttling rate: {rate_metrics['throttle_rate']} "
             f"({rate_metrics['throttled_requests']} throttled)"
@@ -2445,22 +2203,16 @@ def _execute_entity_extraction(
         elif float(rate_metrics["throttle_rate"].rstrip("%")) < 5.0:
             logger.info("   ⚠️  Minor throttling - rate limiting working well")
         else:
-            logger.info(
-                "   🔴 Significant throttling - consider further rate limit tuning"
-            )
+            logger.info("   🔴 Significant throttling - consider further rate limit tuning")
 
         # Display results
         logger.log_summary(summary_data)
 
         # Log entity-specific success messages
         if entity_type == "quotes":
-            logger.info(
-                f"✅ Quote extraction completed: {result['entities_processed']} quotes processed"
-            )  # noqa: E501
+            logger.info(f"✅ Quote extraction completed: {result['entities_processed']} quotes processed")  # noqa: E501
         elif entity_type == "notes":
-            logger.info(
-                f"✅ Note extraction completed: {result['entities_processed']} notes processed"
-            )  # noqa: E501
+            logger.info(f"✅ Note extraction completed: {result['entities_processed']} notes processed")  # noqa: E501
         elif entity_type == "attachments":
             files_downloaded = result.get("files_downloaded", 0)
             total_bytes = result.get("total_bytes_downloaded", 0)
@@ -2469,17 +2221,13 @@ def _execute_entity_extraction(
                 f"{files_downloaded} files downloaded ({total_bytes} bytes)"
             )
         elif entity_type == "users":
-            logger.info(
-                f"✅ User extraction completed: {result['entities_processed']} users processed"
-            )  # noqa: E501
+            logger.info(f"✅ User extraction completed: {result['entities_processed']} users processed")  # noqa: E501
         elif entity_type == "expenses":
             logger.info(
                 f"✅ Expense extraction completed: {result['entities_processed']} expenses processed"  # noqa: E501
             )
         elif entity_type == "visits":
-            logger.info(
-                f"✅ Visit extraction completed: {result['entities_processed']} visits processed"
-            )  # noqa: E501
+            logger.info(f"✅ Visit extraction completed: {result['entities_processed']} visits processed")  # noqa: E501
         elif entity_type == "timesheet-entries":
             logger.info(
                 f"✅ Timesheet entry extraction completed: {result['entities_processed']} timesheet entries processed"  # noqa: E501
@@ -2495,24 +2243,18 @@ def _execute_entity_extraction(
 
         # Handle continuation if more pages available
         if result["has_next_page"] and page_limit is None:
-            logger.info(
-                f"📄 More {entity_type} pages available. Run again to continue extraction."
-            )  # noqa: E501
+            logger.info(f"📄 More {entity_type} pages available. Run again to continue extraction.")  # noqa: E501
             logger.info(f"Next cursor: {result.get('end_cursor', 'N/A')}")
 
         # Exit with appropriate code
         exit_code = 0 if extraction_summary["error_count"] == 0 else 1
-        logger.info(
-            f"{entity_type.capitalize()} extraction completed with exit code {exit_code}"
-        )  # noqa: E501
+        logger.info(f"{entity_type.capitalize()} extraction completed with exit code {exit_code}")  # noqa: E501
         sys.exit(exit_code)
 
     except ConfigurationError as e:
         typer.echo(f"Configuration Error: {e}", err=True)
         typer.echo("To configure authentication, you can either:", err=True)
-        typer.echo(
-            "  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True
-        )
+        typer.echo("  1. Run 'tightbeam oauth init' to set up OAuth authentication", err=True)
         typer.echo("  2. Manually set the following environment variables:", err=True)
         typer.echo("     - JOBBER_CLIENT_ID", err=True)
         typer.echo("     - JOBBER_CLIENT_SECRET", err=True)
@@ -2522,9 +2264,7 @@ def _execute_entity_extraction(
 
     except JobberApiError as e:
         typer.echo(f"API Error: {e}", err=True)
-        typer.echo(
-            "Please check your internet connection and OAuth2 token validity.", err=True
-        )
+        typer.echo("Please check your internet connection and OAuth2 token validity.", err=True)
         sys.exit(2)
 
     except MappingError as e:
@@ -2541,9 +2281,7 @@ def _execute_entity_extraction(
         sys.exit(4)
 
     except KeyboardInterrupt:
-        typer.echo(
-            f"\n{entity_type.capitalize()} extraction interrupted by user.", err=True
-        )
+        typer.echo(f"\n{entity_type.capitalize()} extraction interrupted by user.", err=True)
         sys.exit(130)
 
     except Exception as e:
