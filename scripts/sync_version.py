@@ -13,11 +13,11 @@ import re
 import sys
 from pathlib import Path
 
-# Add src to path to import constants
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add parent directory to path to import from src
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from constants import APP_VERSION, APP_DESCRIPTION, APP_AUTHORS, APP_LICENSE, PACKAGE_KEYWORDS
+    from src.constants import APP_VERSION, APP_DESCRIPTION, APP_AUTHORS, APP_LICENSE, PACKAGE_KEYWORDS
 except ImportError as e:
     print(f"Error importing constants: {e}")
     print("Make sure you're running this from the project root directory")
