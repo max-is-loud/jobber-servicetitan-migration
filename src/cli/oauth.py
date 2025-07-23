@@ -15,6 +15,16 @@ from rich.status import Status
 from rich.table import Table
 
 from src.auth import AuthProvider
+from src.constants import (
+    DEFAULT_PORT,
+    OAUTH_EMOJI,
+    OAUTH_TIMEOUT_SECONDS,
+    REQUIRED_OAUTH_VARS,
+    SUCCESS_EMOJI,
+    ERROR_EMOJI,
+    WARNING_EMOJI,
+    INFO_EMOJI,
+)
 from src.exceptions import ConfigurationError, OAuth2Error, RepositoryError
 from src.utils import (
     complete_oauth_flow,
@@ -28,12 +38,73 @@ from .services import CLIErrorHandler, ServiceFactory
 # Get shared console instance
 console = ServiceFactory.get_console()
 
+
+def _validate_oauth_config(console, verbose: bool = False) -> None:
+    """Validate OAuth configuration before running OAuth commands."""
+    import os
+    import sys
+
+    missing_vars = []
+
+    for var_name, description in REQUIRED_OAUTH_VARS.items():
+        value = os.environ.get(var_name)
+        if not value or not value.strip():
+            missing_vars.append((var_name, description))
+        elif verbose:
+            console.print(f"{SUCCESS_EMOJI} [green]{var_name}[/green] is configured", style="dim")
+
+    if missing_vars:
+        console.print(f"\n[red]{ERROR_EMOJI} OAuth Configuration Error[/red]")
+        console.print("The following required environment variables are missing or empty:")
+
+        for var_name, description in missing_vars:
+            console.print(f"  • [yellow]{var_name}[/yellow] - {description}")
+
+        console.print(f"\n[bold cyan]{INFO_EMOJI} To fix this:[/bold cyan]")
+        console.print("1. Run '[green]tightbeam oauth setup[/green]' for detailed setup instructions")
+        console.print("2. Set the missing environment variables in your shell or .env file")
+        console.print("3. Use '[green]--no-check-config[/green]' to skip this validation")
+
+        sys.exit(1)
+    elif verbose:
+        console.print(f"{SUCCESS_EMOJI} [green]OAuth configuration validated successfully[/green]", style="dim")
+
+
 # Create OAuth subcommand group
 oauth_app = typer.Typer(
     name="oauth",
     help="OAuth authentication setup commands",
     add_completion=False,
 )
+
+
+@oauth_app.callback()
+def oauth_group_callback(
+    ctx: typer.Context,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Enable verbose output for OAuth operations")
+    ] = False,
+    check_config: Annotated[
+        bool, typer.Option("--check-config/--no-check-config", help="Validate OAuth configuration before commands")
+    ] = True,
+) -> None:
+    """
+    OAuth 2.0 authentication management.
+
+    Manage OAuth tokens, authorization flows, and authentication status
+    for connecting to the Jobber API.
+    """
+    # Store shared options in context for all oauth commands
+    ctx.ensure_object(dict)
+    ctx.obj["verbose"] = verbose
+    ctx.obj["check_config"] = check_config
+
+    if verbose:
+        console.print(f"{OAUTH_EMOJI} [bold blue]OAuth Verbose Mode:[/bold blue] Detailed output enabled", style="dim")
+
+    # Validate OAuth configuration if requested (and not running setup/status commands)
+    if check_config and ctx.invoked_subcommand not in ["setup", "status"]:
+        _validate_oauth_config(console, verbose)
 
 
 # These functions are now provided by ServiceFactory
