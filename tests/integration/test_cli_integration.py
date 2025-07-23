@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.cli import _execute_entity_extraction
+from src.cli.services import _execute_entity_extraction
 from src.repositories import Repository
 
 

@@ -1,11 +1,13 @@
-"""Shared services and factories for CLI modules.
-
-This module provides shared business logic, configuration management,
-and service instantiation patterns used across CLI subcommands.
-"""
+"""CLI services and shared functionality."""
 
 from .error_handling import CLIErrorHandler
 from .factories import ServiceFactory
 from .shared import SharedServices
+from .entity_extraction import _execute_entity_extraction
 
-__all__ = ["ServiceFactory", "SharedServices", "CLIErrorHandler"]
+__all__ = [
+    "CLIErrorHandler",
+    "ServiceFactory", 
+    "SharedServices",
+    "_execute_entity_extraction",
+]

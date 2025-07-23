@@ -6,6 +6,15 @@ from typing import Annotated, Optional
 import typer
 
 from src.config import ConfigManagerImpl
+from src.constants import (
+    DEFAULT_DB_PATH,
+    DEFAULT_OPTIMIZATION_LEVEL,
+    MIGRATION_EMOJI,
+    DRY_RUN_EMOJI,
+    ERROR_EMOJI,
+    INFO_EMOJI,
+    OPTIMIZATION_LEVELS,
+)
 from src.exceptions import (
     ConfigurationError,
 )
@@ -14,6 +23,52 @@ from .services import ServiceFactory
 
 # Get shared console instance
 console = ServiceFactory.get_console()
+
+
+def _check_authentication(console) -> None:
+    """Check if user is authenticated before allowing migration operations."""
+    import os
+    import sys
+    from src.auth import AuthProvider
+    from src.exceptions import OAuth2Error
+
+    # Check for environment token first
+    jobber_token = os.environ.get("JOBBER_TOKEN")
+    if jobber_token:
+        # Simple validation - make sure it's not empty
+        if jobber_token.strip():
+            return  # Authentication via environment token is valid
+
+    # Check OAuth2 authentication
+    try:
+        oauth_manager = ServiceFactory.create_oauth2_manager()
+        repository = ServiceFactory.create_repository()
+
+        # Check for stored tokens
+        stored_tokens = repository.get_oauth_tokens()
+        if stored_tokens:
+            # Try to validate the stored tokens
+            auth_provider = AuthProvider(oauth_manager, repository)
+            auth_provider.get_token()  # This will validate and refresh if needed
+            return  # OAuth2 authentication is valid
+    except ConfigurationError:
+        pass  # OAuth2 not configured
+    except OAuth2Error:
+        pass  # OAuth2 tokens invalid
+    except Exception:
+        pass  # Other OAuth2 issues
+
+    # No valid authentication found
+    console.print(f"\n[red]{ERROR_EMOJI} Authentication Required[/red]")
+    console.print("Migration commands require authentication to access the Jobber API.")
+    console.print(f"\n[bold cyan]{INFO_EMOJI} Choose one of the following authentication methods:[/bold cyan]")
+    console.print("1. [green]Environment Token:[/green] Set JOBBER_TOKEN environment variable")
+    console.print("2. [green]OAuth2 Setup:[/green] Run 'tightbeam oauth init' to authenticate")
+    console.print(
+        f"\n[yellow]{INFO_EMOJI} For more information:[/yellow] Run 'tightbeam oauth status' to check your current authentication"
+    )
+    sys.exit(1)
+
 
 # Create migrate subcommand group
 migrate_app = typer.Typer(
@@ -53,7 +108,7 @@ def migrate_callback(
                 "• aggressive (8 req/s): Maximum speed with 4% safety margin, requires active monitoring"
             )
         ),
-    ] = "moderate",
+    ] = DEFAULT_OPTIMIZATION_LEVEL,
     enable_cost_monitoring: Annotated[
         bool,
         typer.Option(
@@ -90,6 +145,13 @@ def migrate_callback(
             help="Enable adaptive performance optimization (auto-tune page size and delays)",
         ),
     ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Preview migration operations without making any changes to the database",
+        ),
+    ] = False,
 ) -> None:
     """
     Data migration commands for TightBeam.
@@ -113,7 +175,7 @@ def migrate_callback(
         )
         raise typer.Exit(1) from None
 
-    # Store shared configuration in context for subcommands
+        # Store shared configuration in context for subcommands
     ctx.ensure_object(dict)
     ctx.obj.update(
         {
@@ -126,8 +188,23 @@ def migrate_callback(
             "cost_monitoring_verbose": cost_monitoring_verbose,
             "resume": resume,
             "enable_adaptive_optimization": enable_adaptive_optimization,
+            "dry_run": dry_run,
         }
     )
+
+    if verbose:
+        console.print(
+            f"{MIGRATION_EMOJI} [bold blue]Migration Verbose Mode:[/bold blue] Detailed output enabled", style="dim"
+        )
+
+    if dry_run:
+        console.print(
+            f"{DRY_RUN_EMOJI} [bold yellow]Dry Run Mode:[/bold yellow] Preview mode - no database changes will be made",
+            style="dim",
+        )
+
+    # Check authentication before allowing migration commands
+    _check_authentication(console)
 
     if ctx.invoked_subcommand is None:
         # Default to 'all' command when no subcommand is specified
@@ -142,6 +219,7 @@ def migrate_callback(
             cost_monitoring_verbose=cost_monitoring_verbose,
             resume=resume,
             enable_adaptive_optimization=enable_adaptive_optimization,
+            dry_run=dry_run,
         )
 
 
@@ -181,6 +259,7 @@ def migrate_all(
             help="Enable adaptive performance optimization (auto-tune page size and delays)",
         ),
     ] = False,
+    dry_run: bool = False,
 ) -> None:
     """
     Migrate all data from Jobber API to SQLite database.
@@ -260,8 +339,8 @@ def migrate_quotes(
     # Get shared configuration from context
     config = ctx.obj or {}
 
-    # Import the helper function from main CLI
-    from ..cli import _execute_entity_extraction
+    # Import the helper function from CLI services
+    from .services import _execute_entity_extraction
 
     _execute_entity_extraction(
         entity_type="quotes",
@@ -303,8 +382,8 @@ def migrate_attachments(
     # Get shared configuration from context
     config = ctx.obj or {}
 
-    # Import the helper function from main CLI
-    from ..cli import _execute_entity_extraction
+    # Import the helper function from CLI services
+    from .services import _execute_entity_extraction
 
     _execute_entity_extraction(
         entity_type="attachments",
@@ -347,8 +426,8 @@ def migrate_users(
     # Get shared configuration from context
     config = ctx.obj or {}
 
-    # Import the helper function from main CLI
-    from ..cli import _execute_entity_extraction
+    # Import the helper function from CLI services
+    from .services import _execute_entity_extraction
 
     _execute_entity_extraction(
         entity_type="users",
@@ -386,8 +465,8 @@ def migrate_expenses(
     # Get shared configuration from context
     config = ctx.obj or {}
 
-    # Import the helper function from main CLI
-    from ..cli import _execute_entity_extraction
+    # Import the helper function from CLI services
+    from .services import _execute_entity_extraction
 
     _execute_entity_extraction(
         entity_type="expenses",
