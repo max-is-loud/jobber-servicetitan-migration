@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "tightbeam-v2"
-version = "0.1.0"
-description = "A command-line tool for extracting client and invoice data from Jobber GraphQL API and persisting it to SQLite database using object-oriented architecture."
+# Version is managed in src/constants.py - update there to change version
+version = "0.1.3"
+description = "Jobber Data Migration Tool"
 authors = ["Maxime Langlois-Morin <max@maxmorin.ca>"]
 readme = "README.md"
-license = "MIT"
+license = "Proprietary"
 keywords = ["jobber", "graphql", "sqlite", "data-migration", "cli"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -56,7 +57,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 line-length = 120
-target-version = "py38"
+target-version = "0.1.3"
 
 [tool.ruff.lint]
 select = [
@@ -84,7 +85,7 @@ multi_line_output = 3
 line_length = 88
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "0.1.3"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
