@@ -38,7 +38,7 @@ def open_browser(auth_url: str, console: Optional[Console] = None) -> None:
         console.print("✅ [green]Browser opened successfully[/green]")
     except Exception as e:
         # In WSL environment, try alternative methods
-        if "wsl" in os.uname().release.lower():
+        if "WSL_INTEROP" in os.environ:
             try:
                 # Try using Windows browser via WSL
                 subprocess.run(
