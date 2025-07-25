@@ -9,7 +9,7 @@ class MigrationSummary:
     """
     Represents the results and status of a complete migration operation.
 
-    Used by MigrationCoordinator to structure migration results for CLI reporting
+    Used by migration coordinators to structure migration results for CLI reporting
     and structured logging. Supports all entity types including Client, Invoice,
     Quote, Note, and Attachment with comprehensive metrics and error tracking.
     Includes skip tracking for resumable migrations.

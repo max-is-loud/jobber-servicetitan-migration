@@ -7,13 +7,11 @@ import typer
 
 from src.config import ConfigManagerImpl
 from src.constants import (
-    DEFAULT_DB_PATH,
     DEFAULT_OPTIMIZATION_LEVEL,
     MIGRATION_EMOJI,
     DRY_RUN_EMOJI,
     ERROR_EMOJI,
     INFO_EMOJI,
-    OPTIMIZATION_LEVELS,
 )
 from src.exceptions import (
     ConfigurationError,
@@ -292,7 +290,7 @@ def migrate_all(
     from src.auth import AuthProvider, OAuth2Manager
     from src.clients import HttpClient, JobberClient
     from src.config import ConfigManagerImpl
-    from src.coordinators import RichMigrationCoordinator
+    from src.coordinators import BaseMigrationCoordinator
     from src.mappers import EntityMapper
     from src.exceptions import ConfigurationError
     from src.loggers import RichLogger
@@ -422,18 +420,16 @@ def migrate_all(
         )
 
         # Create note components for deferred processing if enabled
-        note_reference_collector = None
-        notes_extractor = None
 
         if actual_deferred_notes:
             logger.info("🔄 Deferred notes loading enabled - preventing GraphQL throttling")
-            note_reference_collector = NoteReferenceCollector(
+            NoteReferenceCollector(
                 repository=repository,
                 logger=logger,
                 enable_persistence=actual_enable_notes_persistence,
                 batch_size=1000,
             )
-            notes_extractor = NotesExtractor(
+            NotesExtractor(
                 jobber_client,
                 entity_mapper,
                 repository,
@@ -447,7 +443,7 @@ def migrate_all(
         else:
             logger.info("⚡ Immediate notes processing enabled (legacy mode)")
 
-        quotes_extractor = QuotesExtractor(
+        QuotesExtractor(
             jobber_client,
             entity_mapper,
             repository,
@@ -455,7 +451,7 @@ def migrate_all(
             config_manager=config_manager,
             skip_existing_entities=actual_resume,
         )
-        attachment_downloader = AttachmentDownloader(
+        AttachmentDownloader(
             jobber_client,
             entity_mapper,
             repository,
@@ -471,8 +467,8 @@ def migrate_all(
         else:
             logger.info("🆕 Full migration mode - processing all entities from beginning")
 
-        # Create Rich migration coordinator with basic dependencies
-        migration_coordinator = RichMigrationCoordinator(
+        # Create unified Rich-based migration coordinator
+        migration_coordinator = BaseMigrationCoordinator(
             jobber_client=jobber_client,
             entity_mapper=entity_mapper,
             repository=repository,

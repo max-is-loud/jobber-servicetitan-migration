@@ -58,12 +58,12 @@ Last updated: July 14, 2025
   - Responsibility: Abstract SQLite operations (create tables, upsert entities).
   - Dependencies: DB connection.
   - Methods: `init_schema()`, `save_clients(List[Client])`, `save_invoices(List[Invoice])`
-- **MigrationCoordinator**
+- **RichMigrationCoordinator**
   - Responsibility: Orchestrate the full workflow.
   - Dependencies: `JobberClient`, `EntityMapper`, `Repository`, `Logger`.
   - Method: `migrate()`
 - **CLI** (Typer-based)
-  - Responsibility: Parse arguments with Typer, instantiate dependencies via dependency injection, and invoke `MigrationCoordinator`.
+  - Responsibility: Parse arguments with Typer, instantiate dependencies via dependency injection, and invoke `RichMigrationCoordinator`.
   - Implementation:
     - Use `typer.Typer()` to define the main app and subcommands.
     - Commands:
@@ -78,7 +78,7 @@ Last updated: July 14, 2025
       ):
           """Fetch Jobber data and persist to SQLite"""
           # Instantiate AuthProvider, JobberClient, etc.
-          coordinator = MigrationCoordinator(...)
+          coordinator = RichMigrationCoordinator(...)
           coordinator.migrate()
       ```
 
@@ -92,7 +92,7 @@ Last updated: July 14, 2025
 
 1. CLI reads `--db` path and ensures `JOBBER_TOKEN` is set.
 2. Instantiate `AuthProvider`, `JobberClient`, `EntityMapper`, `Repository`, `Logger`.
-3. `MigrationCoordinator.migrate()` calls:
+3. `RichMigrationCoordinator.migrate()` calls:
    - `Repository.init_schema()`
    - Loop: `JobberClient.fetch_clients()`, `EntityMapper.map_client()`, `Repository.save_clients()`
    - Loop: `JobberClient.fetch_invoices()`, `EntityMapper.map_invoice()`, `Repository.save_invoices()`
@@ -220,7 +220,7 @@ class ClientRepository(Repository, CrudRepository[Client]):
 | ------- | ------------------------------------------------ |
 | July 17 | Implement `AuthProvider`, `JobberClient`, models |
 | July 18 | Add `EntityMapper`, `Repository.init_schema()`   |
-| July 19 | Complete `MigrationCoordinator.migrate()` flow   |
+| July 19 | Complete `RichMigrationCoordinator.migrate()` flow   |
 | July 20 | CLI integration, summary output via `Logger`     |
 | July 21 | Manual demo and PRD sign‑off                     |
 
@@ -243,7 +243,7 @@ Use the diagram below to visualize class interactions and data flow for function
 ```mermaid
 flowchart TD
   subgraph CLI Layer
-    CLI[CLI Parser] --> MC[MigrationCoordinator]
+    CLI[CLI Parser] --> MC[RichMigrationCoordinator]
   end
 
   subgraph Core Components
@@ -262,8 +262,8 @@ flowchart TD
 
 **Interpretation:**
 
-1. **CLI Parser** instantiates and invokes **MigrationCoordinator**.
-2. **MigrationCoordinator** orchestrates calls to **AuthProvider**, **JobberClient**, **EntityMapper**, and **Repository**.
+1. **CLI Parser** instantiates and invokes **RichMigrationCoordinator**.
+2. **RichMigrationCoordinator** orchestrates calls to **AuthProvider**, **JobberClient**, **EntityMapper**, and **Repository**.
 3. **AuthProvider** supplies the token for **JobberClient**’s GraphQL requests.
 4. **JobberClient** fetches raw data and passes it to **EntityMapper**.
 5. **EntityMapper** transforms raw payloads into domain objects and hands them to **Repository**.

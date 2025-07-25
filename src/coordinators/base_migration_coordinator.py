@@ -1,8 +1,24 @@
-"""Abstract base class for migration coordinators with Template Method pattern."""
+"""Base class for migration coordinators with Rich UI and Template Method pattern."""
 
 import time
-from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Optional
+
+from rich.console import Console
+from rich.live import Live
+from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
+from rich.table import Column
+from rich.text import Text
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
@@ -14,20 +30,19 @@ from ..extractors import (
     QuotesExtractor,
 )
 from ..interfaces import Logger
-from ..interfaces import MigrationProgressDisplay
 from ..mappers import EntityMapper
 from ..models import MigrationSummary
 from ..performance import AdaptivePerformanceOptimizer
 from ..repositories import Repository
 
 
-class BaseMigrationCoordinator(ABC):
+class BaseMigrationCoordinator:
     """
-    Abstract base class for migration coordinators with Template Method pattern.
+    Base class for migration coordinators with Rich UI and Template Method pattern.
 
-    Extracts shared migration workflow logic from MigrationCoordinator and
-    RichMigrationCoordinator to eliminate duplication. Implements the Template
-    Method pattern following BaseExtractor design.
+    Provides shared migration workflow logic with Rich-based progress and error reporting.
+    All progress display and error reporting uses Rich exclusively for enhanced
+    visual feedback during migration operations.
 
     Shared responsibilities:
     - Database schema initialization
@@ -37,8 +52,7 @@ class BaseMigrationCoordinator(ABC):
     - Resume functionality with cursor management
     - Optional extractor integration
     - Adaptive performance optimization
-
-    Subclasses implement display-specific progress feedback methods.
+    - Rich-based progress bars and error panels
     """
 
     def __init__(
@@ -85,6 +99,9 @@ class BaseMigrationCoordinator(ABC):
         self._quotes_extractor = quotes_extractor
         self._attachment_downloader = attachment_downloader
 
+        # Rich console for progress and error display
+        self._console = Console()
+
         # Adaptive performance optimization
         self._adaptive_optimizer: Optional[AdaptivePerformanceOptimizer] = None
         if enable_adaptive_optimization:
@@ -95,98 +112,177 @@ class BaseMigrationCoordinator(ABC):
                 optimization_interval=10,  # Optimize every 10 requests
             )
 
-    @abstractmethod
-    def _create_progress_display(self) -> Any:
-        """Create and initialize progress display system.
-
-        Template Method: Subclasses implement display-specific initialization.
+    def _create_progress_display(self) -> Progress:
+        """Create Rich Progress display for migration tracking with custom columns.
 
         Returns:
-            Display object (Progress for Rich UI, None for console logging)
+            Rich Progress object with customized columns for migration workflows
         """
-        ...
+        return Progress(
+            SpinnerColumn(),
+            TextColumn(
+                "[progress.description]{task.description}",
+                table_column=Column(ratio=2, min_width=20),
+            ),
+            BarColumn(
+                bar_width=None,
+                complete_style="green",
+                finished_style="bright_green",
+                table_column=Column(ratio=3),
+            ),
+            MofNCompleteColumn(table_column=Column(min_width=12, justify="right")),
+            TextColumn("•", justify="center"),
+            TransferSpeedColumn(table_column=Column(min_width=12, justify="right")),
+            TextColumn("•", justify="center"),
+            TimeElapsedColumn(table_column=Column(min_width=8, justify="right")),
+            TextColumn("/"),
+            TimeRemainingColumn(table_column=Column(min_width=8, justify="right")),
+            console=self._console,
+            expand=True,
+        )
 
-    @abstractmethod
-    def _add_entity_task(
-        self, display_obj: Any, entity_name: str, description: str
-    ) -> Optional[Any]:
-        """Add a new entity migration task to the progress display.
-
-        Template Method: Subclasses implement display-specific task creation.
+    def _add_entity_task(self, display_obj: Progress, entity_name: str, description: str) -> TaskID:
+        """Add a new entity migration task to Rich progress display.
 
         Args:
-            display_obj: Display object from _create_progress_display()
+            display_obj: Rich Progress object from _create_progress_display()
             entity_name: Name of entity type being migrated
-            description: Initial task description
+            description: Initial task description with Rich formatting
 
         Returns:
-            Task identifier for updates (TaskID for Rich, None for console)
+            TaskID for progress updates
         """
-        ...
+        return display_obj.add_task(description, total=None)
 
-    @abstractmethod
+    def _add_indeterminate_task(self, display_obj: Progress, entity_name: str, description: str) -> TaskID:
+        """Add a new indeterminate progress task for unknown totals.
+
+        Args:
+            display_obj: Rich Progress object from _create_progress_display()
+            entity_name: Name of entity type being migrated
+            description: Task description with Rich formatting
+
+        Returns:
+            TaskID for progress updates
+        """
+        return display_obj.add_task(description, total=None, start=False)
+
+    def _start_task(self, display_obj: Progress, task_id: TaskID, total: Optional[int] = None) -> None:
+        """Start an indeterminate task with optional total.
+
+        Args:
+            display_obj: Rich Progress object
+            task_id: TaskID from _add_indeterminate_task()
+            total: Total number of steps if known
+        """
+        display_obj.start_task(task_id)
+        if total is not None:
+            display_obj.update(task_id, total=total)
+
     def _update_task_progress(
         self,
-        display_obj: Any,
-        task_id: Optional[Any],
+        display_obj: Progress,
+        task_id: Optional[TaskID],
         description: str,
         completed: Optional[int] = None,
         total: Optional[int] = None,
     ) -> None:
-        """Update progress for an existing task.
-
-        Template Method: Subclasses implement display-specific progress updates.
+        """Update Rich progress display for existing task.
 
         Args:
-            display_obj: Display object from _create_progress_display()
-            task_id: Task identifier from _add_entity_task()
-            description: Updated task description
+            display_obj: Rich Progress object from _create_progress_display()
+            task_id: TaskID from _add_entity_task()
+            description: Updated task description with Rich formatting
             completed: Current progress count
             total: Total expected count (if known)
         """
-        ...
+        # Only update if we have a valid task_id
+        if task_id is not None:
+            if completed is not None and total is not None:
+                display_obj.update(task_id, description=description, completed=completed, total=total)
+            elif completed is not None:
+                display_obj.update(task_id, description=description, completed=completed)
+            else:
+                display_obj.update(task_id, description=description)
 
-    @abstractmethod
     def _complete_task(
         self,
-        display_obj: Any,
-        task_id: Optional[Any],
+        display_obj: Progress,
+        task_id: Optional[TaskID],
         entity_name: str,
         final_count: int,
     ) -> None:
-        """Mark a task as completed with final status.
-
-        Template Method: Subclasses implement display-specific completion.
+        """Mark Rich progress task as completed with final status.
 
         Args:
-            display_obj: Display object from _create_progress_display()
-            task_id: Task identifier from _add_entity_task()
+            display_obj: Rich Progress object from _create_progress_display()
+            task_id: TaskID from _add_entity_task()
             entity_name: Name of entity type that was migrated
             final_count: Final number of entities processed
         """
-        ...
+        # Only update if we have a valid task_id
+        if task_id is not None:
+            display_obj.update(
+                task_id,
+                description=f"[green]✓ {entity_name.title()} complete ({final_count:,} processed)",
+                completed=final_count,
+                total=final_count,
+            )
 
-    @abstractmethod
-    def _start_display_context(self, display_obj: Any) -> Any:
-        """Start the display context manager (for Rich Live or console).
-
-        Template Method: Subclasses implement display lifecycle management.
+    def _start_display_context(self, display_obj: Progress) -> Live:
+        """Start Rich Live display context for real-time updates.
 
         Args:
-            display_obj: Display object from _create_progress_display()
+            display_obj: Rich Progress object from _create_progress_display()
 
         Returns:
-            Context manager for display lifecycle
+            Rich Live context manager for real-time display updates
         """
-        ...
+        return Live(display_obj, console=self._console, refresh_per_second=4)
+
+    def _display_error_panel(self, title: str, message: str, error_type: str = "error") -> None:
+        """Display a styled error panel using Rich.
+
+        Args:
+            title: Error panel title
+            message: Error message content
+            error_type: Type of error for styling ("error", "warning", "info")
+        """
+        style_map = {"error": "red", "warning": "yellow", "info": "blue"}
+
+        style = style_map.get(error_type, "red")
+
+        panel = Panel(
+            Text(message, style="white"),
+            title=f"[bold {style}]{title}[/bold {style}]",
+            border_style=style,
+            padding=(1, 2),
+        )
+
+        self._console.print()
+        self._console.print(panel)
+        self._console.print()
+
+    def _print_exception(self, exception: Exception) -> None:
+        """Print exception traceback using Rich formatting.
+
+        Args:
+            exception: Exception to display
+        """
+        self._console.print_exception(
+            show_locals=False,
+            max_frames=5,
+            word_wrap=True,
+            extra_lines=2,
+        )
 
     def migrate(self, include_extended_entities: bool = True) -> MigrationSummary:
         """
-        Execute complete migration workflow with Template Method pattern.
+        Execute complete migration workflow with Rich progress display.
 
-        Orchestrates the full migration process using Template Method:
+        Orchestrates the full migration process using Rich progress bars:
         1. Initialize database schema
-        2. Create progress display (subclass-specific)
+        2. Create Rich progress display
         3. Migrate clients with cursor pagination
         4. Migrate invoices with cursor pagination
         5. Migrate quotes (if extractor provided and enabled)
@@ -232,33 +328,21 @@ class BaseMigrationCoordinator(ABC):
             self._logger.info("Initializing database schema")
             self._repository.init_schema()
 
-            # Create progress display (Template Method - subclass specific)
+            # Create Rich progress display
             display_obj = self._create_progress_display()
 
             # Start display context and execute migration workflow
             with self._start_display_context(display_obj):
                 # Core entity migrations (backward compatibility)
                 self._logger.info("Starting client migration")
-                client_task = self._add_entity_task(
-                    display_obj, "clients", "[cyan]Migrating clients..."
-                )
-                summary.clients_processed = self._migrate_clients(
-                    summary, display_obj, client_task
-                )
-                self._complete_task(
-                    display_obj, client_task, "clients", summary.clients_processed
-                )
+                client_task = self._add_entity_task(display_obj, "clients", "[cyan]Migrating clients...")
+                summary.clients_processed = self._migrate_clients(summary, display_obj, client_task)
+                self._complete_task(display_obj, client_task, "clients", summary.clients_processed)
 
                 self._logger.info("Starting invoice migration")
-                invoice_task = self._add_entity_task(
-                    display_obj, "invoices", "[cyan]Migrating invoices..."
-                )
-                summary.invoices_processed = self._migrate_invoices(
-                    summary, display_obj, invoice_task
-                )
-                self._complete_task(
-                    display_obj, invoice_task, "invoices", summary.invoices_processed
-                )
+                invoice_task = self._add_entity_task(display_obj, "invoices", "[cyan]Migrating invoices...")
+                summary.invoices_processed = self._migrate_invoices(summary, display_obj, invoice_task)
+                self._complete_task(display_obj, invoice_task, "invoices", summary.invoices_processed)
 
                 # Extended entity migrations (if enabled and extractors available)
                 if include_extended_entities:
@@ -266,64 +350,49 @@ class BaseMigrationCoordinator(ABC):
                         self._logger.info("Starting quote migration")
                         summary.quotes_processed = self._migrate_quotes(summary)
                     else:
-                        self._logger.debug(
-                            "Quote extraction skipped - no extractor provided"
-                        )
+                        self._logger.debug("Quote extraction skipped - no extractor provided")
 
                     # Process collected note references using deferred processing
                     if self._notes_extractor and self._note_reference_collector:
                         self._logger.info("Starting deferred note migration")
                         summary.notes_processed = self._migrate_deferred_notes(summary)
                     else:
-                        self._logger.debug(
-                            "Deferred note extraction skipped - no extractor or collector provided"
-                        )
+                        self._logger.debug("Deferred note extraction skipped - no extractor or collector provided")
 
                     if self._attachment_downloader:
-                        self._logger.info(
-                            "Starting attachment migration with file downloads"
-                        )
+                        self._logger.info("Starting attachment migration with file downloads")
                         attachment_results = self._migrate_attachments(summary)
                         summary.attachments_processed = attachment_results["entities"]
-                        summary.files_downloaded = attachment_results[
-                            "files_downloaded"
-                        ]
-                        summary.total_bytes_downloaded = attachment_results[
-                            "bytes_downloaded"
-                        ]
-                        summary.download_failures = attachment_results[
-                            "download_failures"
-                        ]
+                        summary.files_downloaded = attachment_results["files_downloaded"]
+                        summary.total_bytes_downloaded = attachment_results["bytes_downloaded"]
+                        summary.download_failures = attachment_results["download_failures"]
                     else:
-                        self._logger.debug(
-                            "Attachment extraction skipped - no downloader provided"
-                        )
+                        self._logger.debug("Attachment extraction skipped - no downloader provided")
                 else:
-                    self._logger.info(
-                        "Extended entity migration disabled - using legacy Client/Invoice only mode"
-                    )
+                    self._logger.info("Extended entity migration disabled - using legacy Client/Invoice only mode")
 
         except (RepositoryError, JobberApiError, MappingError) as e:
             self._logger.error(f"Critical migration error: {e}")
+            self._display_error_panel(
+                "Critical Migration Error", f"Migration failed due to {type(e).__name__}: {str(e)}", "error"
+            )
             summary.add_error(f"Critical error: {str(e)}")
             raise
         except Exception as e:
             self._logger.error(f"Unexpected migration error: {e}")
+            self._display_error_panel("Unexpected Migration Error", f"An unexpected error occurred: {str(e)}", "error")
+            self._print_exception(e)
             summary.add_error(f"Unexpected error: {str(e)}")
             raise
         finally:
             # Calculate final timing
             end_time = time.time()
-            summary.end_time = time.strftime(
-                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(end_time)
-            )
+            summary.end_time = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(end_time))
             summary.duration_seconds = end_time - start_time
 
             # Update note reference count if collector was used
             if self._note_reference_collector:
-                summary.note_references_collected = (
-                    self._note_reference_collector.get_reference_count()
-                )
+                summary.note_references_collected = self._note_reference_collector.get_reference_count()
 
             # Log comprehensive completion summary
             self._logger.info("Migration workflow completed")
@@ -333,21 +402,13 @@ class BaseMigrationCoordinator(ABC):
             if self._adaptive_optimizer:
                 perf_summary = self._adaptive_optimizer.get_performance_summary()
                 self._logger.info("🤖 Adaptive Optimization Performance Summary:")
-                self._logger.info(
-                    f"   • Total requests: {perf_summary['requests_made']}"
-                )
-                self._logger.info(
-                    f"   • Throttle rate: {perf_summary['throttle_rate']}"
-                )
-                self._logger.info(
-                    f"   • Final throughput: {perf_summary['current_throughput']}"
-                )
+                self._logger.info(f"   • Total requests: {perf_summary['requests_made']}")
+                self._logger.info(f"   • Throttle rate: {perf_summary['throttle_rate']}")
+                self._logger.info(f"   • Final throughput: {perf_summary['current_throughput']}")
                 self._logger.info(
                     f"   • Final settings: {perf_summary['current_page_size']} per page, {perf_summary['current_page_delay']} delay"
                 )
-                self._logger.info(
-                    f"   • Confidence: {perf_summary['confidence_score']}"
-                )
+                self._logger.info(f"   • Confidence: {perf_summary['confidence_score']}")
 
         return summary
 
@@ -378,9 +439,7 @@ class BaseMigrationCoordinator(ABC):
         try:
             migration_state = self._repository.get_migration_state(entity_type)
             if migration_state:
-                self._logger.info(
-                    f"🔄 Found saved cursor for {entity_type}: {migration_state.last_cursor}"
-                )
+                self._logger.info(f"🔄 Found saved cursor for {entity_type}: {migration_state.last_cursor}")
                 return migration_state.last_cursor
             return None
         except Exception as e:
@@ -421,8 +480,8 @@ class BaseMigrationCoordinator(ABC):
     def _migrate_clients(
         self,
         summary: MigrationSummary,
-        display_obj: Any = None,
-        task_id: Optional[Any] = None,
+        display_obj: Optional[Progress] = None,
+        task_id: Optional[TaskID] = None,
     ) -> int:
         """
         Migrate all clients using cursor-based pagination.
@@ -449,16 +508,10 @@ class BaseMigrationCoordinator(ABC):
         if self._resume and cursor:
             try:
                 # Get current count from database when resuming
-                existing_count = self._repository._connection.execute(
-                    "SELECT COUNT(*) FROM clients"
-                ).fetchone()[0]
+                existing_count = self._repository._connection.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
                 total_processed = existing_count
-                self._logger.info(
-                    f"🔄 Resuming client migration from saved cursor: {cursor}"
-                )
-                self._logger.info(
-                    f"📊 Starting from {existing_count:,} existing clients in database"
-                )
+                self._logger.info(f"🔄 Resuming client migration from saved cursor: {cursor}")
+                self._logger.info(f"📊 Starting from {existing_count:,} existing clients in database")
             except Exception as e:
                 self._logger.error(f"Could not get existing client count: {e}")
                 total_processed = 0
@@ -532,9 +585,7 @@ class BaseMigrationCoordinator(ABC):
                                 client_notes, "client", client.id
                             )
                     except MappingError as e:
-                        error_msg = (
-                            f"Failed to map client {node.get('id', 'unknown')}: {e}"
-                        )
+                        error_msg = f"Failed to map client {node.get('id', 'unknown')}: {e}"
                         self._logger.error(error_msg)
                         summary.add_error(error_msg)
 
@@ -542,9 +593,7 @@ class BaseMigrationCoordinator(ABC):
                 if clients:
                     self._repository.save_clients(clients)
                     total_processed += len(clients)
-                    self._logger.info(
-                        f"Processed {len(clients)} clients (total: {total_processed})"
-                    )
+                    self._logger.info(f"Processed {len(clients)} clients (total: {total_processed})")
 
                     # Update progress with current count
                     if display_obj and task_id is not None:
@@ -558,9 +607,7 @@ class BaseMigrationCoordinator(ABC):
                 # Record performance metrics for adaptive optimization
                 if self._adaptive_optimizer:
                     entities_received = len(clients) if clients else 0
-                    self._adaptive_optimizer.record_request(
-                        entities_received, request_time, was_throttled
-                    )
+                    self._adaptive_optimizer.record_request(entities_received, request_time, was_throttled)
 
                 # Check for next page
                 has_next_page = page_info.get("hasNextPage", False)
@@ -582,40 +629,47 @@ class BaseMigrationCoordinator(ABC):
 
             except (JobberApiError, MappingError, RepositoryError) as e:
                 # Record throttling for adaptive optimization if it was a throttling error
-                if (
-                    self._adaptive_optimizer
-                    and isinstance(e, JobberApiError)
-                    and "throttled" in str(e).lower()
-                ):
+                if self._adaptive_optimizer and isinstance(e, JobberApiError) and "throttled" in str(e).lower():
                     # Estimate request time and record throttling
-                    request_time = (
-                        time.time() - request_start_time
-                        if "request_start_time" in locals()
-                        else 1.0
-                    )
-                    self._adaptive_optimizer.record_request(
-                        0, request_time, was_throttled=True
-                    )
+                    request_time = time.time() - request_start_time if "request_start_time" in locals() else 1.0
+                    self._adaptive_optimizer.record_request(0, request_time, was_throttled=True)
 
                 error_msg = f"Error processing clients page {page_number}: {e}"
                 self._logger.error(error_msg)
+
+                # Display Rich error panel for user-friendly error display
+                if isinstance(e, JobberApiError):
+                    self._display_error_panel(
+                        "API Communication Error",
+                        f"Failed to fetch clients page {page_number}: {str(e)}",
+                        "warning" if "throttled" in str(e).lower() else "error",
+                    )
+                elif isinstance(e, MappingError):
+                    self._display_error_panel(
+                        "Data Transformation Error",
+                        f"Failed to process clients data on page {page_number}: {str(e)}",
+                        "error",
+                    )
+                elif isinstance(e, RepositoryError):
+                    self._display_error_panel(
+                        "Database Error", f"Failed to save clients from page {page_number}: {str(e)}", "error"
+                    )
+
                 summary.add_error(error_msg)
                 raise
 
         # Clean up cursor state after successful completion
         if self._resume:
             self._cleanup_cursor_state("clients")
-            self._logger.debug(
-                "✅ Completed client migration - cursor state cleaned up"
-            )
+            self._logger.debug("✅ Completed client migration - cursor state cleaned up")
 
         return total_processed
 
     def _migrate_invoices(
         self,
         summary: MigrationSummary,
-        display_obj: Any = None,
-        task_id: Optional[Any] = None,
+        display_obj: Optional[Progress] = None,
+        task_id: Optional[TaskID] = None,
     ) -> int:
         """
         Migrate all invoices using cursor-based pagination.
@@ -642,16 +696,10 @@ class BaseMigrationCoordinator(ABC):
         if self._resume and cursor:
             try:
                 # Get current count from database when resuming
-                existing_count = self._repository._connection.execute(
-                    "SELECT COUNT(*) FROM invoices"
-                ).fetchone()[0]
+                existing_count = self._repository._connection.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
                 total_processed = existing_count
-                self._logger.info(
-                    f"🔄 Resuming invoice migration from saved cursor: {cursor}"
-                )
-                self._logger.info(
-                    f"📊 Starting from {existing_count:,} existing invoices in database"
-                )
+                self._logger.info(f"🔄 Resuming invoice migration from saved cursor: {cursor}")
+                self._logger.info(f"📊 Starting from {existing_count:,} existing invoices in database")
             except Exception as e:
                 self._logger.error(f"Could not get existing invoice count: {e}")
                 total_processed = 0
@@ -709,9 +757,7 @@ class BaseMigrationCoordinator(ABC):
                                 invoice_notes, "invoice", invoice.id
                             )
                     except MappingError as e:
-                        error_msg = (
-                            f"Failed to map invoice {node.get('id', 'unknown')}: {e}"
-                        )
+                        error_msg = f"Failed to map invoice {node.get('id', 'unknown')}: {e}"
                         self._logger.error(error_msg)
                         summary.add_error(error_msg)
 
@@ -719,9 +765,7 @@ class BaseMigrationCoordinator(ABC):
                 if invoices:
                     self._repository.save_invoices(invoices)
                     total_processed += len(invoices)
-                    self._logger.info(
-                        f"Processed {len(invoices)} invoices (total: {total_processed})"
-                    )
+                    self._logger.info(f"Processed {len(invoices)} invoices (total: {total_processed})")
 
                     # Update progress with current count
                     if display_obj and task_id is not None:
@@ -753,15 +797,32 @@ class BaseMigrationCoordinator(ABC):
             except (JobberApiError, MappingError, RepositoryError) as e:
                 error_msg = f"Error processing invoices page {page_number}: {e}"
                 self._logger.error(error_msg)
+
+                # Display Rich error panel for user-friendly error display
+                if isinstance(e, JobberApiError):
+                    self._display_error_panel(
+                        "API Communication Error",
+                        f"Failed to fetch invoices page {page_number}: {str(e)}",
+                        "warning" if "throttled" in str(e).lower() else "error",
+                    )
+                elif isinstance(e, MappingError):
+                    self._display_error_panel(
+                        "Data Transformation Error",
+                        f"Failed to process invoices data on page {page_number}: {str(e)}",
+                        "error",
+                    )
+                elif isinstance(e, RepositoryError):
+                    self._display_error_panel(
+                        "Database Error", f"Failed to save invoices from page {page_number}: {str(e)}", "error"
+                    )
+
                 summary.add_error(error_msg)
                 raise
 
         # Clean up cursor state after successful completion
         if self._resume:
             self._cleanup_cursor_state("invoices")
-            self._logger.debug(
-                "✅ Completed invoice migration - cursor state cleaned up"
-            )
+            self._logger.debug("✅ Completed invoice migration - cursor state cleaned up")
 
         return total_processed
 
@@ -785,9 +846,7 @@ class BaseMigrationCoordinator(ABC):
             RepositoryError: If database operations fail
         """
         if not self._notes_extractor or not self._note_reference_collector:
-            self._logger.debug(
-                "Deferred note migration skipped - missing extractor or collector"
-            )
+            self._logger.debug("Deferred note migration skipped - missing extractor or collector")
             return 0
 
         try:
@@ -795,9 +854,7 @@ class BaseMigrationCoordinator(ABC):
             note_references = self._note_reference_collector.get_references()
 
             if not note_references:
-                self._logger.info(
-                    "No note references collected for deferred processing"
-                )
+                self._logger.info("No note references collected for deferred processing")
                 return 0
 
             # Process notes using deferred processing with skip tracking
@@ -818,9 +875,7 @@ class BaseMigrationCoordinator(ABC):
                     f"{notes_skipped} skipped"
                 )
             else:
-                self._logger.info(
-                    f"✅ Deferred note migration completed: {notes_processed} notes processed"
-                )
+                self._logger.info(f"✅ Deferred note migration completed: {notes_processed} notes processed")
 
             return notes_processed
 
@@ -849,9 +904,7 @@ class BaseMigrationCoordinator(ABC):
             RepositoryError: If database operations fail
         """
         if not self._quotes_extractor:
-            self._logger.info(
-                "Quote migration requested but no QuotesExtractor provided"
-            )
+            self._logger.info("Quote migration requested but no QuotesExtractor provided")
             return 0
 
         try:
@@ -865,9 +918,7 @@ class BaseMigrationCoordinator(ABC):
                     f"Quote extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
-            self._logger.info(
-                f"Quote migration completed: {result['entities_processed']} quotes processed"
-            )
+            self._logger.info(f"Quote migration completed: {result['entities_processed']} quotes processed")
             return result["entities_processed"]
 
         except Exception as e:
@@ -900,9 +951,7 @@ class BaseMigrationCoordinator(ABC):
             RepositoryError: If database operations fail
         """
         if not self._attachment_downloader:
-            self._logger.info(
-                "Attachment migration requested but no AttachmentDownloader provided"
-            )
+            self._logger.info("Attachment migration requested but no AttachmentDownloader provided")
             return {
                 "entities": 0,
                 "files_downloaded": 0,

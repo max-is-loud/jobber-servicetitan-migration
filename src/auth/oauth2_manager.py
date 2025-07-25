@@ -53,13 +53,9 @@ class OAuth2Manager:
         if not client_id or not client_id.strip():
             raise ConfigurationError("OAuth2 client_id is required and cannot be empty")
         if not client_secret or not client_secret.strip():
-            raise ConfigurationError(
-                "OAuth2 client_secret is required and cannot be empty"
-            )
+            raise ConfigurationError("OAuth2 client_secret is required and cannot be empty")
         if not redirect_uri or not redirect_uri.strip():
-            raise ConfigurationError(
-                "OAuth2 redirect_uri is required and cannot be empty"
-            )
+            raise ConfigurationError("OAuth2 redirect_uri is required and cannot be empty")
 
         self.client_id = client_id.strip()
         self.client_secret = client_secret.strip()
@@ -129,9 +125,7 @@ class OAuth2Manager:
             >>> access_token = tokens["access_token"]
         """  # noqa: E501
         if not authorization_code or not authorization_code.strip():
-            raise ConfigurationError(
-                "Authorization code is required and cannot be empty"
-            )
+            raise ConfigurationError("Authorization code is required and cannot be empty")
 
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -151,15 +145,14 @@ class OAuth2Manager:
                 url=self.TOKEN_URL,
                 headers=headers,
                 data=payload,
+                return_headers=False,
             )
         except Exception as e:
             if "Invalid or expired" in str(e) or "Access forbidden" in str(e):
                 raise ConfigurationError(
                     f"OAuth2 token exchange failed - invalid credentials or authorization code: {e}"  # noqa: E501
                 ) from e
-            raise OAuth2Error(
-                f"Failed to exchange authorization code for tokens: {e}"
-            ) from e
+            raise OAuth2Error(f"Failed to exchange authorization code for tokens: {e}") from e
 
         # Validate token response structure
         self._validate_token_response(response_data)
@@ -211,6 +204,7 @@ class OAuth2Manager:
                 url=self.TOKEN_URL,
                 headers=headers,
                 data=payload,
+                return_headers=False,
             )
         except Exception as e:
             if "Invalid or expired" in str(e) or "Access forbidden" in str(e):
@@ -240,28 +234,18 @@ class OAuth2Manager:
 
         # Check for OAuth2 error response
         if "error" in response_data:
-            error_description = response_data.get(
-                "error_description", "No description provided"
-            )
+            error_description = response_data.get("error_description", "No description provided")
             error_code = response_data.get("error", "unknown_error")
-            raise OAuth2Error(
-                f"OAuth2 error response: {error_code} - {error_description}"
-            )
+            raise OAuth2Error(f"OAuth2 error response: {error_code} - {error_description}")
 
         # Validate required token fields
         required_fields = ["access_token"]  # Only access_token is strictly required
-        missing_fields = [
-            field for field in required_fields if field not in response_data
-        ]
+        missing_fields = [field for field in required_fields if field not in response_data]
 
         if missing_fields:
-            raise OAuth2Error(
-                f"Invalid token response: missing required fields {missing_fields}"
-            )
+            raise OAuth2Error(f"Invalid token response: missing required fields {missing_fields}")
 
         # Validate token type if present (optional for some providers like Jobber)
         token_type = response_data.get("token_type", "bearer")
         if token_type and token_type.casefold() != "bearer".casefold():
-            raise OAuth2Error(
-                f"Unsupported token type: expected 'Bearer', got '{token_type}'"
-            )
+            raise OAuth2Error(f"Unsupported token type: expected 'Bearer', got '{token_type}'")
