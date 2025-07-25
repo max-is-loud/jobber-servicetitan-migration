@@ -190,6 +190,8 @@ class AuthProvider:
         # This eliminates database queries during long-running migrations
         # and provides sub-millisecond response times for repeated token access
         if self._is_cached_token_valid():
+            # Type assertion: _is_cached_token_valid() ensures _cached_token is not None
+            assert self._cached_token is not None
             return self._cached_token
 
         # Cache miss or expired - query database for authoritative token data

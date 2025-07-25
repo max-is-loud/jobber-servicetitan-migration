@@ -15,7 +15,7 @@ rate_limits:
     initial_tokens: 100
     safety_margin: 0.04
 pagination:
-  clients: 39
+  clients: 42
   invoices: 40
   quotes: 50
   jobs: 30
@@ -29,7 +29,7 @@ pagination:
   tax_rates: 30
   default: 30
 delays:
-  page_delay: 0.5
+  page_delay: 1
   request_timeout: 30.0
   retry_base_delay: 2.0
 backoff:

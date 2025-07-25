@@ -45,7 +45,7 @@
 ### Dependency Injection Architecture
 
 - **MUST** inject all dependencies via constructor parameters
-- **FACTORY PATTERN**: CLI uses factory pattern dependency injection: sqlite3.Connection → all components → MigrationCoordinator
+- **FACTORY PATTERN**: CLI uses factory pattern dependency injection: sqlite3.Connection → all components → RichMigrationCoordinator
 - **PROTOCOL INTERFACES**: Use Protocol-based interfaces for all major components
 - **PROHIBITED**: Global variables, singleton patterns, direct instantiation within classes
 
@@ -99,7 +99,7 @@ tightbeam-v2/
 │   │   └── migration_summary.py  # MigrationSummary dataclass
 │   ├── mappers/                  # EntityMapper + MapperUtils
 │   ├── repositories/             # Repository with generic save_entities()
-│   ├── coordinators/             # MigrationCoordinator orchestration
+│   ├── coordinators/             # RichMigrationCoordinator orchestration
 │   ├── loggers/                  # ConsoleLogger implementation
 │   ├── rate_limiting/            # Rate limiting functionality
 │   ├── exceptions/               # Domain-specific exceptions
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   - **MUST** add mapper methods in EntityMapper or create dedicated mapper
   - **MUST** extend Repository with new table creation in `init_schema()`
   - **MUST** add CLI subcommand for entity-specific extraction
-  - **MUST** update MigrationCoordinator to orchestrate new extractor
+  - **MUST** update RichMigrationCoordinator to orchestrate new extractor
 
 ### Extractor Implementation Pattern
 
@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 - **WHEN** adding new migration commands:
   - **MUST** add subcommand to migrate command group
-  - **MUST** create corresponding method in MigrationCoordinator
+  - **MUST** create corresponding method in RichMigrationCoordinator
   - **MUST** follow naming pattern: `migrate_{entity}()` function
   - **MUST** include proper error handling and Rich formatting
 
@@ -321,7 +321,7 @@ CREATE TABLE IF NOT EXISTS attachments (
 - **IF** unsure which extractor should handle functionality:
   - **PRIORITY 1**: Check entity type → corresponding EntityExtractor
   - **PRIORITY 2**: Check if binary file handling → AttachmentDownloader
-  - **PRIORITY 3**: Check if orchestration needed → MigrationCoordinator
+  - **PRIORITY 3**: Check if orchestration needed → RichMigrationCoordinator
   - **PRIORITY 4**: Check if transformation needed → EntityMapper
 
 ### Dependency Direction Rules
