@@ -16,7 +16,7 @@ rate_limits:
     safety_margin: 0.04
 pagination:
   clients: 42
-  invoices: 40
+  invoices: 10
   quotes: 50
   jobs: 30
   properties: 30
