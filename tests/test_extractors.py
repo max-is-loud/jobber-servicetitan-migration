@@ -609,7 +609,7 @@ class TestPropertiesExtractor:
 
     def test_map_entity_calls_mapper(self):
         """Test _map_entity calls entity_mapper.map_property."""
-        node = {"id": "property_123", "address": "123 Main St"}
+        node = {"id": "property_123", "address": {"line1": "123 Main St"}}
         expected_property = create_test_property(id="property_123", address_line1="123 Main St")
         self.mock_mapper.map_property.return_value = expected_property
 

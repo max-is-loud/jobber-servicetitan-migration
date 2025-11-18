@@ -615,9 +615,10 @@ class TestEntityMapper:
     def test_mapper_preserves_original_exception_in_chain(self):
         """Test MappingError preserves original exception."""
         try:
-            self.mapper.map_client({"id": None})  # Will cause issues
+            # Passing None will cause a TypeError inside map_client, which should be wrapped.
+            self.mapper.map_client(None)
         except MappingError as e:
-            assert e.__cause__ is not None  # Original exception preserved
+            assert e.__cause__ is not None  # Original exception should be preserved
 
 
 class TestMapperIntegration:

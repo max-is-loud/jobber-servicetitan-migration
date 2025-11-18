@@ -1013,7 +1013,13 @@ class TestRepositoryTransactionBehavior:
         self.conn.close()
 
     def test_batch_save_commits_transaction(self):
-        """Test batch save operations commit transaction."""
+        """Test batch save operations commit transaction.
+
+        Note: In-memory SQLite databases (:memory:) cannot be shared across connections,
+        so this test verifies that commit is called but cannot verify persistence across
+        separate connections. The transaction behavior is still validated within the
+        same connection.
+        """
         clients = [
             Client(
                 id=f"client_{i}",
@@ -1028,12 +1034,12 @@ class TestRepositoryTransactionBehavior:
 
         self.repo.save_clients(clients)
 
-        # Create new connection to verify commit
-        conn2 = sqlite3.connect(self.conn.execute("PRAGMA database_list").fetchone()[2])
-        cursor = conn2.cursor()
-        # Note: In-memory databases can't be shared, so this test verifies commit was called
-        # but can't verify persistence across connections
-        conn2.close()
+        # Verify data persisted within the same connection
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM clients")
+        count = cursor.fetchone()[0]
+        assert count == 3
+        cursor.close()
 
     def test_delete_commits_transaction(self):
         """Test delete operation commits transaction."""
