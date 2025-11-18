@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Optional
 
 from src.auth import AuthProvider, OAuth2Manager
-from src.clients import HttpClient
+from src.clients import HttpClient, JobberClient
+from src.config import ConfigManagerImpl
+from src.rate_limiting import (
+    ExponentialBackoffStrategy,
+    MetricsCollector,
+    RateLimitedHttpClient,
+    TokenBucketRateLimiter,
+)
 from src.repositories import Repository
 from .shared import SharedServices
 
@@ -79,3 +86,102 @@ class ServiceFactory:
             Console: Shared Rich console for output
         """
         return SharedServices.get_console()
+
+    @staticmethod
+    def create_rate_limited_jobber_client(
+        auth_provider: AuthProvider,
+        repository: Repository,
+        config_manager: ConfigManagerImpl,
+        optimization_level: str = "moderate",
+        enable_cost_monitoring: bool = True,
+    ) -> JobberClient:
+        """Create JobberClient with rate limiting and cost monitoring configured.
+
+        This factory method centralizes the setup of rate-limited JobberClient instances,
+        eliminating code duplication across CLI commands. The returned client has a
+        shared TokenBucketRateLimiter that controls request flow across all extractors
+        that use this client instance.
+
+        Rate Limiting Architecture:
+        - Creates a single TokenBucketRateLimiter with configured capacity and refill rate
+        - Wraps base HttpClient with RateLimitedHttpClient for transparent rate limiting
+        - Injects rate-limited client into JobberClient via set_http_client()
+        - All extractors sharing this JobberClient share the same rate limiter
+
+        Optimization Levels (from config/settings.yaml):
+        - conservative: 250 capacity, 240/min (4 req/s), 52% safety margin
+        - moderate: 600 capacity, 600/min (10 req/s), 28% safety margin (default)
+        - aggressive: 500 capacity, 480/min (8 req/s), 4% safety margin
+
+        Args:
+            auth_provider: Authentication provider for API access and OAuth token refresh
+            repository: Repository for metrics storage and OAuth token persistence
+            config_manager: Configuration manager for rate limit and backoff settings
+            optimization_level: Rate limiting optimization level - one of:
+                              'conservative', 'moderate', 'aggressive'
+                              (default: 'moderate')
+            enable_cost_monitoring: Whether to enable GraphQL cost tracking and metrics
+                                   collection (default: True)
+
+        Returns:
+            JobberClient: Fully configured client with rate limiting, backoff strategy,
+                         and optional cost monitoring enabled
+
+        Example:
+            >>> auth_provider = AuthProvider(oauth_manager, repository)
+            >>> config_manager = ConfigManagerImpl()
+            >>> client = ServiceFactory.create_rate_limited_jobber_client(
+            ...     auth_provider=auth_provider,
+            ...     repository=repository,
+            ...     config_manager=config_manager,
+            ...     optimization_level="moderate",
+            ...     enable_cost_monitoring=True
+            ... )
+        """
+        # Create metrics collector if cost monitoring is enabled
+        metrics_collector = MetricsCollector(repository=repository) if enable_cost_monitoring else None
+
+        # Create base JobberClient with optional metrics collection
+        jobber_client = JobberClient(
+            auth_provider,
+            metrics_collector=metrics_collector,
+            config_manager=config_manager,
+        )
+
+        # Get rate limiting configuration based on optimization level
+        rate_config = config_manager.get_rate_limit_config(optimization_level)
+        capacity = rate_config["capacity"]
+        refill_rate = rate_config["refill_rate"]
+        initial_tokens = rate_config["initial_tokens"]
+
+        # Create token bucket rate limiter with configured parameters
+        rate_limiter = TokenBucketRateLimiter(
+            capacity=capacity,
+            refill_rate=refill_rate,
+            initial_tokens=initial_tokens
+        )
+
+        # Get exponential backoff configuration for retry logic
+        backoff_config = config_manager.get_backoff_config()
+        backoff_strategy = ExponentialBackoffStrategy(
+            initial_delay=backoff_config["initial_delay"],
+            max_delay=backoff_config["max_delay"],
+            multiplier=backoff_config["multiplier"],
+            jitter_factor=backoff_config["jitter_factor"],
+        )
+
+        # Create rate-limited HTTP client wrapper
+        # Max retries set to 15 for Jobber GraphQL API throttling resilience
+        rate_limited_client = RateLimitedHttpClient(
+            HttpClient(),
+            rate_limiter,
+            backoff_strategy,
+            max_retries=15,
+            metrics_collector=metrics_collector,
+            auth_provider=auth_provider,  # Enable reactive OAuth token refresh on 401 errors
+        )
+
+        # Inject rate-limited client into JobberClient
+        jobber_client.set_http_client(rate_limited_client)
+
+        return jobber_client
