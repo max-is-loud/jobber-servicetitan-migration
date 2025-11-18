@@ -52,9 +52,15 @@ class NotesExtractor(BaseExtractor[Note]):
         self._last_batch_entities: List[Note] = []
 
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
-        """Fetch a page of notes from the Jobber API."""
-        # TODO: Implement fetch_notes in JobberClient when adding Notes support
-        return self._jobber_client.fetch_notes(cursor)  # type: ignore
+        """Fetch a page of notes from the Jobber API.
+
+        Note: This method is not used in production. Notes are fetched using the
+        deferred loading pattern via extract_deferred_notes() instead.
+        """
+        raise NotImplementedError(
+            "Bulk note fetching is not supported by Jobber's API. "
+            "Use extract_deferred_notes() for note extraction."
+        )
 
     def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response."""
@@ -206,28 +212,11 @@ class NotesExtractor(BaseExtractor[Note]):
         return {"processed": processed_count, "skipped": skipped_count}
 
     def get_entity_count(self) -> int:
-        """Get total count of notes available for extraction."""
-        self._logger.debug("Fetching total note count from API")
+        """Get total count of notes available for extraction.
 
-        # TODO: Implement fetch_notes in JobberClient when adding Notes support
-        response = self._jobber_client.fetch_notes(cursor=None)  # type: ignore
-        notes_data = response.get("data", {}).get("notes", {})
-
-        # If API provides totalCount, use it
-        total_count = notes_data.get("totalCount")
-        if total_count is not None:
-            self._logger.debug(f"API reported total note count: {total_count}")
-            return int(total_count)
-
-        # Otherwise estimate from first page
-        edges = notes_data.get("edges", [])
-        if not edges:
-            return 0
-
-        page_info = notes_data.get("pageInfo", {})
-        page_size = len(edges)
-        if not page_info.get("hasNextPage", False):
-            return page_size
-
-        self._logger.info("Cannot determine exact note count without full pagination")
-        return -1
+        Note: This method is not used in production. Note counts are determined
+        by the number of note references collected during parent entity extraction.
+        Jobber's API does not provide a bulk notes query, so count is unavailable.
+        """
+        self._logger.debug("Note count not available via bulk query - using deferred loading pattern")
+        return 0  # Notes are counted via NoteReferenceCollector instead
