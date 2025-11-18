@@ -343,6 +343,7 @@ def migrate_all(
     actual_optimization_level = config.get("optimization_level", optimization_level)
     actual_enable_cost_monitoring = config.get("enable_cost_monitoring", enable_cost_monitoring)
     actual_cost_monitoring_verbose = config.get("cost_monitoring_verbose", cost_monitoring_verbose)
+    actual_enable_adaptive_optimization = config.get("enable_adaptive_optimization", enable_adaptive_optimization)
 
     # Special handling for resume: command-level explicit value > group-level > default False
     actual_resume = resume if resume is not None else config.get("resume", False)
