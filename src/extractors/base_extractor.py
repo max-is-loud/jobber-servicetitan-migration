@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Abstract base class for entity extractors with common extraction logic."""
 
 import time
