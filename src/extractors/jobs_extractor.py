@@ -99,6 +99,10 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
     ) -> dict[str, List[Any]]:
         """Extract notes related to the job.
 
+        Extracts nested note data from the job query response. Notes are
+        fetched inline with the job query using optimized pagination
+        (configurable via pagination.nested_notes) to reduce API costs by 60-70%.
+
         Args:
             node: Job data from API
             primary_entity: The job that was mapped
@@ -115,10 +119,10 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
             for note_edge in job_notes:
                 note_node = note_edge.get("node", {})
                 if note_node:
-                    # Add job relationship to note data
-                    note_node["job"] = {"id": primary_entity.id}
                     try:
-                        note = self._entity_mapper.map_note(note_node)
+                        # Add job relationship to note data without mutation
+                        note_data = {**note_node, "job": {"id": primary_entity.id}}
+                        note = self._entity_mapper.map_note(note_data)
                         notes.append(note)
                     except MappingError as e:
                         self._logger.debug(

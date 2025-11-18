@@ -143,8 +143,9 @@ class JobberClient:
     """
 
     def _get_quotes_query(self) -> str:
-        """Get GraphQL query for fetching quotes with configurable pagination."""
+        """Get GraphQL query for fetching quotes with configurable pagination and optimized nested notes."""
         page_size = self._get_pagination_size("quotes")
+        nested_notes_limit = self._get_pagination_size("nested_notes")
         return f"""
     query GetQuotes($cursor: String) {{
       quotes(first: {page_size}, after: $cursor) {{
@@ -164,8 +165,21 @@ class JobberClient:
             lineItems {{
               totalCount
             }}
-            notes {{
-              totalCount
+            notes(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  ... on QuoteNote {{
+                    id
+                    message
+                    createdAt
+                    updatedAt
+                  }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
             }}
             createdAt
             transitionedAt
@@ -216,22 +230,25 @@ class JobberClient:
     }
     """
 
-    # GraphQL query for fetching jobs with cursor pagination
-    JOBS_QUERY = """
-    query GetJobs($cursor: String) {
-      jobs(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_jobs_query(self) -> str:
+        """Get GraphQL query for fetching jobs with configurable pagination and optimized nested notes."""
+        page_size = self._get_pagination_size("jobs")
+        nested_notes_limit = self._get_pagination_size("nested_notes")
+        return f"""
+    query GetJobs($cursor: String) {{
+      jobs(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
-            client {
+            client {{
               id
-            }
-            property {
+            }}
+            property {{
               id
-            }
-            quote {
+            }}
+            quote {{
               id
-            }
+            }}
             jobNumber
             title
             description
@@ -239,28 +256,35 @@ class JobberClient:
             scheduledStartAt
             scheduledEndAt
             completedAt
-            amounts {
+            amounts {{
               total
-            }
-            notes {
-              edges {
-                node {
-                  ... on JobNote {
+            }}
+            notes(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  ... on JobNote {{
                     id
-                  }
-                }
-              }
-            }
+                    message
+                    createdAt
+                    updatedAt
+                  }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
             createdAt
             updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
     # GraphQL query for fetching properties with cursor pagination
@@ -298,50 +322,60 @@ class JobberClient:
     }
     """
 
-    # GraphQL query for fetching requests with cursor pagination
-    REQUESTS_QUERY = """
-    query GetRequests($cursor: String) {
-      requests(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_requests_query(self) -> str:
+        """Get GraphQL query for fetching requests with configurable pagination and optimized nested notes."""
+        page_size = self._get_pagination_size("requests")
+        nested_notes_limit = self._get_pagination_size("nested_notes")
+        return f"""
+    query GetRequests($cursor: String) {{
+      requests(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
-            client {
+            client {{
               id
-            }
-            property {
+            }}
+            property {{
               id
-            }
+            }}
             title
             description
             status
             priority
             source
             assignedTo
-            convertedToQuote {
+            convertedToQuote {{
               id
-            }
-            convertedToJob {
+            }}
+            convertedToJob {{
               id
-            }
-            notes {
-              edges {
-                node {
-                  ... on RequestNote {
+            }}
+            notes(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  ... on RequestNote {{
                     id
-                  }
-                }
-              }
-            }
+                    message
+                    createdAt
+                    updatedAt
+                  }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
             createdAt
             updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
     # GraphQL query for fetching users with cursor pagination
@@ -1130,7 +1164,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.JOBS_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_jobs_query(), cursor)
 
             # Validate that jobs data exists in response
             if response_data.get("data") is not None and "jobs" not in response_data["data"]:
@@ -1201,7 +1235,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.REQUESTS_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_requests_query(), cursor)
 
             # Validate that requests data exists in response
             if response_data.get("data") is not None and "requests" not in response_data["data"]:
