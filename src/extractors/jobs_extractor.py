@@ -96,7 +96,7 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Job
-    ) -> dict[str, List[Any]]:
+    ) -> dict[str, List[Note]]:
         """Extract notes related to the job.
 
         Extracts nested note data from the job query response. Notes are
@@ -144,7 +144,7 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
 
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
         """Save notes related to jobs.
 
         Args:

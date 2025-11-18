@@ -112,7 +112,7 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Invoice
-    ) -> dict[str, List[Any]]:
+    ) -> dict[str, List[Note]]:
         """Extract notes related to the invoice.
 
         Extracts nested note data from the invoice query response. Notes are
@@ -160,7 +160,7 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
 
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
         """Save notes related to invoices.
 
         Args:

@@ -51,6 +51,11 @@ T = TypeVar(
     Visit,
 )
 
+# Type alias for related entities dictionary
+# Maps entity type names to lists of related entities (e.g., {"notes": [Note, Note, ...]})
+# Using Note union for extensibility as more related entity types are added
+RelatedEntities = dict[str, List[Note]]
+
 
 class BaseExtractor(ABC, Generic[T]):
     """
@@ -231,7 +236,7 @@ class BaseExtractor(ABC, Generic[T]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: T
-    ) -> dict[str, List[Any]]:
+    ) -> RelatedEntities:
         """Extract related entities (like notes) from a node.
 
         Override in subclasses that have related entities.
@@ -245,13 +250,13 @@ class BaseExtractor(ABC, Generic[T]):
         """
         return {}
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: RelatedEntities) -> None:
         """Save related entities to repository.
 
         Override in subclasses that have related entities.
 
         Args:
-            related_entities: Dictionary mapping entity type names to lists
+            related_entities: Dictionary mapping entity type names to lists of related entities
         """
         pass
 

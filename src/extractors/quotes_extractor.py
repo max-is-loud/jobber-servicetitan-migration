@@ -103,7 +103,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Quote
-    ) -> dict[str, List[Any]]:
+    ) -> dict[str, List[Note]]:
         """Extract notes related to the quote.
 
         Extracts nested note data from the quote query response. Notes are
@@ -151,7 +151,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
 
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
         """Save notes related to quotes.
 
         Args:

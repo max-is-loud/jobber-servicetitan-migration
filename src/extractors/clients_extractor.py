@@ -112,7 +112,7 @@ class ClientsExtractor(BaseExtractor[Client]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Client
-    ) -> dict[str, List[Any]]:
+    ) -> dict[str, List[Note]]:
         """Extract notes related to the client.
 
         Extracts nested note data from the client query response. Notes are
@@ -160,7 +160,7 @@ class ClientsExtractor(BaseExtractor[Client]):
 
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
         """Save notes related to clients.
 
         Args:

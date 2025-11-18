@@ -100,7 +100,7 @@ class RequestsExtractor(BaseExtractor[Request]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Request
-    ) -> dict[str, List[Any]]:
+    ) -> dict[str, List[Note]]:
         """Extract notes related to the request.
 
         Extracts nested note data from the request query response. Notes are
@@ -148,7 +148,7 @@ class RequestsExtractor(BaseExtractor[Request]):
 
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
         """Save notes related to requests.
 
         Args:

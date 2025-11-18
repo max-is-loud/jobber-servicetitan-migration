@@ -99,7 +99,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Property
-    ) -> dict[str, List[Any]]:
+    ) -> dict[str, List[Note]]:
         """Extract related entities from property node.
 
         Properties don't have related notes or other complex relationships,
@@ -114,7 +114,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         """
         return {}
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
         """Save related entities for properties.
 
         Properties don't have related entities, so this is a no-op.
