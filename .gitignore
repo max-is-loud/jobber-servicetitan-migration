@@ -192,8 +192,8 @@ reports/
 
 # Workspace/development notes (not part of source)
 /CLAUDE.md
-/PROJECT_STATUS.md
 /.document_archive/
+.obsidian/
 
 # Temporary data and cache
 temp/
