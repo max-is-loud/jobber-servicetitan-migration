@@ -6,9 +6,18 @@ and configuration constants. Update these values in one place to ensure
 consistency across the entire application.
 """
 
+from importlib.metadata import version, PackageNotFoundError
+
 # Application Metadata
 APP_NAME = "TightBeam"
-APP_VERSION = "0.1.3"
+
+# Read version from package metadata (pyproject.toml is the single source of truth)
+try:
+    APP_VERSION = version("tightbeam-v2")
+except PackageNotFoundError:
+    # Fallback for development/editable installs where package metadata isn't available
+    APP_VERSION = "0.0.0-dev"
+
 APP_DESCRIPTION = "Jobber Data Migration Tool"
 APP_FULL_DESCRIPTION = "A command-line tool for extracting client and invoice data from Jobber GraphQL API and persisting it to SQLite database using object-oriented architecture."
 
