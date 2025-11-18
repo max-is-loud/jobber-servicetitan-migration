@@ -98,7 +98,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Visit) -> dict[str, List[Any]]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Visit) -> dict[str, List[Note]]:
         """Extract notes related to the visit.
 
         Args:
@@ -129,7 +129,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
 
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
         """Save notes related to visits.
 
         Args:

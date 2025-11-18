@@ -79,6 +79,7 @@ class PaginationConfig:
     timesheet_entries: int
     product_services: int
     tax_rates: int
+    nested_notes: int
     default: int
 
     def __post_init__(self) -> None:
@@ -92,6 +93,16 @@ class PaginationConfig:
                 raise ValueError(
                     f"Pagination size for {field} must be positive (minimum 1), got {value}"
                 )
+
+            # Special validation for nested_notes (used in nested GraphQL queries)
+            if field == "nested_notes":
+                if value > 100:
+                    raise ValueError(
+                        f"nested_notes pagination must not exceed 100, got {value}. "
+                        "Very high values significantly increase GraphQL query costs."
+                    )
+                continue
+
             if value > 1000:
                 raise ValueError(
                     f"Pagination size for {field} must not exceed 1000 (API limits), got {value}"
@@ -255,6 +266,7 @@ class AppConfig:
     """Complete application configuration."""
 
     rate_limits: dict[str, RateLimitConfig]
+    max_retries: int
     pagination: PaginationConfig
     delays: DelayConfig
     backoff: BackoffConfig
@@ -263,6 +275,15 @@ class AppConfig:
 
     def __post_init__(self) -> None:
         """Validate application configuration."""
+        # Validate max_retries with reasonable bounds
+        if not isinstance(self.max_retries, int):
+            raise ValueError(f"max_retries must be an integer, got {type(self.max_retries).__name__}")
+        if not 1 <= self.max_retries <= 100:
+            raise ValueError(
+                f"max_retries must be between 1 and 100, got {self.max_retries}. "
+                "Very high values may cause excessive delays during rate limiting."
+            )
+
         required_rate_limit_levels = {"conservative", "moderate", "aggressive"}
         if not required_rate_limit_levels.issubset(self.rate_limits.keys()):
             missing = required_rate_limit_levels - self.rate_limits.keys()

@@ -166,6 +166,7 @@ class ConfigManagerImpl:
                 timesheet_entries=pagination_data["timesheet_entries"],
                 product_services=pagination_data["product_services"],
                 tax_rates=pagination_data["tax_rates"],
+                nested_notes=pagination_data["nested_notes"],
                 default=pagination_data["default"],
             )
 
@@ -204,6 +205,7 @@ class ConfigManagerImpl:
 
             return AppConfig(
                 rate_limits=rate_limits,
+                max_retries=config_data["max_retries"],
                 pagination=pagination,
                 delays=delays,
                 backoff=backoff,
@@ -272,6 +274,17 @@ class ConfigManagerImpl:
             "multiplier": self.config.backoff.multiplier,
             "jitter_factor": self.config.backoff.jitter_factor,
         }
+
+    def get_max_retries(self) -> int:
+        """Get maximum retry attempts for rate-limited requests.
+
+        Returns:
+            Maximum number of retry attempts for exponential backoff
+        """
+        if not self.config:
+            raise ConfigurationError("Configuration not loaded")
+
+        return self.config.max_retries
 
     def get_logging_config(self) -> dict[str, Any]:
         """Get logging configuration."""

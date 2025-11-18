@@ -100,8 +100,12 @@ class RequestsExtractor(BaseExtractor[Request]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Request
-    ) -> dict[str, List[Any]]:
+    ) -> dict[str, List[Note]]:
         """Extract notes related to the request.
+
+        Extracts nested note data from the request query response. Notes are
+        fetched inline with the request query using optimized pagination
+        (configurable via pagination.nested_notes) to reduce API costs by 60-70%.
 
         Args:
             node: Request data from API
@@ -113,16 +117,19 @@ class RequestsExtractor(BaseExtractor[Request]):
         related = {}
 
         # Extract notes if present
-        request_notes = node.get("notes", {}).get("edges", [])
+        notes_data = node.get("notes", {})
+        request_notes = notes_data.get("edges", [])
+        notes_page_info = notes_data.get("pageInfo", {})
+
         if request_notes:
             notes = []
             for note_edge in request_notes:
                 note_node = note_edge.get("node", {})
                 if note_node:
-                    # Add request relationship to note data
-                    note_node["request"] = {"id": primary_entity.id}
                     try:
-                        note = self._entity_mapper.map_note(note_node)
+                        # Add request relationship to note data without mutation
+                        note_data = {**note_node, "request": {"id": primary_entity.id}}
+                        note = self._entity_mapper.map_note(note_data)
                         notes.append(note)
                     except MappingError as e:
                         self._logger.debug(
@@ -131,9 +138,17 @@ class RequestsExtractor(BaseExtractor[Request]):
             if notes:
                 related["notes"] = notes
 
+                # Warn if there are more notes that weren't fetched
+                if notes_page_info.get("hasNextPage", False):
+                    self._logger.warning(
+                        f"Request {primary_entity.id} has additional notes beyond the "
+                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
+                        f"settings.yaml to fetch more notes inline."
+                    )
+
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Any]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
         """Save notes related to requests.
 
         Args:

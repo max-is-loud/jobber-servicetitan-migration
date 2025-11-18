@@ -171,12 +171,13 @@ class ServiceFactory:
         )
 
         # Create rate-limited HTTP client wrapper
-        # Max retries set to 15 for Jobber GraphQL API throttling resilience
+        # Max retries configurable via settings.yaml (default: 15)
+        max_retries = config_manager.get_max_retries()
         rate_limited_client = RateLimitedHttpClient(
             HttpClient(),
             rate_limiter,
             backoff_strategy,
-            max_retries=15,
+            max_retries=max_retries,
             metrics_collector=metrics_collector,
             auth_provider=auth_provider,  # Enable reactive OAuth token refresh on 401 errors
         )
