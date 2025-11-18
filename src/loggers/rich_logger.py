@@ -54,6 +54,14 @@ class RichLogger(Logger):
         """
         self.error_console.print(f"[red]ERROR[/red]: {message}")
 
+    def warning(self, message: str) -> None:
+        """Print warning message using Rich formatting.
+
+        Args:
+            message: The warning message to log
+        """
+        self.console.print(f"[yellow]WARNING[/yellow]: {message}")
+
     def log_summary(self, summary: dict[str, Any]) -> None:
         """Format and display structured summary data using Rich table.
 

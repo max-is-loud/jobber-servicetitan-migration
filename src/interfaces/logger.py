@@ -34,6 +34,14 @@ class Logger(Protocol):
         """
         ...
 
+    def warning(self, message: str) -> None:
+        """Log a warning message.
+
+        Args:
+            message: The warning message to log
+        """
+        ...
+
     def log_summary(self, summary: dict[str, Any]) -> None:
         """Log structured summary data.
 
