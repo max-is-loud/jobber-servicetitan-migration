@@ -3,6 +3,7 @@
 from unittest.mock import Mock, MagicMock, patch, call
 import pytest
 
+from src.extractors.clients_extractor import ClientsExtractor
 from src.extractors.jobs_extractor import JobsExtractor
 from src.extractors.users_extractor import UsersExtractor
 from src.extractors.quotes_extractor import QuotesExtractor
@@ -11,11 +12,27 @@ from src.clients import JobberClient
 from src.mappers import EntityMapper
 from src.repositories import Repository
 from src.interfaces import Logger
-from src.models import Job, User, Quote, Property, Note
+from src.models import Client, Job, User, Quote, Property, Note
 from src.exceptions import MappingError, JobberApiError
 
 
 # Helper functions to create test entities
+def create_test_client(**kwargs):
+    """Create a Client instance with default values for testing."""
+    defaults = {
+        "id": "client_123",
+        "first_name": "John",
+        "last_name": "Doe",
+        "email": "john@example.com",
+        "phone": "555-0100",
+        "created_at": "2023-11-15T10:00:00Z",
+        "additional_emails": "[]",
+        "additional_phones": "[]",
+    }
+    defaults.update(kwargs)
+    return Client(**defaults)
+
+
 def create_test_job(**kwargs):
     """Create a Job instance with default values for testing."""
     defaults = {
@@ -77,6 +94,229 @@ def create_test_property(**kwargs):
     }
     defaults.update(kwargs)
     return Property(**defaults)
+
+
+def create_test_note(**kwargs):
+    """Create a Note instance with default values for testing."""
+    defaults = {
+        "id": "note_123",
+        "entity_type": "client",
+        "entity_id": "client_123",
+        "message": "Test note message",
+        "created_at": "2023-11-15T10:00:00Z",
+        "updated_at": "2023-11-15T10:00:00Z",
+    }
+    defaults.update(kwargs)
+    return Note(**defaults)
+
+
+class TestClientsExtractor:
+    """Test suite for ClientsExtractor with optimized nested notes."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_client = Mock(spec=JobberClient)
+        self.mock_mapper = Mock(spec=EntityMapper)
+        self.mock_repository = Mock(spec=Repository)
+        self.mock_logger = Mock(spec=Logger)
+
+        self.extractor = ClientsExtractor(
+            jobber_client=self.mock_client,
+            entity_mapper=self.mock_mapper,
+            repository=self.mock_repository,
+            logger=self.mock_logger,
+        )
+
+    def test_init_creates_extractor(self):
+        """Test ClientsExtractor initialization."""
+        assert self.extractor._jobber_client == self.mock_client
+        assert self.extractor._entity_mapper == self.mock_mapper
+        assert self.extractor._repository == self.mock_repository
+        assert self.extractor._logger == self.mock_logger
+        assert self.extractor._entity_name == "client"
+
+    def test_fetch_page_calls_client_fetch_clients(self):
+        """Test _fetch_page calls jobber_client.fetch_clients."""
+        expected_response = {"data": {"clients": {"edges": []}}}
+        self.mock_client.fetch_clients.return_value = expected_response
+
+        result = self.extractor._fetch_page(cursor="test_cursor")
+
+        self.mock_client.fetch_clients.assert_called_once_with("test_cursor")
+        assert result == expected_response
+
+    def test_extract_edges_and_page_info(self):
+        """Test _extract_edges_and_page_info extracts correctly."""
+        response = {
+            "data": {
+                "clients": {
+                    "edges": [
+                        {"node": {"id": "client_1"}},
+                        {"node": {"id": "client_2"}},
+                    ],
+                    "pageInfo": {
+                        "hasNextPage": True,
+                        "endCursor": "cursor_abc",
+                    },
+                }
+            }
+        }
+
+        edges, page_info = self.extractor._extract_edges_and_page_info(response)
+
+        assert len(edges) == 2
+        assert edges[0]["node"]["id"] == "client_1"
+        assert page_info["hasNextPage"] is True
+        assert page_info["endCursor"] == "cursor_abc"
+
+    def test_map_entity_calls_mapper(self):
+        """Test _map_entity calls entity_mapper.map_client."""
+        node = {"id": "client_123", "firstName": "John", "lastName": "Doe"}
+        expected_client = create_test_client(id="client_123", first_name="John", last_name="Doe")
+        self.mock_mapper.map_client.return_value = expected_client
+
+        result = self.extractor._map_entity(node)
+
+        self.mock_mapper.map_client.assert_called_once_with(node)
+        assert result == expected_client
+
+    def test_save_entities_calls_repository(self):
+        """Test _save_entities calls repository.save_clients."""
+        clients = [
+            create_test_client(id="client_1", first_name="John"),
+            create_test_client(id="client_2", first_name="Jane"),
+        ]
+
+        self.extractor._save_entities(clients)
+
+        self.mock_repository.save_clients.assert_called_once_with(clients)
+        assert self.extractor._last_batch_entities == clients
+
+    def test_extract_related_entities_extracts_notes(self):
+        """Test _extract_related_entities extracts client notes with optimization."""
+        client = create_test_client(id="client_123", first_name="John")
+        node = {
+            "id": "client_123",
+            "notes": {
+                "edges": [
+                    {
+                        "node": {
+                            "id": "note_1",
+                            "message": "First note",
+                            "createdAt": "2023-11-15T10:00:00Z",
+                            "updatedAt": "2023-11-15T10:00:00Z",
+                        }
+                    },
+                    {
+                        "node": {
+                            "id": "note_2",
+                            "message": "Second note",
+                            "createdAt": "2023-11-15T11:00:00Z",
+                            "updatedAt": "2023-11-15T11:00:00Z",
+                        }
+                    },
+                ],
+                "pageInfo": {
+                    "hasNextPage": False,
+                    "endCursor": None,
+                },
+            },
+        }
+
+        expected_note_1 = create_test_note(
+            id="note_1",
+            message="First note",
+            entity_type="client",
+            entity_id="client_123",
+            created_at="2023-11-15T10:00:00Z",
+            updated_at="2023-11-15T10:00:00Z",
+        )
+        expected_note_2 = create_test_note(
+            id="note_2",
+            message="Second note",
+            entity_type="client",
+            entity_id="client_123",
+            created_at="2023-11-15T11:00:00Z",
+            updated_at="2023-11-15T11:00:00Z",
+        )
+
+        self.mock_mapper.map_note.side_effect = [expected_note_1, expected_note_2]
+
+        related = self.extractor._extract_related_entities(node, client)
+
+        assert "notes" in related
+        assert len(related["notes"]) == 2
+        assert related["notes"][0] == expected_note_1
+        assert related["notes"][1] == expected_note_2
+        assert self.mock_mapper.map_note.call_count == 2
+
+    def test_extract_related_entities_no_notes(self):
+        """Test _extract_related_entities when client has no notes."""
+        client = create_test_client(id="client_123")
+        node = {
+            "id": "client_123",
+            "notes": {"edges": []},
+        }
+
+        related = self.extractor._extract_related_entities(node, client)
+
+        assert related == {}
+        self.mock_mapper.map_note.assert_not_called()
+
+    def test_extract_related_entities_handles_mapping_errors(self):
+        """Test _extract_related_entities handles note mapping errors gracefully."""
+        client = create_test_client(id="client_123")
+        node = {
+            "id": "client_123",
+            "notes": {
+                "edges": [
+                    {
+                        "node": {
+                            "id": "note_1",
+                            "message": "Valid note",
+                            "createdAt": "2023-11-15T10:00:00Z",
+                            "updatedAt": "2023-11-15T10:00:00Z",
+                        }
+                    },
+                    {
+                        "node": {
+                            "id": "note_2",
+                            "message": "Invalid note",
+                        }
+                    },
+                ]
+            },
+        }
+
+        expected_note = create_test_note(id="note_1", message="Valid note", entity_type="client", entity_id="client_123")
+        self.mock_mapper.map_note.side_effect = [expected_note, MappingError("Invalid data")]
+
+        related = self.extractor._extract_related_entities(node, client)
+
+        assert "notes" in related
+        assert len(related["notes"]) == 1
+        assert related["notes"][0] == expected_note
+        self.mock_logger.debug.assert_called_once()
+
+    def test_save_related_entities_saves_notes(self):
+        """Test _save_related_entities saves notes to repository."""
+        notes = [
+            create_test_note(id="note_1", entity_type="client", entity_id="client_123"),
+            create_test_note(id="note_2", entity_type="client", entity_id="client_123"),
+        ]
+        related_entities = {"notes": notes}
+
+        self.extractor._save_related_entities(related_entities)
+
+        self.mock_repository.save_notes.assert_called_once_with(notes)
+
+    def test_save_related_entities_no_notes(self):
+        """Test _save_related_entities when no notes present."""
+        related_entities = {}
+
+        self.extractor._save_related_entities(related_entities)
+
+        self.mock_repository.save_notes.assert_not_called()
 
 
 class TestJobsExtractor:

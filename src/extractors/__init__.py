@@ -16,6 +16,7 @@ Jobber migration capability.
 
 from .attachment_downloader import AttachmentDownloader
 from .base_extractor import BaseExtractor
+from .clients_extractor import ClientsExtractor
 from .expenses_extractor import ExpensesExtractor
 from .jobs_extractor import JobsExtractor
 from .note_reference_collector import NoteReferenceCollector
@@ -32,6 +33,7 @@ from .visits_extractor import VisitsExtractor
 __all__ = [
     "AttachmentDownloader",
     "BaseExtractor",
+    "ClientsExtractor",
     "ExpensesExtractor",
     "JobsExtractor",
     "NoteReferenceCollector",
