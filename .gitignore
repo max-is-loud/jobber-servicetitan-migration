@@ -204,6 +204,7 @@ tmp/
 # Task management and AI assistant data
 .random/
 .random/.shrimp-data/tightbeam-v2/tasks.json
+shrimp-rules.md
 
 # OAuth tokens and secrets (safety)
 .env.local
