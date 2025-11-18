@@ -32,6 +32,10 @@ console = ServiceFactory.get_console()
 # Version callback
 def version_callback(value: bool) -> None:
     """Display application version and exit."""
+    # Handle case where Typer passes string "False" instead of bool False
+    if isinstance(value, str):
+        value = value.lower() in ('true', '1', 'yes')
+
     if value:
         console.print(f"[bold blue]{VERSION_DISPLAY}[/bold blue]")
         console.print(VERSION_SUBTITLE)
@@ -49,7 +53,7 @@ app = typer.Typer(
 @app.callback()
 def main_callback(
     version: Annotated[
-        bool, typer.Option("--version", "-V", help="Show version and exit", callback=version_callback)
+        bool, typer.Option("--version", "-V", help="Show version and exit", callback=version_callback, is_eager=True)
     ] = False,
 ) -> None:
     """
@@ -67,7 +71,13 @@ app.add_typer(migrate_app, name="migrate")
 
 def main() -> None:
     """Entry point for the CLI application."""
-    app()
+    try:
+        app()
+    except Exception as e:
+        console.print(f"[red]ERROR: {type(e).__name__}: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 if __name__ == "__main__":
