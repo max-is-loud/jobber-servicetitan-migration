@@ -6,7 +6,7 @@ authors = [{name = "Maxime Langlois-Morin", email = "max@maxmorin.ca"}]
 readme = "README.md"
 license = {text = "Proprietary"}
 keywords = ["jobber", "graphql", "sqlite", "data-migration", "cli"]
-requires-python = ">=3.8,<3.13"
+requires-python = ">=3.8"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -48,7 +48,7 @@ classifiers = [
 packages = [{include = "src"}]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.13"
+python = "^3.8"
 typer = "^0.9.0"
 requests = "^2.31.0"
 pyjwt = "^2.8.0"
