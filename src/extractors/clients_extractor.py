@@ -22,9 +22,12 @@ class ClientsExtractor(BaseExtractor[Client]):
 
     Features optimized nested notes extraction:
     - Fetches full note data inline with clients query (60-70% cost reduction)
-    - Uses first: 10 pagination parameter for predictable API costs
+    - Uses configurable pagination (default: 10) for predictable API costs
     - Eliminates need for individual note API calls
     - Saves notes automatically during client extraction
+
+    Configuration: Set pagination.nested_notes in settings.yaml to control
+    the number of notes fetched per client (default: 10).
     """
 
     def __init__(
@@ -114,7 +117,7 @@ class ClientsExtractor(BaseExtractor[Client]):
 
         Extracts nested note data from the client query response. Notes are
         fetched inline with the client query using optimized pagination
-        (first: 10) to reduce API costs by 60-70%.
+        (configurable via pagination.nested_notes) to reduce API costs by 60-70%.
 
         Args:
             node: Client data from API
@@ -132,10 +135,10 @@ class ClientsExtractor(BaseExtractor[Client]):
             for note_edge in client_notes:
                 note_node = note_edge.get("node", {})
                 if note_node:
-                    # Add client relationship to note data
-                    note_node["client"] = {"id": primary_entity.id}
                     try:
-                        note = self._entity_mapper.map_note(note_node)
+                        # Add client relationship to note data without mutation
+                        note_data = {**note_node, "client": {"id": primary_entity.id}}
+                        note = self._entity_mapper.map_note(note_data)
                         notes.append(note)
                     except MappingError as e:
                         self._logger.debug(

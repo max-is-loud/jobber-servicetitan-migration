@@ -128,6 +128,16 @@ pagination:
   # Can increase to 50-100 safely
   tax_rates: 30
 
+  # Nested notes fetching (for optimized inline note extraction)
+  # Default: 10 (balances cost reduction with typical note counts)
+  # ⚠️  This is used in nested queries within parent entities (clients, jobs, invoices)
+  # TUNING:
+  #   - Reduce to 5 if most entities have few notes (reduces query cost)
+  #   - Increase to 20 if clients have many notes and need full batch (increases cost)
+  #   - Keep at 10 for optimal 60-70% cost reduction vs individual fetches
+  # See: docs/architecture/notes-optimization.md for analysis
+  nested_notes: 10
+
   # Default page size for any entity type not specified above
   # Used as fallback when new entity types are added
   default: 30

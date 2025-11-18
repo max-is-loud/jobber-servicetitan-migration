@@ -46,7 +46,7 @@ class JobberClient:
     def _get_clients_query(self) -> str:
         """Get GraphQL query for fetching clients with configurable pagination.
 
-        Includes optimized nested notes query with first: 10 parameter to:
+        Includes optimized nested notes query with configurable pagination to:
         - Reduce API costs by 60-70% (from ~100 points to ~50 points per client)
         - Eliminate individual note API calls
         - Provide predictable query costs
@@ -54,6 +54,7 @@ class JobberClient:
         See docs/architecture/notes-optimization.md for full analysis.
         """
         page_size = self._get_pagination_size("clients")
+        nested_notes_size = self._get_pagination_size("nested_notes")
         return f"""
     query GetClients($cursor: String) {{
       clients(first: {page_size}, after: $cursor) {{
@@ -68,7 +69,7 @@ class JobberClient:
             phones {{
               number
             }}
-            notes(first: 10) {{
+            notes(first: {nested_notes_size}) {{
               edges {{
                 node {{
                   ... on ClientNote {{
