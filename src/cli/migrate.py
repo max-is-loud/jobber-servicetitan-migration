@@ -671,9 +671,7 @@ def migrate_all(
 
     except ConfigurationError as e:
         # Configuration/environment issues
-        from src.cli.services import ServiceFactory
-
-        console = ServiceFactory.get_console()
+        # Use module-level console instance (already initialized at top of file)
 
         console.print(f"[red]Configuration Error:[/red] {e}")
         console.print("[yellow]To configure authentication, you can either:[/yellow]")
