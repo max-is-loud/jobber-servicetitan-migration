@@ -38,16 +38,20 @@ git clone <repository-url>
 cd tightbeam-v2
 ```
 
-2. Install dependencies using Poetry:
+2. Install dependencies using UV:
 
 ```bash
-poetry install
+# Install UV if you haven't already
+# See https://docs.astral.sh/uv/getting-started/installation/
+
+# Sync dependencies from uv.lock
+uv sync
 ```
 
 3. Set up authentication:
 
 ```bash
-poetry run tightbeam oauth init
+uv run tightbeam oauth init
 ```
 
 ### Basic Usage
@@ -55,20 +59,20 @@ poetry run tightbeam oauth init
 1. **Initialize OAuth authentication:**
 
 ```bash
-poetry run tightbeam oauth init
+uv run tightbeam oauth init
 # Follow the displayed instructions to set up your environment variables
 ```
 
 2. **Run a migration:**
 
 ```bash
-poetry run tightbeam migrate start
+uv run tightbeam migrate start
 ```
 
 3. **Resume a migration:**
 
 ```bash
-poetry run tightbeam migrate start --resume
+uv run tightbeam migrate start --resume
 ```
 
 ## Migration Coordinator Architecture
@@ -138,26 +142,26 @@ coordinator = RichMigrationCoordinator(
 
 ```bash
 # Initialize OAuth setup
-poetry run tightbeam oauth init
+uv run tightbeam oauth init
 
 # Get current authentication status
-poetry run tightbeam oauth status
+uv run tightbeam oauth status
 ```
 
 ### Migration Operations
 
 ```bash
 # Start a new migration
-poetry run tightbeam migrate start
+uv run tightbeam migrate start
 
 # Resume an interrupted migration
-poetry run tightbeam migrate start --resume
+uv run tightbeam migrate start --resume
 
 # Dry run mode (preview only)
-poetry run tightbeam migrate start --dry-run
+uv run tightbeam migrate start --dry-run
 
 # Advanced options
-poetry run tightbeam migrate start \
+uv run tightbeam migrate start \
     --resume \
     --adaptive-optimization \
     --optimization-level 3
@@ -230,27 +234,27 @@ src/
 
 ```bash
 # Run all tests
-poetry run pytest
+uv run pytest
 
 # Run with coverage
-poetry run pytest --cov=src
+uv run pytest --cov=src
 
 # Run specific test categories
-poetry run pytest tests/unit/
-poetry run pytest tests/integration/
+uv run pytest tests/unit/
+uv run pytest tests/integration/
 ```
 
 ### Code Quality
 
 ```bash
 # Linting
-poetry run ruff check src/
+uv run ruff check src/
 
 # Type checking
-poetry run mypy src/
+uv run mypy src/
 
 # Formatting
-poetry run black src/
+uv run black src/
 ```
 
 ## Architecture Documentation
@@ -266,8 +270,10 @@ For detailed technical documentation:
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature-name`
 3. Make changes with proper tests
-4. Run the test suite: `poetry run pytest`
+4. Run the test suite: `uv run pytest`
 5. Submit a pull request
+
+**Note**: This project uses [UV](https://docs.astral.sh/uv/) for dependency management. Make sure you have UV installed before contributing.
 
 ## License
 
