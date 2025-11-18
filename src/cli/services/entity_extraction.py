@@ -12,6 +12,7 @@ from src.exceptions import ConfigurationError
 from src.loggers import RichLogger
 from src.mappers import EntityMapper
 from src.repositories import Repository
+from .factories import ServiceFactory
 
 
 def _execute_entity_extraction(
@@ -73,8 +74,6 @@ def _execute_entity_extraction(
 
         # Create JobberClient with rate limiting via ServiceFactory
         # This centralizes rate limiting setup and eliminates code duplication
-        from .factories import ServiceFactory
-
         jobber_client = ServiceFactory.create_rate_limited_jobber_client(
             auth_provider=auth_provider,
             repository=repository,
