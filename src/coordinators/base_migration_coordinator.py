@@ -523,8 +523,7 @@ class BaseMigrationCoordinator:
             RepositoryError: If database operations fail
         """
         if not self._clients_extractor:
-            self._logger.warning("Client migration requested but no ClientsExtractor provided - using fallback inline logic")
-            # Fall back to inline extraction would go here, but for this refactor we require the extractor
+            self._logger.warning("Client migration skipped: ClientsExtractor was not provided.")
             return 0
 
         try:
@@ -589,8 +588,7 @@ class BaseMigrationCoordinator:
             RepositoryError: If database operations fail
         """
         if not self._invoices_extractor:
-            self._logger.warning("Invoice migration requested but no InvoicesExtractor provided - using fallback inline logic")
-            # Fall back to inline extraction would go here, but for this refactor we require the extractor
+            self._logger.warning("Invoice migration skipped: InvoicesExtractor was not provided.")
             return 0
 
         try:
@@ -847,5 +845,12 @@ class BaseMigrationCoordinator:
             self._logger.info(f"   • Text: {text_path}")
             self._logger.info(f"   • JSON: {json_path}")
 
+        except (OSError, IOError, PermissionError) as e:
+            self._logger.warning(
+                f"Failed to save migration reports to {self._report_output_dir}: {e}. "
+                "Check directory permissions or disk space."
+            )
         except Exception as e:
-            self._logger.warning(f"Failed to generate migration reports: {e}")
+            self._logger.warning(
+                f"Failed to generate migration reports due to unexpected error: {e}"
+            )

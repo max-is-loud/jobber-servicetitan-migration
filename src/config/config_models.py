@@ -264,9 +264,14 @@ class AppConfig:
 
     def __post_init__(self) -> None:
         """Validate application configuration."""
-        # Validate max_retries
-        if not isinstance(self.max_retries, int) or self.max_retries < 1:
-            raise ValueError("max_retries must be a positive integer")
+        # Validate max_retries with reasonable bounds
+        if not isinstance(self.max_retries, int):
+            raise ValueError(f"max_retries must be an integer, got {type(self.max_retries).__name__}")
+        if not 1 <= self.max_retries <= 100:
+            raise ValueError(
+                f"max_retries must be between 1 and 100, got {self.max_retries}. "
+                "Very high values may cause excessive delays during rate limiting."
+            )
 
         required_rate_limit_levels = {"conservative", "moderate", "aggressive"}
         if not required_rate_limit_levels.issubset(self.rate_limits.keys()):

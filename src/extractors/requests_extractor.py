@@ -117,7 +117,10 @@ class RequestsExtractor(BaseExtractor[Request]):
         related = {}
 
         # Extract notes if present
-        request_notes = node.get("notes", {}).get("edges", [])
+        notes_data = node.get("notes", {})
+        request_notes = notes_data.get("edges", [])
+        notes_page_info = notes_data.get("pageInfo", {})
+
         if request_notes:
             notes = []
             for note_edge in request_notes:
@@ -134,6 +137,14 @@ class RequestsExtractor(BaseExtractor[Request]):
                         )
             if notes:
                 related["notes"] = notes
+
+                # Warn if there are more notes that weren't fetched
+                if notes_page_info.get("hasNextPage", False):
+                    self._logger.warning(
+                        f"Request {primary_entity.id} has additional notes beyond the "
+                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
+                        f"settings.yaml to fetch more notes inline."
+                    )
 
         return related
 

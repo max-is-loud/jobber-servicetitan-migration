@@ -129,7 +129,10 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
         related = {}
 
         # Extract notes if present
-        invoice_notes = node.get("notes", {}).get("edges", [])
+        notes_data = node.get("notes", {})
+        invoice_notes = notes_data.get("edges", [])
+        notes_page_info = notes_data.get("pageInfo", {})
+
         if invoice_notes:
             notes = []
             for note_edge in invoice_notes:
@@ -146,6 +149,14 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
                         )
             if notes:
                 related["notes"] = notes
+
+                # Warn if there are more notes that weren't fetched
+                if notes_page_info.get("hasNextPage", False):
+                    self._logger.warning(
+                        f"Invoice {primary_entity.id} has additional notes beyond the "
+                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
+                        f"settings.yaml to fetch more notes inline."
+                    )
 
         return related
 

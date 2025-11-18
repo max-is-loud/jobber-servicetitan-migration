@@ -129,7 +129,10 @@ class ClientsExtractor(BaseExtractor[Client]):
         related = {}
 
         # Extract notes if present
-        client_notes = node.get("notes", {}).get("edges", [])
+        notes_data = node.get("notes", {})
+        client_notes = notes_data.get("edges", [])
+        notes_page_info = notes_data.get("pageInfo", {})
+
         if client_notes:
             notes = []
             for note_edge in client_notes:
@@ -146,6 +149,14 @@ class ClientsExtractor(BaseExtractor[Client]):
                         )
             if notes:
                 related["notes"] = notes
+
+                # Warn if there are more notes that weren't fetched
+                if notes_page_info.get("hasNextPage", False):
+                    self._logger.warning(
+                        f"Client {primary_entity.id} has additional notes beyond the "
+                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
+                        f"settings.yaml to fetch more notes inline."
+                    )
 
         return related
 

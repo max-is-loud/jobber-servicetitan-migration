@@ -113,7 +113,10 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
         related = {}
 
         # Extract notes if present
-        job_notes = node.get("notes", {}).get("edges", [])
+        notes_data = node.get("notes", {})
+        job_notes = notes_data.get("edges", [])
+        notes_page_info = notes_data.get("pageInfo", {})
+
         if job_notes:
             notes = []
             for note_edge in job_notes:
@@ -130,6 +133,14 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
                         )
             if notes:
                 related["notes"] = notes
+
+                # Warn if there are more notes that weren't fetched
+                if notes_page_info.get("hasNextPage", False):
+                    self._logger.warning(
+                        f"Job {primary_entity.id} has additional notes beyond the "
+                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
+                        f"settings.yaml to fetch more notes inline."
+                    )
 
         return related
 
