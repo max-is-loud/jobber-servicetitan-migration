@@ -1,3 +1,4 @@
+from __future__ import annotations
 """ClientsExtractor for extracting Client entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional

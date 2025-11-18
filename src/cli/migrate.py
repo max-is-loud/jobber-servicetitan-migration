@@ -81,11 +81,11 @@ migrate_app = typer.Typer(
 def migrate_callback(
     ctx: typer.Context,
     db: Annotated[Optional[Path], typer.Option(help="SQLite database path")] = None,
-    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable verbose logging")] = False,
     deferred_notes: Annotated[
         bool,
         typer.Option(
-            "--deferred-notes/--immediate-notes",
+            "--deferred-notes",
             help="Use deferred notes loading to prevent GraphQL throttling",
         ),
     ] = True,
@@ -110,7 +110,7 @@ def migrate_callback(
     enable_cost_monitoring: Annotated[
         bool,
         typer.Option(
-            "--enable-cost-monitoring/--disable-cost-monitoring",
+            "--enable-cost-monitoring",
             help=(
                 "Enable GraphQL cost monitoring and rate limit tracking. "
                 "Provides detailed performance insights and API usage statistics. "
@@ -139,7 +139,7 @@ def migrate_callback(
     enable_adaptive_optimization: Annotated[
         bool,
         typer.Option(
-            "--adaptive/--no-adaptive",
+            "--adaptive",
             help="Enable adaptive performance optimization (auto-tune page size and delays)",
         ),
     ] = False,
@@ -225,11 +225,11 @@ def migrate_callback(
 def migrate_all(
     ctx: typer.Context,
     db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.sqlite"),
-    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Enable verbose logging")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable verbose logging")] = False,
     deferred_notes: Annotated[
         bool,
         typer.Option(
-            "--deferred-notes/--immediate-notes",
+            "--deferred-notes",
             help="Use deferred notes loading to prevent GraphQL throttling",
         ),
     ] = True,
@@ -247,17 +247,53 @@ def migrate_all(
             help="Skip entities that already exist in database (for resuming interrupted migrations)",
         ),
     ] = None,
-    optimization_level: str = "moderate",
-    enable_cost_monitoring: bool = True,
-    cost_monitoring_verbose: bool = False,
+    optimization_level: Annotated[
+        str,
+        typer.Option(
+            help=(
+                "Rate limiting optimization level:\n"
+                "• conservative (4 req/s): Safest option with 52% safety margin, recommended for production\n"
+                "• moderate (6 req/s): Balanced performance with 28% safety margin, default recommended\n"
+                "• aggressive (8 req/s): Maximum speed with 4% safety margin, requires active monitoring"
+            )
+        ),
+    ] = "moderate",
+    enable_cost_monitoring: Annotated[
+        bool,
+        typer.Option(
+            "--enable-cost-monitoring",
+            help=(
+                "Enable GraphQL cost monitoring and rate limit tracking. "
+                "Provides detailed performance insights and API usage statistics. "
+                "Recommended for performance analysis and optimization tuning."
+            ),
+        ),
+    ] = True,
+    cost_monitoring_verbose: Annotated[
+        bool,
+        typer.Option(
+            "--cost-monitoring-verbose",
+            help=(
+                "Enable verbose cost monitoring output during migration. "
+                "Shows detailed GraphQL query costs, accuracy percentages, and rate limit analysis. "
+                "Use for detailed performance debugging and optimization insights."
+            ),
+        ),
+    ] = False,
     enable_adaptive_optimization: Annotated[
         bool,
         typer.Option(
-            "--adaptive/--no-adaptive",
+            "--adaptive",
             help="Enable adaptive performance optimization (auto-tune page size and delays)",
         ),
     ] = False,
-    dry_run: bool = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Preview migration operations without making any changes to the database",
+        ),
+    ] = False,
 ) -> None:
     """
     Migrate all data from Jobber API to SQLite database.

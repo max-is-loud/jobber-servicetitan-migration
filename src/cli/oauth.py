@@ -84,9 +84,9 @@ def oauth_group_callback(
     verbose: Annotated[
         bool, typer.Option("--verbose", "-v", help="Enable verbose output for OAuth operations")
     ] = False,
-    check_config: Annotated[
-        bool, typer.Option("--check-config/--no-check-config", help="Validate OAuth configuration before commands")
-    ] = True,
+    # check_config: Annotated[
+    #     bool, typer.Option("--check-config/--no-check-config", help="Validate OAuth configuration before commands")
+    # ] = True,
 ) -> None:
     """
     OAuth 2.0 authentication management.
@@ -97,50 +97,19 @@ def oauth_group_callback(
     # Store shared options in context for all oauth commands
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
-    ctx.obj["check_config"] = check_config
+    # ctx.obj["check_config"] = check_config
 
     if verbose:
         console.print(f"{OAUTH_EMOJI} [bold blue]OAuth Verbose Mode:[/bold blue] Detailed output enabled", style="dim")
 
     # Validate OAuth configuration if requested (and not running setup/status commands)
-    if check_config and ctx.invoked_subcommand not in ["setup", "status"]:
-        _validate_oauth_config(console, verbose)
+    # if check_config and ctx.invoked_subcommand not in ["setup", "status"]:
+    #     _validate_oauth_config(console, verbose)
 
 
 # These functions are now provided by ServiceFactory
 _create_oauth2_manager = ServiceFactory.create_oauth2_manager
 _create_repository = ServiceFactory.create_repository
-
-
-@oauth_app.command()
-def init() -> None:
-    """
-    Initialize OAuth authentication setup.
-    Guides you through setting up the required environment variables
-    for Jobber API OAuth authentication.
-    """
-    # Create a panel with OAuth setup instructions
-    setup_content = """To authenticate with the Jobber API, you need to set up
-    the following environment variables:
-
-[bold cyan]Required OAuth Environment Variables:[/bold cyan]
-  • [green]JOBBER_CLIENT_ID[/green] - Your Jobber application's client ID
-  • [green]JOBBER_CLIENT_SECRET[/green] - Your Jobber application's client secret
-  • [green]JOBBER_REDIRECT_URI[/green] - OAuth redirect URI for your application
-  • [green]JOBBER_TOKEN[/green] - Valid Jobber API access token
-
-[bold yellow]You can set these in your shell environment:[/bold yellow]
-  export JOBBER_CLIENT_ID='your_client_id'
-  export JOBBER_CLIENT_SECRET='your_client_secret'
-  export JOBBER_REDIRECT_URI='your_redirect_uri'
-  export JOBBER_TOKEN='your_access_token'
-
-[bold yellow]Or create a .env file in your project directory with these values.[/bold yellow]
-
-[bold blue]For more information on obtaining these credentials, visit:[/bold blue]
-📖 https://developer.getjobber.com/docs/authentication"""  # noqa: E501
-
-    console.print(Panel(setup_content, title="🔧 TightBeam OAuth Setup", border_style="blue"))
 
 
 @oauth_app.command("init")

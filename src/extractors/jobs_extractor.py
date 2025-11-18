@@ -1,3 +1,4 @@
+from __future__ import annotations
 """JobsExtractor for extracting Job entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
@@ -6,7 +7,7 @@ from ..clients import JobberClient
 from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import Job
+from ..models import Job, Note
 from ..repositories import Repository
 from .base_extractor import BaseExtractor
 
