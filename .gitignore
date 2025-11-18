@@ -189,9 +189,9 @@ reports/
 *.report.json
 
 # Workspace/development notes (not part of source)
-CLAUDE.md
-PROJECT_STATUS.md
-.document_archive/
+/CLAUDE.md
+/PROJECT_STATUS.md
+/.document_archive/
 
 # Temporary data and cache
 temp/
