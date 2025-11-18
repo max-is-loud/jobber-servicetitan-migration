@@ -1,0 +1,109 @@
+# Coverage.py configuration for TightBeam v2
+# ===========================================
+# Controls code coverage measurement and reporting.
+# See: https://coverage.readthedocs.io/en/latest/config.html
+
+[run]
+# Source code directory to measure coverage for
+source = src
+
+# Omit specific files/patterns from coverage measurement
+omit =
+    # Test files should not be included in coverage
+    tests/*
+
+    # __init__.py files are typically just imports
+    */__init__.py
+
+    # Exclude development/debug utilities
+    src/utils/debug.py
+
+    # Exclude legacy/orphaned files if any exist
+    src/oauth2_cli_fix.py
+    src/oauth2_cli_fixed.py
+
+# Enable branch coverage (tracks both True and False branches)
+branch = True
+
+# Parallel mode for concurrent test runs (future-proofing)
+parallel = False
+
+[report]
+# Precision for coverage percentage (2 decimal places)
+precision = 2
+
+# Show line numbers for missing coverage
+show_missing = True
+
+# Skip files with 100% coverage in the report (focus on gaps)
+skip_covered = False
+
+# Skip empty files
+skip_empty = True
+
+# Sort report by coverage percentage (lowest first - focus on worst)
+sort = Cover
+
+# Exclude lines from coverage measurement using pragma comments
+exclude_lines =
+    # Standard pragma to exclude lines
+    pragma: no cover
+
+    # Don't complain about missing debug-only code
+    def __repr__
+
+    # Don't complain if tests don't hit defensive assertion code
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run
+    if __name__ == "__main__":
+
+    # Don't complain about abstract methods
+    @abstractmethod
+    @abc.abstractmethod
+
+    # Don't complain about type checking blocks
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
+
+    # Don't complain about protocol definitions
+    @Protocol
+    @runtime_checkable
+
+# Ignore errors for source files that can't be found
+ignore_errors = False
+
+# Fail under this coverage percentage (80% target)
+# Set to 0 initially, increase as tests are added
+fail_under = 0
+
+[html]
+# Directory for HTML coverage reports
+directory = htmlcov
+
+# Title for HTML report
+title = TightBeam v2 Code Coverage Report
+
+# Show contexts (which tests covered which lines)
+show_contexts = True
+
+[xml]
+# Output file for XML coverage report (for CI/CD tools)
+output = coverage.xml
+
+[json]
+# Output file for JSON coverage report
+output = coverage.json
+
+# Pretty-print JSON output
+pretty_print = True
+
+# Show contexts in JSON output
+show_contexts = True
+
+[paths]
+# Map source paths for coverage combining (useful for different environments)
+source =
+    src/
+    */tightbeam-v2/src/
