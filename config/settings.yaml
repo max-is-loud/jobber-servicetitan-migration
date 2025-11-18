@@ -54,6 +54,15 @@ rate_limits:
     initial_tokens: 100
     safety_margin: 0.04  # Only 4% reserve - minimal safety buffer
 
+# Maximum retry attempts for rate-limited requests
+# Applies exponential backoff on 429 (throttled) responses
+# Default: 15 retries (adequate for most scenarios)
+# TUNING:
+#   - Increase to 20-25 for very large migrations or unstable API
+#   - Reduce to 10 for faster failure detection
+# NOTE: With max_delay of 300s, 15 retries = up to 75 minutes total wait time
+max_retries: 15
+
 # Pagination Settings
 # --------------------
 # Number of entities to fetch per GraphQL query (per page).

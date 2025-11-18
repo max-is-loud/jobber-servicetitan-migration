@@ -255,6 +255,7 @@ class AppConfig:
     """Complete application configuration."""
 
     rate_limits: dict[str, RateLimitConfig]
+    max_retries: int
     pagination: PaginationConfig
     delays: DelayConfig
     backoff: BackoffConfig
@@ -263,6 +264,10 @@ class AppConfig:
 
     def __post_init__(self) -> None:
         """Validate application configuration."""
+        # Validate max_retries
+        if not isinstance(self.max_retries, int) or self.max_retries < 1:
+            raise ValueError("max_retries must be a positive integer")
+
         required_rate_limit_levels = {"conservative", "moderate", "aggressive"}
         if not required_rate_limit_levels.issubset(self.rate_limits.keys()):
             missing = required_rate_limit_levels - self.rate_limits.keys()
