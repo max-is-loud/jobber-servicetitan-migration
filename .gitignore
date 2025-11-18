@@ -186,8 +186,8 @@ tightbeam*.db
 attachments/
 downloads/
 
-# Migration reports and analysis
-reports/
+# Migration reports and analysis (only top-level reports/, not src/reports/)
+/reports/
 *.report.json
 
 # Workspace/development notes (not part of source)

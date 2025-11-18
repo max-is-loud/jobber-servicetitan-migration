@@ -1,6 +1,8 @@
 """Base class for migration coordinators with Rich UI and Template Method pattern."""
 
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
@@ -36,6 +38,7 @@ from ..mappers import EntityMapper
 from ..models import MigrationSummary
 from ..performance import AdaptivePerformanceOptimizer
 from ..repositories import Repository
+from ..reports import MigrationReportGenerator
 
 
 class BaseMigrationCoordinator:
@@ -72,6 +75,7 @@ class BaseMigrationCoordinator:
         config_manager: Optional[ConfigManagerImpl] = None,
         resume: bool = False,
         enable_adaptive_optimization: bool = False,
+        report_output_dir: Optional[Path] = None,
     ) -> None:
         """Initialize BaseMigrationCoordinator with required dependencies.
 
@@ -89,6 +93,7 @@ class BaseMigrationCoordinator:
             config_manager: Optional ConfigManager for delays and pagination settings
             resume: Whether to skip entities that already exist in database
             enable_adaptive_optimization: Whether to enable adaptive performance optimization
+            report_output_dir: Optional directory for migration reports (default: ./reports)
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
@@ -96,6 +101,7 @@ class BaseMigrationCoordinator:
         self._logger = logger
         self._config_manager = config_manager or ConfigManagerImpl()
         self._resume = resume
+        self._report_output_dir = report_output_dir or Path("reports")
 
         # Note reference collector for deferred note processing
         self._note_reference_collector = note_reference_collector
@@ -417,6 +423,12 @@ class BaseMigrationCoordinator:
                     f"   • Final settings: {perf_summary['current_page_size']} per page, {perf_summary['current_page_delay']} delay"
                 )
                 self._logger.info(f"   • Confidence: {perf_summary['confidence_score']}")
+
+            # Generate migration reports
+            self._generate_migration_reports(
+                start_time=datetime.fromtimestamp(start_time),
+                end_time=datetime.fromtimestamp(end_time)
+            )
 
         return summary
 
@@ -782,3 +794,58 @@ class BaseMigrationCoordinator:
             self._logger.error(error_msg)
             summary.add_error(error_msg)
             raise
+
+    def _generate_migration_reports(
+        self, start_time: datetime, end_time: datetime
+    ) -> None:
+        """Generate and save migration summary reports.
+
+        Creates both text and JSON format reports summarizing extraction
+        metrics from all active extractors.
+
+        Args:
+            start_time: Migration start timestamp
+            end_time: Migration end timestamp
+        """
+        try:
+            # Create report generator
+            report = MigrationReportGenerator(migration_name="TightBeam Migration")
+            report.set_timing(start_time, end_time)
+
+            # Collect extractor summaries
+            if self._clients_extractor:
+                report.add_extractor_summary(
+                    "clients", self._clients_extractor.get_extraction_summary()
+                )
+
+            if self._invoices_extractor:
+                report.add_extractor_summary(
+                    "invoices", self._invoices_extractor.get_extraction_summary()
+                )
+
+            if self._quotes_extractor:
+                report.add_extractor_summary(
+                    "quotes", self._quotes_extractor.get_extraction_summary()
+                )
+
+            if self._notes_extractor:
+                report.add_extractor_summary(
+                    "notes", self._notes_extractor.get_extraction_summary()
+                )
+
+            if self._attachment_downloader:
+                report.add_extractor_summary(
+                    "attachments", self._attachment_downloader.get_extraction_summary()
+                )
+
+            # Save reports
+            text_path, json_path = report.save_reports(
+                self._report_output_dir, include_timestamp=True
+            )
+
+            self._logger.info(f"📊 Migration reports saved:")
+            self._logger.info(f"   • Text: {text_path}")
+            self._logger.info(f"   • JSON: {json_path}")
+
+        except Exception as e:
+            self._logger.warning(f"Failed to generate migration reports: {e}")

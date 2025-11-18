@@ -55,6 +55,9 @@ class TestServiceFactoryRateLimitedClient:
             "jitter_factor": 0.2,
         }
 
+        # Configure max retries
+        config_manager.get_max_retries.return_value = 15
+
         return config_manager
 
     def test_create_rate_limited_jobber_client_returns_jobber_client(
