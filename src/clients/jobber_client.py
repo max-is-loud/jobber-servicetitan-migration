@@ -76,7 +76,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
                   }}
                 }}
               }}
@@ -123,7 +122,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
                   }}
                 }}
               }}
@@ -172,7 +170,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
                   }}
                 }}
               }}
@@ -266,7 +263,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
                   }}
                 }}
               }}
@@ -357,7 +353,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
                   }}
                 }}
               }}
@@ -599,7 +594,6 @@ class JobberClient:
           id
           message
           createdAt
-          updatedAt
           client {
             id
           }
@@ -608,7 +602,6 @@ class JobberClient:
           id
           message
           createdAt
-          updatedAt
           job {
             id
           }
@@ -617,7 +610,6 @@ class JobberClient:
           id
           message
           createdAt
-          updatedAt
           quote {
             id
           }
@@ -626,7 +618,6 @@ class JobberClient:
           id
           message
           createdAt
-          updatedAt
           invoice {
             id
           }
@@ -635,7 +626,6 @@ class JobberClient:
           id
           message
           createdAt
-          updatedAt
           request {
             id
           }
