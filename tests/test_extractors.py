@@ -4,6 +4,7 @@ from unittest.mock import Mock, MagicMock, patch, call
 import pytest
 
 from src.extractors.clients_extractor import ClientsExtractor
+from src.extractors.invoices_extractor import InvoicesExtractor
 from src.extractors.jobs_extractor import JobsExtractor
 from src.extractors.users_extractor import UsersExtractor
 from src.extractors.quotes_extractor import QuotesExtractor
@@ -12,7 +13,7 @@ from src.clients import JobberClient
 from src.mappers import EntityMapper
 from src.repositories import Repository
 from src.interfaces import Logger
-from src.models import Client, Job, User, Quote, Property, Note
+from src.models import Client, Invoice, Job, User, Quote, Property, Note
 from src.exceptions import MappingError, JobberApiError
 
 
@@ -108,6 +109,23 @@ def create_test_note(**kwargs):
     }
     defaults.update(kwargs)
     return Note(**defaults)
+
+
+def create_test_invoice(**kwargs):
+    """Create an Invoice instance with default values for testing."""
+    defaults = {
+        "id": "invoice_123",
+        "client_id": "client_123",
+        "number": "INV-001",
+        "total_cents": 10000,
+        "status": "draft",
+        "issued_at": "2023-11-15T10:00:00Z",
+        "due_date": "2023-12-15T10:00:00Z",
+        "subtotal": 10000,
+        "line_items": "[]",
+    }
+    defaults.update(kwargs)
+    return Invoice(**defaults)
 
 
 class TestClientsExtractor:
@@ -955,3 +973,298 @@ class TestExtractorErrorHandling:
         # Should handle None gracefully
         assert edges is None or edges == []
         assert page_info is None or page_info == {}
+
+
+class TestInvoicesExtractor:
+    """Test suite for InvoicesExtractor with optimized nested notes."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_client = Mock(spec=JobberClient)
+        self.mock_mapper = Mock(spec=EntityMapper)
+        self.mock_repository = Mock(spec=Repository)
+        self.mock_logger = Mock(spec=Logger)
+
+        self.extractor = InvoicesExtractor(
+            jobber_client=self.mock_client,
+            entity_mapper=self.mock_mapper,
+            repository=self.mock_repository,
+            logger=self.mock_logger,
+        )
+
+    def test_init_creates_extractor(self):
+        """Test InvoicesExtractor initialization."""
+        assert self.extractor._jobber_client == self.mock_client
+        assert self.extractor._entity_mapper == self.mock_mapper
+        assert self.extractor._repository == self.mock_repository
+        assert self.extractor._logger == self.mock_logger
+        assert self.extractor._entity_name == "invoice"
+
+    def test_fetch_page_calls_client_fetch_invoices(self):
+        """Test _fetch_page calls jobber_client.fetch_invoices."""
+        expected_response = {"data": {"invoices": {"edges": []}}}
+        self.mock_client.fetch_invoices.return_value = expected_response
+
+        result = self.extractor._fetch_page(cursor="test_cursor")
+
+        self.mock_client.fetch_invoices.assert_called_once_with("test_cursor")
+        assert result == expected_response
+
+    def test_extract_edges_and_page_info(self):
+        """Test _extract_edges_and_page_info extracts correctly."""
+        response = {
+            "data": {
+                "invoices": {
+                    "edges": [
+                        {"node": {"id": "invoice_1"}},
+                        {"node": {"id": "invoice_2"}},
+                    ],
+                    "pageInfo": {
+                        "hasNextPage": True,
+                        "endCursor": "cursor_abc",
+                    },
+                }
+            }
+        }
+
+        edges, page_info = self.extractor._extract_edges_and_page_info(response)
+
+        assert len(edges) == 2
+        assert edges[0]["node"]["id"] == "invoice_1"
+        assert page_info["hasNextPage"] is True
+        assert page_info["endCursor"] == "cursor_abc"
+
+    def test_map_entity_calls_mapper(self):
+        """Test _map_entity calls entity_mapper.map_invoice."""
+        node = {"id": "invoice_123", "invoiceNumber": "INV-001", "invoiceStatus": "draft"}
+        expected_invoice = create_test_invoice(id="invoice_123", number="INV-001", status="draft")
+        self.mock_mapper.map_invoice.return_value = expected_invoice
+
+        result = self.extractor._map_entity(node)
+
+        self.mock_mapper.map_invoice.assert_called_once_with(node)
+        assert result == expected_invoice
+
+    def test_save_entities_calls_repository(self):
+        """Test _save_entities calls repository.save_invoices."""
+        invoices = [
+            create_test_invoice(id="invoice_1", number="INV-001"),
+            create_test_invoice(id="invoice_2", number="INV-002"),
+        ]
+
+        self.extractor._save_entities(invoices)
+
+        self.mock_repository.save_invoices.assert_called_once_with(invoices)
+        assert self.extractor._last_batch_entities == invoices
+
+    def test_extract_related_entities_extracts_notes(self):
+        """Test _extract_related_entities extracts invoice notes with optimization."""
+        invoice = create_test_invoice(id="invoice_123", number="INV-001")
+        node = {
+            "id": "invoice_123",
+            "notes": {
+                "edges": [
+                    {
+                        "node": {
+                            "id": "note_1",
+                            "message": "First note",
+                            "createdAt": "2023-11-15T10:00:00Z",
+                            "updatedAt": "2023-11-15T10:00:00Z",
+                        }
+                    },
+                    {
+                        "node": {
+                            "id": "note_2",
+                            "message": "Second note",
+                            "createdAt": "2023-11-15T11:00:00Z",
+                            "updatedAt": "2023-11-15T11:00:00Z",
+                        }
+                    },
+                ],
+                "pageInfo": {
+                    "hasNextPage": False,
+                    "endCursor": None,
+                },
+            },
+        }
+
+        expected_note_1 = create_test_note(
+            id="note_1",
+            message="First note",
+            entity_type="invoice",
+            entity_id="invoice_123",
+            created_at="2023-11-15T10:00:00Z",
+            updated_at="2023-11-15T10:00:00Z",
+        )
+        expected_note_2 = create_test_note(
+            id="note_2",
+            message="Second note",
+            entity_type="invoice",
+            entity_id="invoice_123",
+            created_at="2023-11-15T11:00:00Z",
+            updated_at="2023-11-15T11:00:00Z",
+        )
+
+        self.mock_mapper.map_note.side_effect = [expected_note_1, expected_note_2]
+
+        related = self.extractor._extract_related_entities(node, invoice)
+
+        assert "notes" in related
+        assert len(related["notes"]) == 2
+        assert related["notes"][0] == expected_note_1
+        assert related["notes"][1] == expected_note_2
+        assert self.mock_mapper.map_note.call_count == 2
+
+    def test_extract_related_entities_no_notes(self):
+        """Test _extract_related_entities when invoice has no notes."""
+        invoice = create_test_invoice(id="invoice_123")
+        node = {
+            "id": "invoice_123",
+            "notes": {"edges": []},
+        }
+
+        related = self.extractor._extract_related_entities(node, invoice)
+
+        assert related == {}
+        self.mock_mapper.map_note.assert_not_called()
+
+    def test_extract_related_entities_handles_mapping_errors(self):
+        """Test _extract_related_entities handles note mapping errors gracefully."""
+        invoice = create_test_invoice(id="invoice_123")
+        node = {
+            "id": "invoice_123",
+            "notes": {
+                "edges": [
+                    {
+                        "node": {
+                            "id": "note_1",
+                            "message": "Valid note",
+                            "createdAt": "2023-11-15T10:00:00Z",
+                            "updatedAt": "2023-11-15T10:00:00Z",
+                        }
+                    },
+                    {
+                        "node": {
+                            "id": "note_2",
+                            "message": "Invalid note",
+                            "createdAt": "invalid",
+                        }
+                    },
+                ]
+            },
+        }
+
+        expected_note_1 = create_test_note(id="note_1", message="Valid note")
+        self.mock_mapper.map_note.side_effect = [
+            expected_note_1,
+            MappingError("Invalid date format"),
+        ]
+
+        related = self.extractor._extract_related_entities(node, invoice)
+
+        # Should only include the valid note
+        assert "notes" in related
+        assert len(related["notes"]) == 1
+        assert related["notes"][0] == expected_note_1
+        assert self.mock_mapper.map_note.call_count == 2
+
+    def test_save_related_entities_saves_notes(self):
+        """Test _save_related_entities calls repository.save_notes."""
+        notes = [
+            create_test_note(id="note_1", message="First note"),
+            create_test_note(id="note_2", message="Second note"),
+        ]
+        related_entities = {"notes": notes}
+
+        self.extractor._save_related_entities(related_entities)
+
+        self.mock_repository.save_notes.assert_called_once_with(notes)
+
+    def test_save_related_entities_no_notes(self):
+        """Test _save_related_entities when no notes to save."""
+        related_entities = {}
+
+        self.extractor._save_related_entities(related_entities)
+
+        self.mock_repository.save_notes.assert_not_called()
+
+    def test_get_entities_from_last_batch(self):
+        """Test _get_entities_from_last_batch returns last batch."""
+        invoices = [
+            create_test_invoice(id="invoice_1"),
+            create_test_invoice(id="invoice_2"),
+        ]
+        self.extractor._last_batch_entities = invoices
+
+        result = self.extractor._get_entities_from_last_batch()
+
+        assert result == invoices
+
+    def test_get_entity_count_with_total_count(self):
+        """Test get_entity_count when API provides totalCount."""
+        response = {
+            "data": {
+                "invoices": {
+                    "totalCount": 150,
+                    "edges": [{"node": {"id": "invoice_1"}}],
+                    "pageInfo": {"hasNextPage": True, "endCursor": "cursor"},
+                }
+            }
+        }
+        self.mock_client.fetch_invoices.return_value = response
+
+        count = self.extractor.get_entity_count()
+
+        assert count == 150
+        self.mock_client.fetch_invoices.assert_called_once_with(cursor=None)
+
+    def test_get_entity_count_without_total_count_single_page(self):
+        """Test get_entity_count when no totalCount and single page."""
+        response = {
+            "data": {
+                "invoices": {
+                    "edges": [
+                        {"node": {"id": "invoice_1"}},
+                        {"node": {"id": "invoice_2"}},
+                    ],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        }
+        self.mock_client.fetch_invoices.return_value = response
+
+        count = self.extractor.get_entity_count()
+
+        assert count == 2
+
+    def test_get_entity_count_without_total_count_multiple_pages(self):
+        """Test get_entity_count when no totalCount and multiple pages."""
+        response = {
+            "data": {
+                "invoices": {
+                    "edges": [{"node": {"id": "invoice_1"}}],
+                    "pageInfo": {"hasNextPage": True, "endCursor": "cursor"},
+                }
+            }
+        }
+        self.mock_client.fetch_invoices.return_value = response
+
+        count = self.extractor.get_entity_count()
+
+        assert count == -1  # Unknown count
+
+    def test_get_entity_count_empty_response(self):
+        """Test get_entity_count with empty response."""
+        response = {
+            "data": {
+                "invoices": {
+                    "edges": [],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        }
+        self.mock_client.fetch_invoices.return_value = response
+
+        count = self.extractor.get_entity_count()
+
+        assert count == 0

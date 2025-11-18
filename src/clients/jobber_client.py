@@ -98,8 +98,9 @@ class JobberClient:
     """
 
     def _get_invoices_query(self) -> str:
-        """Get GraphQL query for fetching invoices with configurable pagination."""
+        """Get GraphQL query for fetching invoices with configurable pagination and optimized nested notes."""
         page_size = self._get_pagination_size("invoices")
+        nested_notes_limit = self._get_pagination_size("nested_notes")
         return f"""
     query GetInvoices($cursor: String) {{
       invoices(first: {page_size}, after: $cursor) {{
@@ -115,13 +116,20 @@ class JobberClient:
             }}
             invoiceStatus
             issuedDate
-            notes {{
+            notes(first: {nested_notes_limit}) {{
               edges {{
                 node {{
                   ... on InvoiceNote {{
                     id
+                    message
+                    createdAt
+                    updatedAt
                   }}
                 }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
               }}
             }}
           }}
