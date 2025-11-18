@@ -418,7 +418,7 @@ class TestUsersExtractor:
 
     def test_map_entity_calls_mapper(self):
         """Test _map_entity calls entity_mapper.map_user."""
-        node = {"id": "user_123", "name": "John Doe"}
+        node = {"id": "user_123", "name": {"first": "John", "last": "Doe"}}
         expected_user = create_test_user(id="user_123", first_name="John", last_name="Doe", email="john@example.com")
         self.mock_mapper.map_user.return_value = expected_user
 
