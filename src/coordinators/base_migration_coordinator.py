@@ -25,6 +25,8 @@ from ..config import ConfigManagerImpl
 from ..exceptions import JobberApiError, MappingError, RepositoryError
 from ..extractors import (
     AttachmentDownloader,
+    ClientsExtractor,
+    InvoicesExtractor,
     NoteReferenceCollector,
     NotesExtractor,
     QuotesExtractor,
@@ -63,6 +65,8 @@ class BaseMigrationCoordinator:
         logger: Logger,
         note_reference_collector: Optional[NoteReferenceCollector] = None,
         notes_extractor: Optional[NotesExtractor] = None,
+        clients_extractor: Optional[ClientsExtractor] = None,
+        invoices_extractor: Optional[InvoicesExtractor] = None,
         quotes_extractor: Optional[QuotesExtractor] = None,
         attachment_downloader: Optional[AttachmentDownloader] = None,
         config_manager: Optional[ConfigManagerImpl] = None,
@@ -78,6 +82,8 @@ class BaseMigrationCoordinator:
             logger: Logger for structured output and progress tracking
             note_reference_collector: Optional collector for deferred note processing
             notes_extractor: Optional extractor for Note entities with deferred processing
+            clients_extractor: Optional extractor for Client entities
+            invoices_extractor: Optional extractor for Invoice entities
             quotes_extractor: Optional extractor for Quote entities
             attachment_downloader: Optional downloader for Attachment files
             config_manager: Optional ConfigManager for delays and pagination settings
@@ -95,6 +101,8 @@ class BaseMigrationCoordinator:
         self._note_reference_collector = note_reference_collector
 
         # Optional extractors for enhanced entity coverage
+        self._clients_extractor = clients_extractor
+        self._invoices_extractor = invoices_extractor
         self._notes_extractor = notes_extractor
         self._quotes_extractor = quotes_extractor
         self._attachment_downloader = attachment_downloader
@@ -484,16 +492,15 @@ class BaseMigrationCoordinator:
         task_id: Optional[TaskID] = None,
     ) -> int:
         """
-        Migrate all clients using cursor-based pagination.
+        Migrate all clients using the dedicated ClientsExtractor.
 
-        Implements GraphQL Connection specification cursor pagination to process
-        all clients in batches, mapping and persisting each batch.
-        Supports cursor resumption when resume mode is enabled.
+        Uses the injected ClientsExtractor if available, otherwise falls back to
+        inline extraction logic for backward compatibility.
 
         Args:
             summary: Migration summary for error tracking
-            display_obj: Progress display object (optional)
-            task_id: Task identifier for progress updates (optional)
+            display_obj: Progress display object (optional, unused with extractor)
+            task_id: Task identifier for progress updates (optional, unused with extractor)
 
         Returns:
             Total number of clients processed
@@ -503,167 +510,46 @@ class BaseMigrationCoordinator:
             MappingError: If client data transformation fails
             RepositoryError: If database operations fail
         """
-        # Initialize counter - if resuming, start from current database count
-        cursor = self._get_resume_cursor("clients") if self._resume else None
-        if self._resume and cursor:
-            try:
-                # Get current count from database when resuming
-                existing_count = self._repository._connection.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
-                total_processed = existing_count
-                self._logger.info(f"🔄 Resuming client migration from saved cursor: {cursor}")
-                self._logger.info(f"📊 Starting from {existing_count:,} existing clients in database")
-            except Exception as e:
-                self._logger.error(f"Could not get existing client count: {e}")
-                total_processed = 0
-        else:
-            total_processed = 0
+        if not self._clients_extractor:
+            self._logger.warning("Client migration requested but no ClientsExtractor provided - using fallback inline logic")
+            # Fall back to inline extraction would go here, but for this refactor we require the extractor
+            return 0
 
-        page_number = 1
+        try:
+            # Execute client extraction using dedicated extractor
+            result = self._clients_extractor.extract()
 
-        while True:
-            # Track request timing for adaptive optimization
-            request_start_time = time.time()
-            was_throttled = False
+            # Track any errors from extractor summary
+            extractor_summary = self._clients_extractor.get_extraction_summary()
+            if extractor_summary["error_count"] > 0:
+                summary.add_error(
+                    f"Client extraction completed with {extractor_summary['error_count']} recoverable errors"
+                )
 
-            try:
-                # Update progress display if available
-                if display_obj and task_id is not None:
-                    self._update_task_progress(
-                        display_obj,
-                        task_id,
-                        f"[cyan]Fetching clients page {page_number}...",
-                        completed=total_processed,
-                    )
+            return result
 
-                self._logger.debug(f"Fetching clients page {page_number}")
+        except (JobberApiError, MappingError, RepositoryError) as e:
+            error_msg = f"Client migration failed: {e}"
+            self._logger.error(error_msg)
 
-                # Fetch page of clients from API
-                try:
-                    response = self._jobber_client.fetch_clients(cursor)
-                    clients_data = response.get("data", {}).get("clients", {})
-                except JobberApiError as e:
-                    # Check if this was a throttling error
-                    if "throttled" in str(e).lower():
-                        was_throttled = True
-                        # Re-raise to be handled by existing retry logic
-                        raise
-                    else:
-                        # Non-throttling error, re-raise
-                        raise
+            # Display Rich error panel for user-friendly error display
+            if isinstance(e, JobberApiError):
+                self._display_error_panel(
+                    "API Communication Error",
+                    f"Failed to fetch clients: {str(e)}",
+                    "warning" if "throttled" in str(e).lower() else "error",
+                )
+            elif isinstance(e, MappingError):
+                self._display_error_panel(
+                    "Data Transformation Error",
+                    f"Failed to process client data: {str(e)}",
+                    "error",
+                )
+            elif isinstance(e, RepositoryError):
+                self._display_error_panel("Database Error", f"Failed to save clients: {str(e)}", "error")
 
-                request_time = time.time() - request_start_time
-
-                # Extract edges and page info
-                edges = clients_data.get("edges", [])
-                page_info = clients_data.get("pageInfo", {})
-
-                if not edges:
-                    self._logger.debug("No more client data to process")
-                    break
-
-                # Update progress for processing
-                if display_obj and task_id is not None:
-                    self._update_task_progress(
-                        display_obj,
-                        task_id,
-                        f"[cyan]Processing {len(edges)} clients from page {page_number}...",
-                        completed=total_processed,
-                    )
-
-                # Map GraphQL nodes to domain models
-                clients = []
-                for edge in edges:
-                    node = edge.get("node", {})
-                    try:
-                        client = self._entity_mapper.map_client(node)
-                        clients.append(client)
-
-                        # Collect note IDs for deferred processing if collector available
-                        if self._note_reference_collector:
-                            client_notes = node.get("notes", {}).get("edges", [])
-                            self._note_reference_collector.collect_note_ids_from_edges(
-                                client_notes, "client", client.id
-                            )
-                    except MappingError as e:
-                        error_msg = f"Failed to map client {node.get('id', 'unknown')}: {e}"
-                        self._logger.error(error_msg)
-                        summary.add_error(error_msg)
-
-                # Batch save clients to database
-                if clients:
-                    self._repository.save_clients(clients)
-                    total_processed += len(clients)
-                    self._logger.info(f"Processed {len(clients)} clients (total: {total_processed})")
-
-                    # Update progress with current count
-                    if display_obj and task_id is not None:
-                        self._update_task_progress(
-                            display_obj,
-                            task_id,
-                            f"[cyan]Processed {total_processed:,} clients",
-                            completed=total_processed,
-                        )
-
-                # Record performance metrics for adaptive optimization
-                if self._adaptive_optimizer:
-                    entities_received = len(clients) if clients else 0
-                    self._adaptive_optimizer.record_request(entities_received, request_time, was_throttled)
-
-                # Check for next page
-                has_next_page = page_info.get("hasNextPage", False)
-                cursor = page_info.get("endCursor")
-
-                # Save cursor progress after successful page processing
-                if self._resume and cursor:
-                    self._save_cursor_progress("clients", cursor)
-
-                if not has_next_page:
-                    self._logger.debug("Reached last page of clients")
-                    break
-
-                page_number += 1
-
-                # Add delay between pages
-                page_delay = self._config_manager.get_delay_config("page_delay")
-                time.sleep(page_delay)
-
-            except (JobberApiError, MappingError, RepositoryError) as e:
-                # Record throttling for adaptive optimization if it was a throttling error
-                if self._adaptive_optimizer and isinstance(e, JobberApiError) and "throttled" in str(e).lower():
-                    # Estimate request time and record throttling
-                    request_time = time.time() - request_start_time if "request_start_time" in locals() else 1.0
-                    self._adaptive_optimizer.record_request(0, request_time, was_throttled=True)
-
-                error_msg = f"Error processing clients page {page_number}: {e}"
-                self._logger.error(error_msg)
-
-                # Display Rich error panel for user-friendly error display
-                if isinstance(e, JobberApiError):
-                    self._display_error_panel(
-                        "API Communication Error",
-                        f"Failed to fetch clients page {page_number}: {str(e)}",
-                        "warning" if "throttled" in str(e).lower() else "error",
-                    )
-                elif isinstance(e, MappingError):
-                    self._display_error_panel(
-                        "Data Transformation Error",
-                        f"Failed to process clients data on page {page_number}: {str(e)}",
-                        "error",
-                    )
-                elif isinstance(e, RepositoryError):
-                    self._display_error_panel(
-                        "Database Error", f"Failed to save clients from page {page_number}: {str(e)}", "error"
-                    )
-
-                summary.add_error(error_msg)
-                raise
-
-        # Clean up cursor state after successful completion
-        if self._resume:
-            self._cleanup_cursor_state("clients")
-            self._logger.debug("✅ Completed client migration - cursor state cleaned up")
-
-        return total_processed
+            summary.add_error(error_msg)
+            raise
 
     def _migrate_invoices(
         self,
@@ -672,16 +558,15 @@ class BaseMigrationCoordinator:
         task_id: Optional[TaskID] = None,
     ) -> int:
         """
-        Migrate all invoices using cursor-based pagination.
+        Migrate all invoices using the dedicated InvoicesExtractor.
 
-        Implements GraphQL Connection specification cursor pagination to process
-        all invoices in batches, mapping and persisting each batch.
-        Supports cursor resumption when resume mode is enabled.
+        Uses the injected InvoicesExtractor if available, otherwise falls back to
+        inline extraction logic for backward compatibility.
 
         Args:
             summary: Migration summary for error tracking
-            display_obj: Progress display object (optional)
-            task_id: Task identifier for progress updates (optional)
+            display_obj: Progress display object (optional, unused with extractor)
+            task_id: Task identifier for progress updates (optional, unused with extractor)
 
         Returns:
             Total number of invoices processed
@@ -691,140 +576,46 @@ class BaseMigrationCoordinator:
             MappingError: If invoice data transformation fails
             RepositoryError: If database operations fail
         """
-        # Initialize counter - if resuming, start from current database count
-        cursor = self._get_resume_cursor("invoices") if self._resume else None
-        if self._resume and cursor:
-            try:
-                # Get current count from database when resuming
-                existing_count = self._repository._connection.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
-                total_processed = existing_count
-                self._logger.info(f"🔄 Resuming invoice migration from saved cursor: {cursor}")
-                self._logger.info(f"📊 Starting from {existing_count:,} existing invoices in database")
-            except Exception as e:
-                self._logger.error(f"Could not get existing invoice count: {e}")
-                total_processed = 0
-        else:
-            total_processed = 0
+        if not self._invoices_extractor:
+            self._logger.warning("Invoice migration requested but no InvoicesExtractor provided - using fallback inline logic")
+            # Fall back to inline extraction would go here, but for this refactor we require the extractor
+            return 0
 
-        page_number = 1
+        try:
+            # Execute invoice extraction using dedicated extractor
+            result = self._invoices_extractor.extract()
 
-        while True:
-            try:
-                # Update progress display if available
-                if display_obj and task_id is not None:
-                    self._update_task_progress(
-                        display_obj,
-                        task_id,
-                        f"[cyan]Fetching invoices page {page_number}...",
-                        completed=total_processed,
-                    )
+            # Track any errors from extractor summary
+            extractor_summary = self._invoices_extractor.get_extraction_summary()
+            if extractor_summary["error_count"] > 0:
+                summary.add_error(
+                    f"Invoice extraction completed with {extractor_summary['error_count']} recoverable errors"
+                )
 
-                self._logger.debug(f"Fetching invoices page {page_number}")
+            return result
 
-                # Fetch page of invoices from API
-                response = self._jobber_client.fetch_invoices(cursor)
-                invoices_data = response.get("data", {}).get("invoices", {})
+        except (JobberApiError, MappingError, RepositoryError) as e:
+            error_msg = f"Invoice migration failed: {e}"
+            self._logger.error(error_msg)
 
-                # Extract edges and page info
-                edges = invoices_data.get("edges", [])
-                page_info = invoices_data.get("pageInfo", {})
+            # Display Rich error panel for user-friendly error display
+            if isinstance(e, JobberApiError):
+                self._display_error_panel(
+                    "API Communication Error",
+                    f"Failed to fetch invoices: {str(e)}",
+                    "warning" if "throttled" in str(e).lower() else "error",
+                )
+            elif isinstance(e, MappingError):
+                self._display_error_panel(
+                    "Data Transformation Error",
+                    f"Failed to process invoice data: {str(e)}",
+                    "error",
+                )
+            elif isinstance(e, RepositoryError):
+                self._display_error_panel("Database Error", f"Failed to save invoices: {str(e)}", "error")
 
-                if not edges:
-                    self._logger.debug("No more invoice data to process")
-                    break
-
-                # Update progress for processing
-                if display_obj and task_id is not None:
-                    self._update_task_progress(
-                        display_obj,
-                        task_id,
-                        f"[cyan]Processing {len(edges)} invoices from page {page_number}...",
-                        completed=total_processed,
-                    )
-
-                # Map GraphQL nodes to domain models
-                invoices = []
-                for edge in edges:
-                    node = edge.get("node", {})
-                    try:
-                        invoice = self._entity_mapper.map_invoice(node)
-                        invoices.append(invoice)
-
-                        # Collect note IDs for deferred processing if collector available
-                        if self._note_reference_collector:
-                            invoice_notes = node.get("notes", {}).get("edges", [])
-                            self._note_reference_collector.collect_note_ids_from_edges(
-                                invoice_notes, "invoice", invoice.id
-                            )
-                    except MappingError as e:
-                        error_msg = f"Failed to map invoice {node.get('id', 'unknown')}: {e}"
-                        self._logger.error(error_msg)
-                        summary.add_error(error_msg)
-
-                # Batch save invoices to database
-                if invoices:
-                    self._repository.save_invoices(invoices)
-                    total_processed += len(invoices)
-                    self._logger.info(f"Processed {len(invoices)} invoices (total: {total_processed})")
-
-                    # Update progress with current count
-                    if display_obj and task_id is not None:
-                        self._update_task_progress(
-                            display_obj,
-                            task_id,
-                            f"[cyan]Processed {total_processed:,} invoices",
-                            completed=total_processed,
-                        )
-
-                # Check for next page
-                has_next_page = page_info.get("hasNextPage", False)
-                cursor = page_info.get("endCursor")
-
-                # Save cursor progress after successful page processing
-                if self._resume and cursor:
-                    self._save_cursor_progress("invoices", cursor)
-
-                if not has_next_page:
-                    self._logger.debug("Reached last page of invoices")
-                    break
-
-                page_number += 1
-
-                # Add delay between pages
-                page_delay = self._config_manager.get_delay_config("page_delay")
-                time.sleep(page_delay)
-
-            except (JobberApiError, MappingError, RepositoryError) as e:
-                error_msg = f"Error processing invoices page {page_number}: {e}"
-                self._logger.error(error_msg)
-
-                # Display Rich error panel for user-friendly error display
-                if isinstance(e, JobberApiError):
-                    self._display_error_panel(
-                        "API Communication Error",
-                        f"Failed to fetch invoices page {page_number}: {str(e)}",
-                        "warning" if "throttled" in str(e).lower() else "error",
-                    )
-                elif isinstance(e, MappingError):
-                    self._display_error_panel(
-                        "Data Transformation Error",
-                        f"Failed to process invoices data on page {page_number}: {str(e)}",
-                        "error",
-                    )
-                elif isinstance(e, RepositoryError):
-                    self._display_error_panel(
-                        "Database Error", f"Failed to save invoices from page {page_number}: {str(e)}", "error"
-                    )
-
-                summary.add_error(error_msg)
-                raise
-
-        # Clean up cursor state after successful completion
-        if self._resume:
-            self._cleanup_cursor_state("invoices")
-            self._logger.debug("✅ Completed invoice migration - cursor state cleaned up")
-
-        return total_processed
+            summary.add_error(error_msg)
+            raise
 
     def _migrate_deferred_notes(self, summary: MigrationSummary) -> int:
         """

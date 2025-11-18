@@ -375,22 +375,26 @@ def migrate_all(
         # Create optional extractors for enhanced entity coverage
         from src.extractors import (
             AttachmentDownloader,
+            ClientsExtractor,
+            InvoicesExtractor,
             NoteReferenceCollector,
             NotesExtractor,
             QuotesExtractor,
         )
 
         # Create note components for deferred processing if enabled
+        note_reference_collector = None
+        notes_extractor = None
 
         if actual_deferred_notes:
             logger.info("🔄 Deferred notes loading enabled - preventing GraphQL throttling")
-            NoteReferenceCollector(
+            note_reference_collector = NoteReferenceCollector(
                 repository=repository,
                 logger=logger,
                 enable_persistence=actual_enable_notes_persistence,
                 batch_size=1000,
             )
-            NotesExtractor(
+            notes_extractor = NotesExtractor(
                 jobber_client,
                 entity_mapper,
                 repository,
@@ -404,7 +408,8 @@ def migrate_all(
         else:
             logger.info("⚡ Immediate notes processing enabled (legacy mode)")
 
-        QuotesExtractor(
+        # Create entity extractors for modular extraction
+        clients_extractor = ClientsExtractor(
             jobber_client,
             entity_mapper,
             repository,
@@ -412,7 +417,23 @@ def migrate_all(
             config_manager=config_manager,
             skip_existing_entities=actual_resume,
         )
-        AttachmentDownloader(
+        invoices_extractor = InvoicesExtractor(
+            jobber_client,
+            entity_mapper,
+            repository,
+            logger,
+            config_manager=config_manager,
+            skip_existing_entities=actual_resume,
+        )
+        quotes_extractor = QuotesExtractor(
+            jobber_client,
+            entity_mapper,
+            repository,
+            logger,
+            config_manager=config_manager,
+            skip_existing_entities=actual_resume,
+        )
+        attachment_downloader = AttachmentDownloader(
             jobber_client,
             entity_mapper,
             repository,
@@ -434,6 +455,15 @@ def migrate_all(
             entity_mapper=entity_mapper,
             repository=repository,
             logger=logger,
+            note_reference_collector=note_reference_collector,
+            notes_extractor=notes_extractor,
+            clients_extractor=clients_extractor,
+            invoices_extractor=invoices_extractor,
+            quotes_extractor=quotes_extractor,
+            attachment_downloader=attachment_downloader,
+            config_manager=config_manager,
+            resume=actual_resume,
+            enable_adaptive_optimization=actual_enable_adaptive_optimization,
         )
 
         # Execute migration workflow with Rich progress bars
