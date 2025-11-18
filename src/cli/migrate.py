@@ -529,6 +529,7 @@ def migrate_all(
             logger.info("   • GraphQL cost monitoring: DISABLED")
 
         logger.info("🔍 Rate Limiter Status:")
+        rate_limiter = jobber_client.http_client.get_rate_limiter()
         logger.info(f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
             f"   • Refill rate: {rate_limiter.get_refill_rate()}/min (~{rate_limiter.get_refill_rate()/60:.1f}/sec)"
