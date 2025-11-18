@@ -6,17 +6,11 @@ from pathlib import Path
 from typing import Optional
 
 from src.auth import AuthProvider, OAuth2Manager
-from src.clients import HttpClient, JobberClient
+from src.clients import HttpClient
 from src.config import ConfigManagerImpl
 from src.exceptions import ConfigurationError
 from src.loggers import RichLogger
 from src.mappers import EntityMapper
-from src.rate_limiting import (
-    ExponentialBackoffStrategy,
-    MetricsCollector,
-    RateLimitedHttpClient,
-    TokenBucketRateLimiter,
-)
 from src.repositories import Repository
 
 
@@ -77,37 +71,26 @@ def _execute_entity_extraction(
         # Initialize configuration manager for consistent settings
         config_manager = ConfigManagerImpl()
 
-        # Setup JobberClient with rate limiting
-        jobber_client = JobberClient(auth_provider, config_manager=config_manager)
+        # Create JobberClient with rate limiting via ServiceFactory
+        # This centralizes rate limiting setup and eliminates code duplication
+        from .factories import ServiceFactory
 
-        # Initialize rate limiting components with dynamic optimization settings
+        jobber_client = ServiceFactory.create_rate_limited_jobber_client(
+            auth_provider=auth_provider,
+            repository=repository,
+            config_manager=config_manager,
+            optimization_level=optimization_level,
+            enable_cost_monitoring=True,  # Always enable for entity extraction
+        )
+
+        # Log rate limiting configuration for visibility
         rate_config = config_manager.get_rate_limit_config(optimization_level)
-        capacity = rate_config["capacity"]
-        refill_rate = rate_config["refill_rate"]
-        initial_tokens = rate_config["initial_tokens"]
-        requests_per_second = refill_rate / 60
+        requests_per_second = rate_config["refill_rate"] / 60
         logger.info(
-            f"Setting up {optimization_level.upper()} rate limiting for entity extraction "
-            f"({capacity} tokens, {refill_rate}/minute, ~{requests_per_second:.0f} req/sec)"
+            f"Rate limiting configured: {optimization_level.upper()} optimization level "
+            f"({rate_config['capacity']} tokens, {rate_config['refill_rate']}/minute, "
+            f"~{requests_per_second:.0f} req/sec)"
         )
-        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
-        backoff_config = config_manager.get_backoff_config()
-        backoff_strategy = ExponentialBackoffStrategy(
-            initial_delay=backoff_config["initial_delay"],
-            max_delay=backoff_config["max_delay"],
-            multiplier=backoff_config["multiplier"],
-            jitter_factor=backoff_config["jitter_factor"],
-        )
-        metrics_collector = MetricsCollector(repository=repository)
-
-        rate_limited_client = RateLimitedHttpClient(
-            HttpClient(),
-            rate_limiter,
-            backoff_strategy,
-            max_retries=15,
-            metrics_collector=metrics_collector,
-        )
-        jobber_client.set_http_client(rate_limited_client)
 
         # Create entity mapper
         entity_mapper = EntityMapper()
