@@ -71,13 +71,7 @@ app.add_typer(migrate_app, name="migrate")
 
 def main() -> None:
     """Entry point for the CLI application."""
-    try:
-        app()
-    except Exception as e:
-        console.print(f"[red]ERROR: {type(e).__name__}: {e}[/red]")
-        import traceback
-        traceback.print_exc()
-        raise
+    app()
 
 
 if __name__ == "__main__":
