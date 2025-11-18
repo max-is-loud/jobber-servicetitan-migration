@@ -79,15 +79,15 @@ class MigrationReportGenerator:
 
         # Overall statistics
         total_entities = sum(
-            summary.get("total_extracted", 0)
+            summary.get("total_entities", 0)
             for summary in self.extractor_summaries.values()
         )
         total_pages = sum(
-            summary.get("pages_fetched", 0)
+            summary.get("total_pages", 0)
             for summary in self.extractor_summaries.values()
         )
         total_errors = sum(
-            summary.get("errors", 0) for summary in self.extractor_summaries.values()
+            summary.get("error_count", 0) for summary in self.extractor_summaries.values()
         )
 
         lines.append("OVERALL STATISTICS")
@@ -102,9 +102,9 @@ class MigrationReportGenerator:
         lines.append("-" * 80)
         for entity_type, summary in sorted(self.extractor_summaries.items()):
             lines.append(f"\n{entity_type.upper()}:")
-            lines.append(f"  Extracted:     {summary.get('total_extracted', 0):,}")
-            lines.append(f"  Pages:         {summary.get('pages_fetched', 0):,}")
-            lines.append(f"  Errors:        {summary.get('errors', 0):,}")
+            lines.append(f"  Extracted:     {summary.get('total_entities', 0):,}")
+            lines.append(f"  Pages:         {summary.get('total_pages', 0):,}")
+            lines.append(f"  Errors:        {summary.get('error_count', 0):,}")
 
             # Related entities (like notes)
             related = summary.get("related_entities", {})
@@ -120,7 +120,7 @@ class MigrationReportGenerator:
 
                 # Calculate rate
                 if summary["duration_seconds"] > 0:
-                    rate = summary.get("total_extracted", 0) / summary["duration_seconds"]
+                    rate = summary.get("total_entities", 0) / summary["duration_seconds"]
                     lines.append(f"  Rate:          {rate:.2f} entities/second")
 
         lines.append("")
@@ -158,10 +158,10 @@ class MigrationReportGenerator:
         # Calculate summary statistics
         for summary in self.extractor_summaries.values():
             report_data["summary"]["total_entities"] += summary.get(
-                "total_extracted", 0
+                "total_entities", 0
             )
-            report_data["summary"]["total_pages"] += summary.get("pages_fetched", 0)
-            report_data["summary"]["total_errors"] += summary.get("errors", 0)
+            report_data["summary"]["total_pages"] += summary.get("total_pages", 0)
+            report_data["summary"]["total_errors"] += summary.get("error_count", 0)
 
         return json.dumps(report_data, indent=2)
 
