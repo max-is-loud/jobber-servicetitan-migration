@@ -79,6 +79,7 @@ class PaginationConfig:
     timesheet_entries: int
     product_services: int
     tax_rates: int
+    nested_notes: int
     default: int
 
     def __post_init__(self) -> None:
@@ -92,6 +93,16 @@ class PaginationConfig:
                 raise ValueError(
                     f"Pagination size for {field} must be positive (minimum 1), got {value}"
                 )
+
+            # Special validation for nested_notes (used in nested GraphQL queries)
+            if field == "nested_notes":
+                if value > 100:
+                    raise ValueError(
+                        f"nested_notes pagination must not exceed 100, got {value}. "
+                        "Very high values significantly increase GraphQL query costs."
+                    )
+                continue
+
             if value > 1000:
                 raise ValueError(
                     f"Pagination size for {field} must not exceed 1000 (API limits), got {value}"

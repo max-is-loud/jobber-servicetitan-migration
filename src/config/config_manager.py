@@ -166,6 +166,7 @@ class ConfigManagerImpl:
                 timesheet_entries=pagination_data["timesheet_entries"],
                 product_services=pagination_data["product_services"],
                 tax_rates=pagination_data["tax_rates"],
+                nested_notes=pagination_data["nested_notes"],
                 default=pagination_data["default"],
             )
 

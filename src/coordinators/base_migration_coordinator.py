@@ -537,7 +537,7 @@ class BaseMigrationCoordinator:
                     f"Client extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
-            return result
+            return result["entities_processed"]
 
         except (JobberApiError, MappingError, RepositoryError) as e:
             error_msg = f"Client migration failed: {e}"
@@ -602,7 +602,7 @@ class BaseMigrationCoordinator:
                     f"Invoice extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
-            return result
+            return result["entities_processed"]
 
         except (JobberApiError, MappingError, RepositoryError) as e:
             error_msg = f"Invoice migration failed: {e}"
