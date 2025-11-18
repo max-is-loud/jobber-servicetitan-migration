@@ -170,6 +170,7 @@ tightbeam*.db
 # IDEs
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
