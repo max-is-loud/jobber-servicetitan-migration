@@ -156,58 +156,15 @@ class JobberClient:
     }}
     """
 
-    # NOTE: This query is deprecated - notes are now fetched with their parent entities
-    # (clients, jobs, quotes, invoices)
-    # NOTES_QUERY = """
-    # query GetNotes($cursor: String) {
-    #   nodes(first: 100, after: $cursor) {
-    #     edges {
-    #       node {
-    #         ... on ClientNote {
-    #           id
-    #           message
-    #           client {
-    #             id
-    #           }
-    #           createdAt
-    #           updatedAt
-    #         }
-    #         ... on JobNote {
-    #           id
-    #           message
-    #           job {
-    #             id
-    #           }
-    #           createdAt
-    #           updatedAt
-    #         }
-    #         ... on QuoteNote {
-    #           id
-    #           message
-    #           quote {
-    #             id
-    #           }
-    #           createdAt
-    #           updatedAt
-    #         }
-    #         ... on InvoiceNote {
-    #           id
-    #           message
-    #           invoice {
-    #             id
-    #           }
-    #           createdAt
-    #           updatedAt
-    #         }
-    #       }
-    #     }
-    #     pageInfo {
-    #       hasNextPage
-    #       endCursor
-    #     }
-    #   }
-    # }
-    # """
+    # NOTE: Bulk note fetching is not supported by Jobber's GraphQL API.
+    # The API does not provide a top-level 'notes' or 'nodes' query for fetching all notes.
+    # Notes are only accessible through parent entity connections (Client.notes, Job.notes, etc.)
+    # or via the node(id:) interface for individual note fetching.
+    #
+    # Current implementation uses deferred loading pattern:
+    # 1. Collect note IDs during parent entity extraction
+    # 2. Fetch individual notes using node(id:) interface (see NOTE_BY_ID_QUERY)
+    # This avoids nested query complexity that triggers API rate limiting.
 
     # GraphQL query for fetching attachments with cursor pagination
     # Attachments are file attachments linked to notes
@@ -1090,45 +1047,9 @@ class JobberClient:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(f"Unexpected error while fetching quotes: {e}") from e
 
-    # NOTE: This method is deprecated - notes are now fetched with their parent entities
-    # def fetch_notes(self, cursor: Optional[str] = None) -> dict[str, Any]:
-    #     """Fetch notes from Jobber API with cursor pagination.
-    #
-    #     Notes in Jobber are polymorphic and can be attached to clients, jobs,
-    #     quotes, or invoices. This method fetches all types of notes.
-    #
-    #     Args:
-    #         cursor: Optional pagination cursor for fetching next page
-    #
-    #     Returns:
-    #         dict[str, Any]: Raw GraphQL response containing notes data
-    #
-    #     Raises:
-    #         JobberApiError: If API request fails with HTTP error or
-    #                        invalid response structure
-    #         ConfigurationError: If authentication configuration is invalid
-    #                            or OAuth2 token refresh fails
-    #     """
-    #     try:
-    #         response_data = self._execute_graphql_request(self.NOTES_QUERY, cursor)
-    #
-    #         # Validate that notes data exists in response
-    #         if (
-    #             response_data.get("data") is not None
-    #             and "nodes" not in response_data["data"]
-    #         ):
-    #             raise JobberApiError(
-    #                 "Invalid response structure: missing 'nodes' field in data"
-    #             )
-    #
-    #         return response_data
-    #
-    #     except (ConfigurationError, JobberApiError):
-    #         # Re-raise our domain exceptions as-is
-    #         raise
-    #     except Exception as e:
-    #         # Wrap unexpected exceptions in JobberApiError
-    #         raise JobberApiError(f"Unexpected error fetching notes: {str(e)}") from e
+    # NOTE: Bulk note fetching is not supported by Jobber's GraphQL API.
+    # Notes are fetched individually using fetch_note_by_id() as part of the
+    # deferred loading pattern. See NOTE_BY_ID_QUERY for the implementation.
 
     def fetch_attachments(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """

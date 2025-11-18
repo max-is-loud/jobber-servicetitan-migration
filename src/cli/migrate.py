@@ -288,18 +288,12 @@ def migrate_all(
 
     # Import required components
     from src.auth import AuthProvider, OAuth2Manager
-    from src.clients import HttpClient, JobberClient
+    from src.clients import HttpClient
     from src.config import ConfigManagerImpl
     from src.coordinators import BaseMigrationCoordinator
     from src.mappers import EntityMapper
     from src.exceptions import ConfigurationError
     from src.loggers import RichLogger
-    from src.rate_limiting import (
-        ExponentialBackoffStrategy,
-        MetricsCollector,
-        RateLimitedHttpClient,
-        TokenBucketRateLimiter,
-    )
     from src.repositories import Repository
 
     # Get shared configuration from context (group-level flags take precedence)
@@ -357,56 +351,23 @@ def migrate_all(
         # Initialize configuration manager for consistent settings
         config_manager = ConfigManagerImpl()
 
-        # Initialize metrics collector for cost monitoring if enabled
-        metrics_collector = MetricsCollector(repository=repository) if actual_enable_cost_monitoring else None
-        jobber_client = JobberClient(
-            auth_provider,
-            metrics_collector=metrics_collector,
+        # Create JobberClient with rate limiting via ServiceFactory
+        # This centralizes rate limiting setup and eliminates code duplication
+        jobber_client = ServiceFactory.create_rate_limited_jobber_client(
+            auth_provider=auth_provider,
+            repository=repository,
             config_manager=config_manager,
+            optimization_level=actual_optimization_level,
+            enable_cost_monitoring=actual_enable_cost_monitoring,
         )
 
-        # Initialize rate limiting components with dynamic optimization settings
+        # Log rate limiting configuration for visibility
         rate_config = config_manager.get_rate_limit_config(actual_optimization_level)
-        capacity = rate_config["capacity"]
-        refill_rate = rate_config["refill_rate"]
-        initial_tokens = rate_config["initial_tokens"]
-        requests_per_second = refill_rate / 60
+        requests_per_second = rate_config["refill_rate"] / 60
         logger.info(
-            f"Setting up {actual_optimization_level.upper()} rate limiting "
-            f"({capacity} tokens, {refill_rate}/minute, ~{requests_per_second:.0f} req/sec)"
-        )
-        # Dynamic optimization for Jobber GraphQL API based on user selection
-        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
-        # Use backoff strategy from configuration for GraphQL throttling
-        backoff_config = config_manager.get_backoff_config()
-        backoff_strategy = ExponentialBackoffStrategy(
-            initial_delay=backoff_config["initial_delay"],
-            max_delay=backoff_config["max_delay"],
-            multiplier=backoff_config["multiplier"],
-            jitter_factor=backoff_config["jitter_factor"],
-        )
-
-        # Wrap HTTP client with rate limiting - maximum retries for Jobber GraphQL API
-        http_client = HttpClient()
-        rate_limited_client = RateLimitedHttpClient(
-            http_client,
-            rate_limiter,
-            backoff_strategy,
-            max_retries=15,  # Maximum retries for GraphQL throttling
-            metrics_collector=metrics_collector,
-            auth_provider=auth_provider,  # Enable reactive OAuth token refresh on 401 errors
-        )
-        jobber_client.set_http_client(rate_limited_client)
-
-        # Verify rate limiting is properly configured
-        logger.info(
-            f"Rate limiter configured: {rate_limiter.get_capacity()} tokens, "
-            f"{rate_limiter.get_refill_rate()}/min, "
-            f"{rate_limiter.get_available_tokens():.1f} available"
-        )
-        logger.info(
-            f"Jobber-optimized settings: ~3 requests per second maximum, "
-            f"starting with {rate_limiter.get_available_tokens():.0f} tokens"
+            f"Rate limiting configured: {actual_optimization_level.upper()} optimization level "
+            f"({rate_config['capacity']} tokens, {rate_config['refill_rate']}/minute, "
+            f"~{requests_per_second:.0f} req/sec)"
         )
 
         entity_mapper = EntityMapper()
