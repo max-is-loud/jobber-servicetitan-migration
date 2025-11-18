@@ -162,6 +162,8 @@ cython_debug/
 # Project specific
 *.sqlite
 *.db
+tightbeam.db
+tightbeam*.db
 .DS_Store
 
 # IDEs
@@ -172,8 +174,38 @@ cython_debug/
 *~
 
 # Logs
-*.log 
+*.log
+
+# UV (package manager)
+.uv/
+.python-version
+
+# Downloaded attachments (migration artifacts)
+attachments/
+downloads/
+
+# Migration reports and analysis
+reports/
+*.report.json
+
+# Workspace/development notes (not part of source)
+CLAUDE.md
+PROJECT_STATUS.md
+.document_archive/
+
+# Temporary data and cache
+temp/
+tmp/
+.cache/
+*.tmp
 
 # Task management and AI assistant data
-.random/ 
+.random/
 .random/.shrimp-data/tightbeam-v2/tasks.json
+
+# OAuth tokens and secrets (safety)
+.env.local
+.env.*.local
+oauth_tokens.db
+credentials.json
+secrets.json
