@@ -9,6 +9,7 @@ from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import Job, Note, Attachment
 from ..repositories import Repository
+from .attachment_downloader import AttachmentDownloader
 from .base_extractor import BaseExtractor
 
 
@@ -45,7 +46,15 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
             entity_name="job",
         )
         # Track entities from last batch for extract_all
-        self._last_batch_entities: List[Job] = []
+        self\._last_batch_entities: List\[Job\] = \[\]
+
+        # Initialize attachment downloader for file downloads
+        self._attachment_downloader = AttachmentDownloader(logger=logger)
+
+        # Track download metrics
+        self._files_downloaded = 0
+        self._bytes_downloaded = 0
+        self._download_failures = 0
 
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """Fetch a page of jobs from the Jobber API.
@@ -174,7 +183,10 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
         return related
 
     def _save_related_entities(self, related_entities: dict[str, Any]) -> None:
-        """Save notes and attachments related to jobs.
+        """Save notes and attachments related to jobss.
+
+        Downloads attachment files and updates metadata with local file paths
+        before saving to repository.
 
         Args:
             related_entities: Dictionary with notes and attachments lists
@@ -185,7 +197,39 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
 
         attachments = related_entities.get("attachments", [])
         if attachments:
-            self._repository.save_attachments(attachments)
+            # Download files and update attachment metadata
+            attachments_with_files = []
+            for attachment in attachments:
+                download_result = self._attachment_downloader.download_attachment(attachment)
+
+                if download_result["success"]:
+                    # Update attachment with downloaded file path
+                    updated_attachment = Attachment(
+                        id=attachment.id,
+                        note_id=attachment.note_id,
+                        file_name=attachment.file_name,
+                        content_type=attachment.content_type,
+                        original_url=attachment.original_url,
+                        local_file_path=download_result["local_file_path"],
+                        file_size=attachment.file_size,
+                        created_at=attachment.created_at,
+                    )
+                    attachments_with_files.append(updated_attachment)
+
+                    # Track download metrics
+                    self._files_downloaded += 1
+                    self._bytes_downloaded += download_result["bytes_downloaded"]
+                else:
+                    # Download failed, save metadata only with original local_file_path
+                    self._logger.warning(
+                        f"Failed to download attachment {attachment.id}: "
+                        f"{download_result['error_message']}"
+                    )
+                    attachments_with_files.append(attachment)
+                    self._download_failures += 1
+
+            # Save all attachments with updated file paths
+            self._repository.save_attachments(attachments_with_files)
 
     def _get_entities_from_last_batch(self) -> List[Job]:
         """Get jobs from the last extraction batch.
@@ -194,6 +238,18 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
             List of jobs from last batch
         """
         return self._last_batch_entities
+
+    def get_download_metrics(self) -> dict[str, int]:
+        """Get attachment download metrics.
+
+        Returns:
+            Dictionary with download statistics
+        """
+        return {
+            "files_downloaded": self._files_downloaded,
+            "bytes_downloaded": self._bytes_downloaded,
+            "download_failures": self._download_failures,
+        }
 
     def get_entity_count(self) -> int:
         """Get total count of jobs available for extraction.

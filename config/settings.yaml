@@ -84,7 +84,7 @@ pagination:
   # Client entities (includes nested properties, contacts)
   # Default: 42 (tested sweet spot for client complexity)
   # Reduce to 20-30 if clients have many properties/contacts
-  clients: 23
+  clients: 10
 
   # Invoice entities (includes line items, payments)
   # Default: 10 (invoices are heavy with line items)
@@ -149,7 +149,7 @@ pagination:
 
   # Default page size for any entity type not specified above
   # Used as fallback when new entity types are added
-  default: 30
+  default: 10
 
 # Timing & Delay Configuration
 # -----------------------------
@@ -163,7 +163,7 @@ delays:
   #   - Increase to 2-3s if experiencing throttling
   #   - Reduce to 0.5s for aggressive migrations (not recommended)
   #   - Set to 0 to disable (rely entirely on rate limiter)
-  page_delay: 1
+  page_delay: 0.8
 
   # HTTP request timeout (seconds)
   # Maximum wait time for Jobber API response
