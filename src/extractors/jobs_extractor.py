@@ -52,6 +52,7 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
         self._attachment_downloader = AttachmentDownloader(logger=logger)
 
         # Track download metrics
+        self._attachments_processed = 0
         self._files_downloaded = 0
         self._bytes_downloaded = 0
         self._download_failures = 0
@@ -197,6 +198,9 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
 
         attachments = related_entities.get("attachments", [])
         if attachments:
+            # Track total attachments processed
+            self._attachments_processed += len(attachments)
+
             # Download files and update attachment metadata
             attachments_with_files = []
             for attachment in attachments:
@@ -246,6 +250,7 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
             Dictionary with download statistics
         """
         return {
+            "attachments_processed": self._attachments_processed,
             "files_downloaded": self._files_downloaded,
             "bytes_downloaded": self._bytes_downloaded,
             "download_failures": self._download_failures,

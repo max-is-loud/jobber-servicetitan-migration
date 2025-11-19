@@ -15,8 +15,8 @@ class MigrationSummary:
     Includes skip tracking for resumable migrations.
     Not frozen to allow error collection during migration.
 
-    Note: Attachment metrics (attachments_processed, files_downloaded, etc.) are
-    deprecated as attachments are now extracted inline with parent entities.
+    Attachment metrics are aggregated from entity extractors that download files
+    inline during extraction (Client, Invoice, Quote, Job, Request extractors).
     """
 
     clients_processed: int  # Number of client records successfully processed
@@ -29,11 +29,13 @@ class MigrationSummary:
     duration_seconds: float  # Total migration time in seconds
     errors: List[str]  # List of non-fatal errors encountered during processing
 
-    # Deprecated attachment metrics (attachments now extracted inline with parent entities)
-    attachments_processed: int = 0  # Deprecated: Number of attachment records successfully processed
-    files_downloaded: int = 0  # Deprecated: Number of attachment files successfully downloaded
-    total_bytes_downloaded: int = 0  # Deprecated: Total bytes of attachment files downloaded
-    download_failures: int = 0  # Deprecated: Number of attachment download failures
+    # Attachment metrics (aggregated from entity extractors)
+    # Attachments are extracted inline with parent entities (Client, Invoice, Quote, Job, Request)
+    # and these metrics are collected from each extractor's download operations
+    attachments_processed: int = 0  # Number of attachment records successfully processed
+    files_downloaded: int = 0  # Number of attachment files successfully downloaded
+    total_bytes_downloaded: int = 0  # Total bytes of attachment files downloaded
+    download_failures: int = 0  # Number of attachment download failures
 
     # Skip tracking fields for resumable migrations
     clients_skipped: int = 0  # Number of client records skipped (already exist)

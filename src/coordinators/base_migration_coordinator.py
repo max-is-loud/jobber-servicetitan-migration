@@ -521,12 +521,12 @@ class BaseMigrationCoordinator:
                     f"Client extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
-            # Collect download metrics if available
-            if hasattr(self._clients_extractor, "get_download_metrics"):
-                metrics = self._clients_extractor.get_download_metrics()
-                summary.files_downloaded += metrics["files_downloaded"]
-                summary.total_bytes_downloaded += metrics["bytes_downloaded"]
-                summary.download_failures += metrics["download_failures"]
+            # Collect download metrics from extractor
+            metrics = self._clients_extractor.get_download_metrics()
+            summary.attachments_processed += metrics["attachments_processed"]
+            summary.files_downloaded += metrics["files_downloaded"]
+            summary.total_bytes_downloaded += metrics["bytes_downloaded"]
+            summary.download_failures += metrics["download_failures"]
 
             return result["entities_processed"]
 
@@ -593,12 +593,12 @@ class BaseMigrationCoordinator:
                     f"Invoice extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
-            # Collect download metrics if available
-            if hasattr(self._invoices_extractor, "get_download_metrics"):
-                metrics = self._invoices_extractor.get_download_metrics()
-                summary.files_downloaded += metrics["files_downloaded"]
-                summary.total_bytes_downloaded += metrics["bytes_downloaded"]
-                summary.download_failures += metrics["download_failures"]
+            # Collect download metrics from extractor
+            metrics = self._invoices_extractor.get_download_metrics()
+            summary.attachments_processed += metrics["attachments_processed"]
+            summary.files_downloaded += metrics["files_downloaded"]
+            summary.total_bytes_downloaded += metrics["bytes_downloaded"]
+            summary.download_failures += metrics["download_failures"]
 
             return result["entities_processed"]
 
@@ -717,12 +717,12 @@ class BaseMigrationCoordinator:
                     f"Quote extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
-            # Collect download metrics if available
-            if hasattr(self._quotes_extractor, "get_download_metrics"):
-                metrics = self._quotes_extractor.get_download_metrics()
-                summary.files_downloaded += metrics["files_downloaded"]
-                summary.total_bytes_downloaded += metrics["bytes_downloaded"]
-                summary.download_failures += metrics["download_failures"]
+            # Collect download metrics from extractor
+            metrics = self._quotes_extractor.get_download_metrics()
+            summary.attachments_processed += metrics["attachments_processed"]
+            summary.files_downloaded += metrics["files_downloaded"]
+            summary.total_bytes_downloaded += metrics["bytes_downloaded"]
+            summary.download_failures += metrics["download_failures"]
 
             self._logger.info(f"Quote migration completed: {result['entities_processed']} quotes processed")
             return result["entities_processed"]

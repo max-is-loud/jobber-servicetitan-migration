@@ -627,6 +627,27 @@ class BaseExtractor(ABC, Generic[T]):
         """
         return self._last_extraction_summary.copy()
 
+    def get_download_metrics(self) -> dict[str, int]:
+        """Get attachment download metrics.
+
+        Override in subclasses that download attachments.
+        Default implementation returns zero metrics for extractors
+        that don't handle attachments.
+
+        Returns:
+            Dictionary with download statistics:
+            - attachments_processed: Total number of attachment records processed
+            - files_downloaded: Number of files successfully downloaded
+            - bytes_downloaded: Total bytes downloaded
+            - download_failures: Number of failed downloads
+        """
+        return {
+            "attachments_processed": 0,
+            "files_downloaded": 0,
+            "bytes_downloaded": 0,
+            "download_failures": 0,
+        }
+
     def _update_extraction_summary(
         self,
         entities_processed: int,
