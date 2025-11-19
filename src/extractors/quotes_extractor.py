@@ -5,12 +5,10 @@ from typing import Any, List, Optional
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
-from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import Quote, Note, Attachment
+from ..models import Quote
 from ..repositories import Repository
-from .attachment_downloader import AttachmentDownloader
 from .base_extractor import BaseExtractor
 
 
@@ -54,16 +52,6 @@ class QuotesExtractor(BaseExtractor[Quote]):
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Quote] = []
-
-        # Initialize attachment downloader for file downloads
-        self._attachment_downloader = AttachmentDownloader(logger=logger)
-
-        # Track download metrics
-        self._attachments_processed = 0
-        self._files_downloaded = 0
-        self._bytes_downloaded = 0
-        self._download_failures = 0
-        self._attachment_mapping_failures = 0
 
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """Fetch a page of quotes from the Jobber API.
@@ -118,9 +106,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
     ) -> dict[str, Any]:
         """Extract notes and attachments related to the quote.
 
-        Extracts nested note and attachment data from the quote query response.
-        Both are fetched inline with the quote query using optimized pagination
-        (configurable via pagination.nested_notes) to reduce API costs.
+        Delegates to base implementation for common extraction logic.
 
         Args:
             node: Quote data from API
@@ -129,120 +115,17 @@ class QuotesExtractor(BaseExtractor[Quote]):
         Returns:
             Dictionary with notes and attachments lists
         """
-        related = {}
-
-        # Extract notes if present
-        notes_data = node.get("notes", {})
-        quote_notes = notes_data.get("edges", [])
-        notes_page_info = notes_data.get("pageInfo", {})
-
-        if quote_notes:
-            notes = []
-            for note_edge in quote_notes:
-                note_node = note_edge.get("node", {})
-                if note_node:
-                    try:
-                        # Add quote relationship to note data without mutation
-                        note_data = {**note_node, "quote": {"id": primary_entity.id}}
-                        note = self._entity_mapper.map_note(note_data)
-                        notes.append(note)
-                    except MappingError as e:
-                        self._logger.debug(
-                            f"Failed to map note for quote {primary_entity.id}: {e}"
-                        )
-            if notes:
-                related["notes"] = notes
-
-                # Warn if there are more notes that weren't fetched
-                if notes_page_info.get("hasNextPage", False):
-                    self._logger.warning(
-                        f"Quote {primary_entity.id} has additional notes beyond the "
-                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
-                        f"settings.yaml to fetch more notes inline."
-                    )
-
-        # Extract attachments if present
-        attachments_data = node.get("noteAttachments", {})
-        quote_attachments = attachments_data.get("edges", [])
-        attachments_page_info = attachments_data.get("pageInfo", {})
-
-        if quote_attachments:
-            attachments = []
-            for attachment_edge in quote_attachments:
-                attachment_node = attachment_edge.get("node", {})
-                if attachment_node:
-                    try:
-                        attachment = self._entity_mapper.map_attachment(attachment_node)
-                        attachments.append(attachment)
-                    except MappingError as e:
-                        self._attachment_mapping_failures += 1
-                        self._logger.warning(
-                            f"Failed to map attachment for quote {primary_entity.id}: {e}"
-                        )
-            if attachments:
-                related["attachments"] = attachments
-
-                # Warn if there are more attachments that weren't fetched
-                if attachments_page_info.get("hasNextPage", False):
-                    self._logger.warning(
-                        f"Quote {primary_entity.id} has additional attachments beyond the "
-                        f"{len(attachments)} fetched. Increase pagination.nested_notes in "
-                        f"settings.yaml to fetch more attachments inline."
-                    )
-
-        return related
+        return self._extract_notes_and_attachments(node, primary_entity)
 
     def _save_related_entities(self, related_entities: dict[str, Any]) -> None:
-        """Save notes and attachments related to quotess.
+        """Save notes and attachments related to quotes.
 
-        Downloads attachment files and updates metadata with local file paths
-        before saving to repository.
+        Delegates to base implementation for common save logic.
 
         Args:
             related_entities: Dictionary with notes and attachments lists
         """
-        notes = related_entities.get("notes", [])
-        if notes:
-            self._repository.save_notes(notes)
-
-        attachments = related_entities.get("attachments", [])
-        if attachments:
-            # Track total attachments processed
-            self._attachments_processed += len(attachments)
-
-            # Download files and update attachment metadata
-            attachments_with_files = []
-            for attachment in attachments:
-                download_result = self._attachment_downloader.download_attachment(attachment)
-
-                if download_result["success"]:
-                    # Update attachment with downloaded file path
-                    updated_attachment = Attachment(
-                        id=attachment.id,
-                        note_id=attachment.note_id,
-                        file_name=attachment.file_name,
-                        content_type=attachment.content_type,
-                        original_url=attachment.original_url,
-                        local_file_path=download_result["local_file_path"],
-                        file_size=attachment.file_size,
-                        created_at=attachment.created_at,
-                    )
-                    attachments_with_files.append(updated_attachment)
-
-                    # Track download metrics
-                    self._files_downloaded += 1
-                    self._bytes_downloaded += download_result["bytes_downloaded"]
-                else:
-                    # Download failed, save metadata only with original local_file_path
-                    self._logger.warning(
-                        f"Failed to download attachment {attachment.id}: "
-                        f"{download_result['error_message']}"
-                    )
-                    attachments_with_files.append(attachment)
-                    self._download_failures += 1
-
-            # Save all attachments with updated file paths
-            self._repository.save_attachments(attachments_with_files)
+        self._save_notes_and_attachments(related_entities)
 
     def _get_entities_from_last_batch(self) -> List[Quote]:
         """Get quotes from the last extraction batch.
@@ -252,19 +135,6 @@ class QuotesExtractor(BaseExtractor[Quote]):
         """
         return self._last_batch_entities
 
-    def get_download_metrics(self) -> dict[str, int]:
-        """Get attachment download metrics.
-
-        Returns:
-            Dictionary with download statistics
-        """
-        return {
-            "attachments_processed": self._attachments_processed,
-            "files_downloaded": self._files_downloaded,
-            "bytes_downloaded": self._bytes_downloaded,
-            "download_failures": self._download_failures,
-            "attachment_mapping_failures": self._attachment_mapping_failures,
-        }
 
     def get_entity_count(self) -> int:
         """Get total count of quotes available for extraction.

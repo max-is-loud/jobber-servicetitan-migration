@@ -32,6 +32,7 @@ from ..models import (
     Visit,
 )
 from ..repositories import Repository
+from .attachment_downloader import AttachmentDownloader
 
 # Type variable for entity types
 T = TypeVar(
@@ -142,6 +143,15 @@ class BaseExtractor(ABC, Generic[T]):
             "extraction_status": "pending",
             "error_count": 0,
         }
+
+        # Attachment downloader and metrics tracking
+        # Used by extractors that handle nested attachments (clients, invoices, quotes, jobs, requests)
+        self._attachment_downloader = AttachmentDownloader(logger=logger)
+        self._attachments_processed = 0
+        self._files_downloaded = 0
+        self._bytes_downloaded = 0
+        self._download_failures = 0
+        self._attachment_mapping_failures = 0
 
     def _should_skip_entity(self, entity_id: str) -> bool:
         """Check if an entity should be skipped based on existence in database.
@@ -689,3 +699,140 @@ class BaseExtractor(ABC, Generic[T]):
             "extraction_status": status,
             "error_count": error_count,
         }
+
+    def _extract_notes_and_attachments(
+        self, node: dict[str, Any], primary_entity: T
+    ) -> dict[str, Any]:
+        """Extract nested notes and attachments from entity query response.
+
+        Common implementation for extracting notes and attachments that are
+        fetched inline with parent entities (clients, invoices, quotes, jobs, requests).
+        Uses optimized pagination (configurable via pagination.nested_notes) to reduce API costs.
+
+        Args:
+            node: Entity data from API response
+            primary_entity: The parent entity that was mapped
+
+        Returns:
+            Dictionary with 'notes' and 'attachments' lists (if present)
+        """
+        related = {}
+
+        # Extract notes if present
+        notes_data = node.get("notes", {})
+        entity_notes = notes_data.get("edges", [])
+        notes_page_info = notes_data.get("pageInfo", {})
+
+        if entity_notes:
+            notes = []
+            for note_edge in entity_notes:
+                note_node = note_edge.get("node", {})
+                if note_node:
+                    try:
+                        # Add parent entity relationship to note data
+                        # Uses entity_name to create dynamic relationship field (e.g., "client", "invoice")
+                        note_data = {
+                            **note_node,
+                            self._entity_name: {"id": primary_entity.id},
+                        }
+                        note = self._entity_mapper.map_note(note_data)
+                        notes.append(note)
+                    except MappingError as e:
+                        self._logger.debug(
+                            f"Failed to map note for {self._entity_name} {primary_entity.id}: {e}"
+                        )
+            if notes:
+                related["notes"] = notes
+
+                # Warn if there are more notes that weren't fetched
+                if notes_page_info.get("hasNextPage", False):
+                    self._logger.warning(
+                        f"{self._entity_name.capitalize()} {primary_entity.id} has additional notes beyond the "
+                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
+                        f"settings.yaml to fetch more notes inline."
+                    )
+
+        # Extract attachments if present
+        attachments_data = node.get("noteAttachments", {})
+        entity_attachments = attachments_data.get("edges", [])
+        attachments_page_info = attachments_data.get("pageInfo", {})
+
+        if entity_attachments:
+            attachments = []
+            for attachment_edge in entity_attachments:
+                attachment_node = attachment_edge.get("node", {})
+                if attachment_node:
+                    try:
+                        attachment = self._entity_mapper.map_attachment(attachment_node)
+                        attachments.append(attachment)
+                    except MappingError as e:
+                        self._attachment_mapping_failures += 1
+                        self._logger.warning(
+                            f"Failed to map attachment for {self._entity_name} {primary_entity.id}: {e}"
+                        )
+            if attachments:
+                related["attachments"] = attachments
+
+                # Warn if there are more attachments that weren't fetched
+                if attachments_page_info.get("hasNextPage", False):
+                    self._logger.warning(
+                        f"{self._entity_name.capitalize()} {primary_entity.id} has additional attachments beyond the "
+                        f"{len(attachments)} fetched. Increase pagination.nested_notes in "
+                        f"settings.yaml to fetch more attachments inline."
+                    )
+
+        return related
+
+    def _save_notes_and_attachments(self, related_entities: dict[str, Any]) -> None:
+        """Save notes and attachments to repository.
+
+        Common implementation for saving notes and downloading/saving attachments.
+        Downloads attachment files and updates metadata with local file paths before saving.
+
+        Args:
+            related_entities: Dictionary with 'notes' and 'attachments' lists
+        """
+        # Save notes if present
+        notes = related_entities.get("notes", [])
+        if notes:
+            self._repository.save_notes(notes)
+
+        # Download and save attachments if present
+        attachments = related_entities.get("attachments", [])
+        if attachments:
+            # Track total attachments processed
+            self._attachments_processed += len(attachments)
+
+            # Download files and update attachment metadata
+            attachments_with_files = []
+            for attachment in attachments:
+                download_result = self._attachment_downloader.download_attachment(attachment)
+
+                if download_result["success"]:
+                    # Update attachment with downloaded file path
+                    updated_attachment = Attachment(
+                        id=attachment.id,
+                        note_id=attachment.note_id,
+                        file_name=attachment.file_name,
+                        content_type=attachment.content_type,
+                        original_url=attachment.original_url,
+                        local_file_path=download_result["local_file_path"],
+                        file_size=attachment.file_size,
+                        created_at=attachment.created_at,
+                    )
+                    attachments_with_files.append(updated_attachment)
+
+                    # Track download metrics
+                    self._files_downloaded += 1
+                    self._bytes_downloaded += download_result["bytes_downloaded"]
+                else:
+                    # Download failed, save metadata only with original local_file_path
+                    self._logger.warning(
+                        f"Failed to download attachment {attachment.id}: "
+                        f"{download_result['error_message']}"
+                    )
+                    attachments_with_files.append(attachment)
+                    self._download_failures += 1
+
+            # Save all attachments with updated file paths
+            self._repository.save_attachments(attachments_with_files)
