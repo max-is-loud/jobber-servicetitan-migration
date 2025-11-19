@@ -269,6 +269,25 @@ class JobberClient:
                 endCursor
               }}
             }}
+            noteAttachments(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  id
+                  note {{
+                    id
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
             createdAt
             updatedAt
           }}
