@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -64,6 +65,62 @@ class AttachmentDownloader:
         # Ensure base download directory exists
         Path(self._base_download_path).mkdir(parents=True, exist_ok=True)
 
+        # Configure allowed domains for SSRF protection
+        # Jobber attachments are hosted on their CDN and S3 buckets
+        self._allowed_domains = {
+            "getjobber.com",
+            "cdn.getjobber.com",
+            "assets.getjobber.com",
+            "s3.amazonaws.com",  # Jobber may use AWS S3
+            "cloudfront.net",  # Common CDN for Jobber assets
+        }
+
+    def _validate_url(self, url: str) -> tuple[bool, str]:
+        """Validate URL is safe for download to prevent SSRF attacks.
+
+        Validates that the URL:
+        - Uses HTTPS protocol only (prevents protocol confusion)
+        - Points to a trusted Jobber domain (prevents SSRF to internal resources)
+        - Has a valid hostname (prevents malformed URLs)
+
+        Args:
+            url: The URL to validate
+
+        Returns:
+            Tuple of (is_valid, error_message). error_message is empty if valid.
+        """
+        if not url:
+            return False, "URL is empty or None"
+
+        try:
+            parsed = urlparse(url)
+
+            # Only allow HTTPS to prevent protocol confusion attacks
+            if parsed.scheme != "https":
+                return False, f"Invalid URL scheme '{parsed.scheme}'. Only HTTPS is allowed for security."
+
+            # Ensure hostname exists
+            if not parsed.hostname:
+                return False, "URL has no hostname"
+
+            # Check if domain is in allowed list (supports subdomains)
+            hostname_lower = parsed.hostname.lower()
+            is_allowed = False
+
+            for allowed_domain in self._allowed_domains:
+                # Check exact match or subdomain match
+                if hostname_lower == allowed_domain or hostname_lower.endswith(f".{allowed_domain}"):
+                    is_allowed = True
+                    break
+
+            if not is_allowed:
+                return False, f"Domain '{parsed.hostname}' is not in the allowed domains list. Allowed: {', '.join(sorted(self._allowed_domains))}"
+
+            return True, ""
+
+        except Exception as e:
+            return False, f"URL parsing failed: {e}"
+
     def download_attachment(self, attachment: Attachment) -> dict[str, Any]:
         """Download attachment file from remote URL to local storage.
 
@@ -114,6 +171,8 @@ class AttachmentDownloader:
     def _download_attachment_file(self, attachment: Attachment) -> dict[str, Any]:
         """Download attachment file from remote URL to local storage.
 
+        Validates URL for security (SSRF protection) before downloading.
+
         Args:
             attachment: Attachment entity with download URL and metadata
 
@@ -124,6 +183,18 @@ class AttachmentDownloader:
             - 'bytes_downloaded': int - Number of bytes downloaded
             - 'error_message': str - Error message (if failed)
         """
+        # Validate URL for security (prevent SSRF attacks)
+        is_valid, validation_error = self._validate_url(attachment.original_url)
+        if not is_valid:
+            error_msg = f"URL validation failed for {attachment.file_name}: {validation_error}"
+            self._logger.error(error_msg)
+            return {
+                "success": False,
+                "local_file_path": "",
+                "bytes_downloaded": 0,
+                "error_message": error_msg,
+            }
+
         try:
             # Create note-specific directory
             note_dir = Path(self._base_download_path) / attachment.note_id
@@ -146,6 +217,7 @@ class AttachmentDownloader:
                 attachment.original_url,
                 stream=True,
                 timeout=(30, 300),  # Connect timeout 30s, read timeout 5min
+                allow_redirects=False,  # Prevent redirect following for additional security
             )
             response.raise_for_status()
 
