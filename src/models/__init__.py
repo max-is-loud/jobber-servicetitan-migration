@@ -1,11 +1,15 @@
 """Data models for Jobber entities."""
 
 from .attachment import Attachment
+from .attachment_queue_item import AttachmentQueueItem
 from .client import Client
+from .entity_inventory import EntityInventory
 from .expense import Expense
+from .extract_queue_item import ExtractQueueItem
 from .graphql_cost import GraphQLCost
 from .invoice import Invoice
 from .job import Job
+from .map_snapshot import MapSnapshot
 from .migration_state import MigrationState
 from .migration_summary import MigrationSummary
 from .note import Note
@@ -20,11 +24,15 @@ from .visit import Visit
 
 __all__ = [
     "Attachment",
+    "AttachmentQueueItem",
     "Client",
+    "EntityInventory",
     "Expense",
+    "ExtractQueueItem",
     "GraphQLCost",
     "Invoice",
     "Job",
+    "MapSnapshot",
     "MigrationState",
     "MigrationSummary",
     "Note",
