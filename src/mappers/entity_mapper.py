@@ -302,7 +302,8 @@ class EntityMapper:
             # Extract file metadata
             file_name = data.get("fileName", "")
             content_type = data.get("contentType", "")
-            original_url = data.get("downloadUrl", "")
+            # NOTE: Field is 'url', not 'downloadUrl' (verified via GraphiQL introspection)
+            original_url = data.get("url", "")
 
             # Generate local file path following convention:
             # ./attachments/{note_id}/{filename}

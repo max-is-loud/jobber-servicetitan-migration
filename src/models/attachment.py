@@ -19,9 +19,9 @@ class Attachment:
 
     id: str  # EncodedId! - The unique identifier
     note_id: str  # Foreign key referencing the note this attachment belongs to
-    file_name: str  # Original filename of the attachment
-    content_type: str  # MIME type of the file (e.g., 'image/jpeg', 'application/pdf')
-    original_url: str  # Remote URL from Jobber API for file download
+    file_name: str  # Original filename of the attachment (fileName field from API)
+    content_type: str  # MIME type of the file (contentType field from API)
+    original_url: str  # Remote download URL from Jobber API (url field from API)
     local_file_path: str  # Local storage path following ./attachments/{note_id}/{filename}
-    file_size: int  # File size in bytes for storage tracking
+    file_size: int  # File size in bytes for storage tracking (fileSize field from API)
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string
