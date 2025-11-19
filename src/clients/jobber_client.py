@@ -154,7 +154,9 @@ class JobberClient:
                 node {{
                   id
                   note {{
-                    id
+                    ... on InvoiceNote {{
+                      id
+                    }}
                   }}
                   fileName
                   contentType
@@ -221,7 +223,9 @@ class JobberClient:
                 node {{
                   id
                   note {{
-                    id
+                    ... on QuoteNote {{
+                      id
+                    }}
                   }}
                   fileName
                   contentType
@@ -312,7 +316,9 @@ class JobberClient:
                 node {{
                   id
                   note {{
-                    id
+                    ... on JobNote {{
+                      id
+                    }}
                   }}
                   fileName
                   contentType
@@ -420,7 +426,11 @@ class JobberClient:
               edges {{
                 node {{
                   id
-                  note {{ id }}
+                  note {{
+                    ... on RequestNote {{
+                      id
+                    }}
+                  }}
                   fileName
                   contentType
                   url

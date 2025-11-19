@@ -84,7 +84,7 @@ pagination:
   # Client entities (includes nested properties, contacts)
   # Default: 42 (tested sweet spot for client complexity)
   # Reduce to 20-30 if clients have many properties/contacts
-  clients: 42
+  clients: 23
 
   # Invoice entities (includes line items, payments)
   # Default: 10 (invoices are heavy with line items)
