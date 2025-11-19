@@ -1,76 +1,64 @@
-"""AttachmentDownloader for downloading and managing attachment files."""
+"""AttachmentDownloader helper for downloading and managing attachment files."""
 
 import os
-import time
 from pathlib import Path
-from typing import Any, List, Union
+from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from ..clients import JobberClient
-from ..config import ConfigManagerImpl
-from ..exceptions import (
-    ConfigurationError,
-    MappingError,
-)
+from ..exceptions import ConfigurationError
 from ..interfaces import Logger
-from ..mappers import EntityMapper
-from ..models import Attachment, Client, Invoice, Note, Quote
-from ..repositories import Repository
+from ..models import Attachment
 
 
 class AttachmentDownloader:
     """
-    Downloader for Attachment files implementing BaseExtractor protocol.
+    Helper class for downloading attachment files from Jobber.
 
-    Specialized extractor for handling binary file downloads from Jobber attachments
-    with comprehensive file management, local storage organization, and metadata tracking.
-    Addresses PRD Day 5 milestone for Note Attachments with complete file coverage.
+    Provides file download utilities for entity extractors to download
+    attachment files after extracting metadata from noteAttachments fields.
+    Attachments are now fetched inline with parent entities (Client, Job,
+    Quote, Request, Invoice) rather than via a separate query.
 
     Features:
     - Binary file downloads with streaming for large files
     - Organized local storage: ./attachments/{note_id}/{filename}
     - File conflict handling and filename sanitization
     - Retry logic for failed downloads
-    - Progress reporting and metadata tracking
-    """  # noqa: E501
+    """
+
+    # HTTP timeout constants (in seconds)
+    DEFAULT_CONNECT_TIMEOUT = 30  # Connection establishment timeout
+    DEFAULT_READ_TIMEOUT = 300  # Read timeout for large file downloads (5 minutes)
 
     def __init__(
         self,
-        jobber_client: JobberClient,
-        entity_mapper: EntityMapper,
-        repository: Repository,
         logger: Logger,
         base_download_path: str = "./attachments",
         max_retries: int = 3,
         chunk_size: int = 8192,
-        config_manager: ConfigManagerImpl | None = None,
-        skip_existing_entities: bool = False,
+        connect_timeout: int = DEFAULT_CONNECT_TIMEOUT,
+        read_timeout: int = DEFAULT_READ_TIMEOUT,
     ) -> None:
         """Initialize AttachmentDownloader with required dependencies.
 
         Args:
-            jobber_client: Client for Jobber GraphQL API communication
-            entity_mapper: Mapper for transforming GraphQL data to domain models
-            repository: Repository for database operations
             logger: Logger for structured output and progress tracking
             base_download_path: Base directory for attachment storage
             max_retries: Maximum retry attempts for failed downloads
             chunk_size: Chunk size in bytes for streaming downloads
-            config_manager: Optional ConfigManager for delays and pagination settings
-            skip_existing_entities: Whether to skip entities that already exist in database
+            connect_timeout: HTTP connection timeout in seconds
+            read_timeout: HTTP read timeout in seconds
         """
-        self._jobber_client = jobber_client
-        self._entity_mapper = entity_mapper
-        self._repository = repository
         self._logger = logger
         self._base_download_path = base_download_path
         self._max_retries = max_retries
         self._chunk_size = chunk_size
-        self._config_manager = config_manager or ConfigManagerImpl()
-        self._skip_existing_entities = skip_existing_entities
+        self._connect_timeout = connect_timeout
+        self._read_timeout = read_timeout
 
         # Setup HTTP session with retry logic
         self._session = requests.Session()
@@ -84,320 +72,106 @@ class AttachmentDownloader:
         self._session.mount("http://", adapter)
         self._session.mount("https://", adapter)
 
-        # Extraction state tracking
-        self._last_extraction_summary = {
-            "total_entities": 0,
-            "total_pages": 0,
-            "extraction_duration": 0.0,
-            "average_page_size": 0.0,
-            "entities_per_second": 0.0,
-            "last_cursor": None,
-            "extraction_status": "pending",
-            "error_count": 0,
-            "files_downloaded": 0,
-            "total_bytes_downloaded": 0,
-            "download_failures": 0,
-        }
-
         # Ensure base download directory exists
         Path(self._base_download_path).mkdir(parents=True, exist_ok=True)
 
-    def extract(
-        self,
-        cursor: str | None = None,
-        page_limit: int | None = None,
-    ) -> dict[str, Any]:
-        """Extract attachments from Jobber GraphQL API with file downloads.
+        # Configure allowed domains for SSRF protection
+        # NOTE: These domains should be verified against actual Jobber attachment URLs
+        # and narrowed to specific S3 buckets/CloudFront distributions if possible.
+        # Current configuration allows known Jobber domains and their specific CDN endpoints.
+        self._allowed_domains = {
+            # Jobber main domains
+            "getjobber.com",
+            "cdn.getjobber.com",
+            "assets.getjobber.com",
+            # Jobber-specific S3 buckets (narrowed from broad s3.amazonaws.com)
+            # TODO: Replace with actual Jobber S3 bucket names once identified
+            "jobber-attachments.s3.amazonaws.com",
+            "jobber-assets.s3.amazonaws.com",
+            # Jobber-specific CloudFront distributions (narrowed from broad cloudfront.net)
+            # TODO: Replace with actual CloudFront distribution IDs once identified
+            "d123456abcdef.cloudfront.net",  # Example - replace with actual distribution
+        }
 
-        Performs complete extraction workflow including:
-        - GraphQL API calls with cursor pagination
-        - Data transformation via EntityMapper
-        - Binary file downloads with retry logic
-        - Local file storage organization
-        - Metadata persistence via Repository
+    def _validate_url(self, url: str) -> tuple[bool, str]:
+        """Validate URL is safe for download to prevent SSRF attacks.
+
+        Validates that the URL:
+        - Uses HTTPS protocol only (prevents protocol confusion)
+        - Points to a trusted Jobber domain (prevents SSRF to internal resources)
+        - Has a valid hostname (prevents malformed URLs)
 
         Args:
-            cursor: Optional pagination cursor for continuing extraction
-            page_limit: Optional limit on number of pages to process (for testing)
+            url: The URL to validate
 
         Returns:
-            Dictionary containing extraction results with keys:
-            - 'entities_processed': int - Total number of entities extracted
-            - 'pages_processed': int - Number of API pages processed
-            - 'has_next_page': bool - Whether more pages are available
-            - 'end_cursor': Optional[str] - Final cursor for continuation
-            - 'extraction_time': float - Total extraction time in seconds
-            - 'files_downloaded': int - Number of files successfully downloaded
-            - 'total_bytes_downloaded': int - Total bytes downloaded
-            - 'download_failures': int - Number of download failures
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-            RepositoryError: If database operations fail
+            Tuple of (is_valid, error_message). error_message is empty if valid.
         """
-        start_time = time.time()
-        entities_processed = 0
-        pages_processed = 0
-        current_cursor = cursor
-        error_count = 0
-        files_downloaded = 0
-        total_bytes_downloaded = 0
-        download_failures = 0
-        page_info = {}  # Initialize page_info
-
-        self._logger.info(f"Starting attachments extraction from cursor: {cursor}")
+        if not url:
+            return False, "URL is empty or None"
 
         try:
-            while True:
-                # Check page limit for testing
-                if page_limit is not None and pages_processed >= page_limit:
-                    self._logger.debug(f"Reached page limit: {page_limit}")
+            parsed = urlparse(url)
+
+            # Only allow HTTPS to prevent protocol confusion attacks
+            if parsed.scheme != "https":
+                return False, f"Invalid URL scheme '{parsed.scheme}'. Only HTTPS is allowed for security."
+
+            # Ensure hostname exists
+            if not parsed.hostname:
+                return False, "URL has no hostname"
+
+            # Check if domain is in allowed list (supports subdomains)
+            hostname_lower = parsed.hostname.lower()
+            is_allowed = False
+
+            for allowed_domain in self._allowed_domains:
+                # Check exact match or subdomain match
+                if hostname_lower == allowed_domain or hostname_lower.endswith(f".{allowed_domain}"):
+                    is_allowed = True
                     break
 
-                # Fetch page of attachments from API
-                self._logger.debug(f"Fetching attachments page {pages_processed + 1}")
-                response = self._jobber_client.fetch_attachments(current_cursor)
-                attachments_data = response.get("data", {}).get("attachments", {})
+            if not is_allowed:
+                return False, f"Domain '{parsed.hostname}' is not in the allowed domains list. Allowed: {', '.join(sorted(self._allowed_domains))}"
 
-                # Extract edges and page info
-                edges = attachments_data.get("edges", [])
-                page_info = attachments_data.get("pageInfo", {})
-
-                if not edges:
-                    self._logger.debug("No more attachment data to process")
-                    break
-
-                # Map GraphQL nodes to domain models and download files
-                attachments = []
-                for edge in edges:
-                    node = edge.get("node", {})
-                    try:
-                        # Map to attachment model
-                        attachment = self._entity_mapper.map_attachment(node)
-
-                        # Download the actual file
-                        download_result = self._download_attachment_file(attachment)
-                        if download_result["success"]:
-                            files_downloaded += 1
-                            total_bytes_downloaded += download_result[
-                                "bytes_downloaded"
-                            ]
-                            # Update attachment with actual local file path
-                            attachment = attachment.__class__(
-                                **{
-                                    **attachment.__dict__,
-                                    "local_file_path": download_result[
-                                        "local_file_path"
-                                    ],
-                                }
-                            )
-                        else:
-                            download_failures += 1
-                            error_count += 1
-
-                        attachments.append(attachment)
-
-                    except MappingError as e:
-                        error_msg = (
-                            f"Failed to map attachment {node.get('id', 'unknown')}: {e}"
-                        )
-                        self._logger.error(error_msg)
-                        error_count += 1
-
-                # Batch save attachments to database
-                if attachments:
-                    self._repository.save_attachments(attachments)
-                    entities_processed += len(attachments)
-                    self._logger.info(
-                        f"Processed {len(attachments)} attachments "
-                        f"(total: {entities_processed}, downloaded: {files_downloaded})"
-                    )
-
-                pages_processed += 1
-
-                # Check for next page
-                has_next_page = page_info.get("hasNextPage", False)
-                end_cursor = page_info.get("endCursor")
-
-                if not has_next_page:
-                    self._logger.debug("Reached last page of attachments")
-                    break
-
-                # Update cursor for next iteration
-                current_cursor = end_cursor
-
-                # Add configurable delay between pages to prevent API overload
-                page_delay = self._config_manager.get_delay_config("page_delay")
-                time.sleep(page_delay)
-                self._logger.debug(
-                    f"Added {page_delay}s delay before page {pages_processed + 1}"
-                )
-
-            extraction_time = time.time() - start_time
-
-            # Update extraction summary
-            self._update_extraction_summary(
-                entities_processed,
-                pages_processed,
-                extraction_time,
-                current_cursor,
-                "completed",
-                error_count,
-                files_downloaded,
-                total_bytes_downloaded,
-                download_failures,
-            )
-
-            result = {
-                "entities_processed": entities_processed,
-                "pages_processed": pages_processed,
-                "has_next_page": page_info.get("hasNextPage", False),
-                "end_cursor": current_cursor,
-                "extraction_time": extraction_time,
-                "files_downloaded": files_downloaded,
-                "total_bytes_downloaded": total_bytes_downloaded,
-                "download_failures": download_failures,
-            }
-
-            self._logger.info(
-                f"Attachments extraction completed: {entities_processed} attachments, "
-                f"{files_downloaded} files downloaded ({total_bytes_downloaded} bytes), "  # noqa: E501
-                f"{pages_processed} pages in {extraction_time:.2f}s"
-            )
-
-            return result
+            return True, ""
 
         except Exception as e:
-            extraction_time = time.time() - start_time
-            self._update_extraction_summary(
-                entities_processed,
-                pages_processed,
-                extraction_time,
-                current_cursor,
-                "failed",
-                error_count,
-                files_downloaded,
-                total_bytes_downloaded,
-                download_failures,
-            )
-            self._logger.error(f"Attachments extraction failed: {e}")
-            raise
+            return False, f"URL parsing failed: {e}"
 
-    def extract_all(self) -> List[Union[Client, Invoice, Quote, Note, Attachment]]:
-        """Extract all attachments with automatic pagination and file downloads.
+    def download_attachment(self, attachment: Attachment) -> dict[str, Any]:
+        """Download attachment file from remote URL to local storage.
 
-        Continuously calls extract() with cursor pagination until all available
-        attachments are processed and downloaded. Provides complete dataset
-        extraction with file management.
+        Public wrapper around _download_attachment_file for use by extractors.
+
+        Args:
+            attachment: Attachment entity with download URL and metadata
 
         Returns:
-            List of all extracted Attachment objects
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-            RepositoryError: If database operations fail
+            Dictionary with download result:
+            - 'success': bool - Whether download succeeded
+            - 'local_file_path': str - Local file path (if successful)
+            - 'bytes_downloaded': int - Number of bytes downloaded
+            - 'error_message': str - Error message (if failed)
         """
-        all_attachments = []
-        cursor = None
-
-        self._logger.info("Starting complete attachments extraction and download")
-
-        while True:
-            result = self.extract(cursor=cursor)
-
-            # Get attachments from database for this batch
-            attachments_batch = self._repository.get_all_attachments()
-            if attachments_batch:
-                # Filter attachments for this extraction session
-                batch_start = len(all_attachments)
-                new_attachments = attachments_batch[
-                    batch_start : batch_start + result["entities_processed"]
-                ]
-                all_attachments.extend(new_attachments)
-
-            if not result["has_next_page"]:
-                break
-
-            cursor = result["end_cursor"]
-
-        self._logger.info(
-            f"Complete attachments extraction finished: {len(all_attachments)} attachments"
-        )  # noqa: E501
-        return all_attachments
-
-    def get_entity_count(self) -> int:
-        """Get total count of attachments available for extraction.
-
-        Performs a lightweight API call to determine the total number of attachments
-        available for extraction without actually downloading files.
-
-        Returns:
-            Total number of attachments available for extraction
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-        """
-        total_count = 0
-        cursor = None
-
-        while True:
-            response = self._jobber_client.fetch_attachments(cursor)
-            attachments_data = response.get("data", {}).get("attachments", {})
-
-            edges = attachments_data.get("edges", [])
-            page_info = attachments_data.get("pageInfo", {})
-
-            total_count += len(edges)
-
-            if not page_info.get("hasNextPage", False):
-                break
-
-            cursor = page_info.get("endCursor")
-
-        return total_count
+        return self._download_attachment_file(attachment)
 
     def validate_dependencies(self) -> bool:
         """Validate that all required dependencies are properly configured.
 
-        Checks that JobberClient, EntityMapper, Repository, and Logger
-        dependencies are properly injected and configured for extraction.
-        Also validates download directory permissions.
+        Validates download directory permissions and that the logger is available.
 
         Returns:
-            True if all dependencies are valid and ready for extraction
+            True if all dependencies are valid and ready for file downloads
 
         Raises:
             ConfigurationError: If any required dependency is missing or invalid
         """
-        if not self._jobber_client:
-            raise ConfigurationError("JobberClient dependency is required")
-        if not self._entity_mapper:
-            raise ConfigurationError("EntityMapper dependency is required")
-        if not self._repository:
-            raise ConfigurationError("Repository dependency is required")
         if not self._logger:
             raise ConfigurationError("Logger dependency is required")
 
-        # Test basic functionality
+        # Validate download directory
         try:
-            # Verify JobberClient has required methods
-            if not hasattr(self._jobber_client, "fetch_attachments"):
-                raise ConfigurationError(
-                    "JobberClient missing fetch_attachments method"
-                )
-
-            # Verify EntityMapper has required methods
-            if not hasattr(self._entity_mapper, "map_attachment"):
-                raise ConfigurationError("EntityMapper missing map_attachment method")
-
-            # Verify Repository has required methods
-            if not hasattr(self._repository, "save_attachments"):
-                raise ConfigurationError("Repository missing save_attachments method")
-
-            # Validate download directory
             base_path = Path(self._base_download_path)
             if not base_path.exists():
                 base_path.mkdir(parents=True, exist_ok=True)
@@ -412,30 +186,10 @@ class AttachmentDownloader:
         except Exception as e:
             raise ConfigurationError(f"Dependency validation failed: {e}") from e
 
-    def get_extraction_summary(self) -> dict[str, Any]:
-        """Get summary statistics of the last extraction operation.
-
-        Provides detailed metrics and status information from the most recent
-        extract() or extract_all() operation including file download statistics.
-
-        Returns:
-            Dictionary containing extraction summary with keys:
-            - 'total_entities': int - Total entities processed
-            - 'total_pages': int - Total API pages processed
-            - 'extraction_duration': float - Total time in seconds
-            - 'average_page_size': float - Average entities per page
-            - 'entities_per_second': float - Processing rate
-            - 'last_cursor': Optional[str] - Final pagination cursor
-            - 'extraction_status': str - 'completed', 'partial', or 'failed'
-            - 'error_count': int - Number of recoverable errors encountered
-            - 'files_downloaded': int - Number of files successfully downloaded
-            - 'total_bytes_downloaded': int - Total bytes downloaded
-            - 'download_failures': int - Number of download failures
-        """
-        return self._last_extraction_summary.copy()
-
     def _download_attachment_file(self, attachment: Attachment) -> dict[str, Any]:
         """Download attachment file from remote URL to local storage.
+
+        Validates URL for security (SSRF protection) before downloading.
 
         Args:
             attachment: Attachment entity with download URL and metadata
@@ -447,6 +201,18 @@ class AttachmentDownloader:
             - 'bytes_downloaded': int - Number of bytes downloaded
             - 'error_message': str - Error message (if failed)
         """
+        # Validate URL for security (prevent SSRF attacks)
+        is_valid, validation_error = self._validate_url(attachment.original_url)
+        if not is_valid:
+            error_msg = f"URL validation failed for {attachment.file_name}: {validation_error}"
+            self._logger.error(error_msg)
+            return {
+                "success": False,
+                "local_file_path": "",
+                "bytes_downloaded": 0,
+                "error_message": error_msg,
+            }
+
         try:
             # Create note-specific directory
             note_dir = Path(self._base_download_path) / attachment.note_id
@@ -468,7 +234,8 @@ class AttachmentDownloader:
             response = self._session.get(
                 attachment.original_url,
                 stream=True,
-                timeout=(30, 300),  # Connect timeout 30s, read timeout 5min
+                timeout=(self._connect_timeout, self._read_timeout),
+                allow_redirects=False,  # Prevent redirect following for additional security
             )
             response.raise_for_status()
 
@@ -551,35 +318,3 @@ class AttachmentDownloader:
             if not new_path.exists():
                 return new_path
             counter += 1
-
-    def _update_extraction_summary(
-        self,
-        total_entities: int,
-        total_pages: int,
-        extraction_duration: float,
-        last_cursor: str | None,
-        status: str,
-        error_count: int,
-        files_downloaded: int = 0,
-        total_bytes_downloaded: int = 0,
-        download_failures: int = 0,
-    ) -> None:
-        """Update internal extraction summary statistics."""
-        average_page_size = total_entities / total_pages if total_pages > 0 else 0.0
-        entities_per_second = (
-            total_entities / extraction_duration if extraction_duration > 0 else 0.0
-        )
-
-        self._last_extraction_summary = {
-            "total_entities": total_entities,
-            "total_pages": total_pages,
-            "extraction_duration": extraction_duration,
-            "average_page_size": average_page_size,
-            "entities_per_second": entities_per_second,
-            "last_cursor": last_cursor,
-            "extraction_status": status,
-            "error_count": error_count,
-            "files_downloaded": files_downloaded,
-            "total_bytes_downloaded": total_bytes_downloaded,
-            "download_failures": download_failures,
-        }

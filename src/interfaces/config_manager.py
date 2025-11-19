@@ -88,6 +88,17 @@ class ConfigManager(Protocol):
         """
         ...
 
+    def get_attachment_config(self) -> dict[str, Any]:
+        """Get attachment download configuration.
+
+        Returns:
+            Dictionary containing attachment configuration (auto_download)
+
+        Raises:
+            ConfigurationError: If attachment config is malformed
+        """
+        ...
+
     def reload_config(self, environment: str | None = None) -> None:
         """Reload configuration from YAML files.
 

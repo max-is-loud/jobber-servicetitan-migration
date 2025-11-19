@@ -5,7 +5,6 @@ from typing import Any, List, Optional
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
-from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import Quote
@@ -104,63 +103,29 @@ class QuotesExtractor(BaseExtractor[Quote]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Quote
-    ) -> dict[str, List[Note]]:
-        """Extract notes related to the quote.
+    ) -> dict[str, Any]:
+        """Extract notes and attachments related to the quote.
 
-        Extracts nested note data from the quote query response. Notes are
-        fetched inline with the quote query using optimized pagination
-        (configurable via pagination.nested_notes) to reduce API costs by 60-70%.
+        Delegates to base implementation for common extraction logic.
 
         Args:
             node: Quote data from API
             primary_entity: The quote that was mapped
 
         Returns:
-            Dictionary with notes list
+            Dictionary with notes and attachments lists
         """
-        related = {}
+        return self._extract_notes_and_attachments(node, primary_entity)
 
-        # Extract notes if present
-        notes_data = node.get("notes", {})
-        quote_notes = notes_data.get("edges", [])
-        notes_page_info = notes_data.get("pageInfo", {})
+    def _save_related_entities(self, related_entities: dict[str, Any]) -> None:
+        """Save notes and attachments related to quotes.
 
-        if quote_notes:
-            notes = []
-            for note_edge in quote_notes:
-                note_node = note_edge.get("node", {})
-                if note_node:
-                    try:
-                        # Add quote relationship to note data without mutation
-                        note_data = {**note_node, "quote": {"id": primary_entity.id}}
-                        note = self._entity_mapper.map_note(note_data)
-                        notes.append(note)
-                    except MappingError as e:
-                        self._logger.debug(
-                            f"Failed to map note for quote {primary_entity.id}: {e}"
-                        )
-            if notes:
-                related["notes"] = notes
-
-                # Warn if there are more notes that weren't fetched
-                if notes_page_info.get("hasNextPage", False):
-                    self._logger.warning(
-                        f"Quote {primary_entity.id} has additional notes beyond the "
-                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
-                        f"settings.yaml to fetch more notes inline."
-                    )
-
-        return related
-
-    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
-        """Save notes related to quotes.
+        Delegates to base implementation for common save logic.
 
         Args:
-            related_entities: Dictionary with notes list
+            related_entities: Dictionary with notes and attachments lists
         """
-        notes = related_entities.get("notes", [])
-        if notes:
-            self._repository.save_notes(notes)
+        self._save_notes_and_attachments(related_entities)
 
     def _get_entities_from_last_batch(self) -> List[Quote]:
         """Get quotes from the last extraction batch.
@@ -169,6 +134,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
             List of quotes from last batch
         """
         return self._last_batch_entities
+
 
     def get_entity_count(self) -> int:
         """Get total count of quotes available for extraction.

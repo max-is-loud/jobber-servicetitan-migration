@@ -411,7 +411,6 @@ def migrate_all(
 
         # Create optional extractors for enhanced entity coverage
         from src.extractors import (
-            AttachmentDownloader,
             ClientsExtractor,
             InvoicesExtractor,
             NoteReferenceCollector,
@@ -470,15 +469,9 @@ def migrate_all(
             config_manager=config_manager,
             skip_existing_entities=actual_resume,
         )
-        attachment_downloader = AttachmentDownloader(
-            jobber_client,
-            entity_mapper,
-            repository,
-            logger,
-            base_download_path="./attachments",
-            config_manager=config_manager,
-            skip_existing_entities=actual_resume,
-        )
+
+        # Note: AttachmentDownloader is now a helper class used by extractors
+        # Attachments are extracted inline with parent entities via noteAttachments fields
 
         # Create migration coordinator with all dependencies including optional extractors
         if actual_resume:
@@ -497,7 +490,6 @@ def migrate_all(
             clients_extractor=clients_extractor,
             invoices_extractor=invoices_extractor,
             quotes_extractor=quotes_extractor,
-            attachment_downloader=attachment_downloader,
             config_manager=config_manager,
             resume=actual_resume,
             enable_adaptive_optimization=actual_enable_adaptive_optimization,

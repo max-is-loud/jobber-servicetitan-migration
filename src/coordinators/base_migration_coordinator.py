@@ -26,7 +26,6 @@ from ..clients import JobberClient
 from ..config import ConfigManagerImpl
 from ..exceptions import JobberApiError, MappingError, RepositoryError
 from ..extractors import (
-    AttachmentDownloader,
     ClientsExtractor,
     InvoicesExtractor,
     NoteReferenceCollector,
@@ -71,7 +70,6 @@ class BaseMigrationCoordinator:
         clients_extractor: Optional[ClientsExtractor] = None,
         invoices_extractor: Optional[InvoicesExtractor] = None,
         quotes_extractor: Optional[QuotesExtractor] = None,
-        attachment_downloader: Optional[AttachmentDownloader] = None,
         config_manager: Optional[ConfigManagerImpl] = None,
         resume: bool = False,
         enable_adaptive_optimization: bool = False,
@@ -89,7 +87,6 @@ class BaseMigrationCoordinator:
             clients_extractor: Optional extractor for Client entities
             invoices_extractor: Optional extractor for Invoice entities
             quotes_extractor: Optional extractor for Quote entities
-            attachment_downloader: Optional downloader for Attachment files
             config_manager: Optional ConfigManager for delays and pagination settings
             resume: Whether to skip entities that already exist in database
             enable_adaptive_optimization: Whether to enable adaptive performance optimization
@@ -111,7 +108,6 @@ class BaseMigrationCoordinator:
         self._invoices_extractor = invoices_extractor
         self._notes_extractor = notes_extractor
         self._quotes_extractor = quotes_extractor
-        self._attachment_downloader = attachment_downloader
 
         # Rich console for progress and error display
         self._console = Console()
@@ -297,15 +293,17 @@ class BaseMigrationCoordinator:
         Orchestrates the full migration process using Rich progress bars:
         1. Initialize database schema
         2. Create Rich progress display
-        3. Migrate clients with cursor pagination
-        4. Migrate invoices with cursor pagination
-        5. Migrate quotes (if extractor provided and enabled)
-        6. Migrate notes (if extractor provided and enabled)
-        7. Migrate attachments with file downloads (if downloader provided and enabled)
-        8. Calculate timing and return comprehensive summary
+        3. Migrate clients with cursor pagination (includes notes & attachments inline)
+        4. Migrate invoices with cursor pagination (includes notes & attachments inline)
+        5. Migrate quotes (if extractor provided and enabled, includes notes & attachments inline)
+        6. Migrate notes (if extractor provided and enabled, deferred note processing)
+        7. Calculate timing and return comprehensive summary
+
+        Note: Attachments are now extracted inline with parent entities (Client, Job, Quote,
+        Request, Invoice) via their noteAttachments fields, not as a separate migration step.
 
         Args:
-            include_extended_entities: Whether to include Quote, Note, Attachment extraction
+            include_extended_entities: Whether to include Quote and Note extraction
 
         Returns:
             MigrationSummary with processing counts, timing, and any errors
@@ -325,10 +323,6 @@ class BaseMigrationCoordinator:
             quotes_processed=0,
             notes_processed=0,
             note_references_collected=0,
-            attachments_processed=0,
-            files_downloaded=0,
-            total_bytes_downloaded=0,
-            download_failures=0,
             start_time=start_time_iso,
             end_time="",
             duration_seconds=0.0,
@@ -372,16 +366,6 @@ class BaseMigrationCoordinator:
                         summary.notes_processed = self._migrate_deferred_notes(summary)
                     else:
                         self._logger.debug("Deferred note extraction skipped - no extractor or collector provided")
-
-                    if self._attachment_downloader:
-                        self._logger.info("Starting attachment migration with file downloads")
-                        attachment_results = self._migrate_attachments(summary)
-                        summary.attachments_processed = attachment_results["entities"]
-                        summary.files_downloaded = attachment_results["files_downloaded"]
-                        summary.total_bytes_downloaded = attachment_results["bytes_downloaded"]
-                        summary.download_failures = attachment_results["download_failures"]
-                    else:
-                        self._logger.debug("Attachment extraction skipped - no downloader provided")
                 else:
                     self._logger.info("Extended entity migration disabled - using legacy Client/Invoice only mode")
 
@@ -537,6 +521,14 @@ class BaseMigrationCoordinator:
                     f"Client extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
+            # Collect download metrics from extractor
+            metrics = self._clients_extractor.get_download_metrics()
+            summary.attachments_processed += metrics["attachments_processed"]
+            summary.files_downloaded += metrics["files_downloaded"]
+            summary.total_bytes_downloaded += metrics["bytes_downloaded"]
+            summary.download_failures += metrics["download_failures"]
+            summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
+
             return result["entities_processed"]
 
         except (JobberApiError, MappingError, RepositoryError) as e:
@@ -601,6 +593,14 @@ class BaseMigrationCoordinator:
                 summary.add_error(
                     f"Invoice extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
+
+            # Collect download metrics from extractor
+            metrics = self._invoices_extractor.get_download_metrics()
+            summary.attachments_processed += metrics["attachments_processed"]
+            summary.files_downloaded += metrics["files_downloaded"]
+            summary.total_bytes_downloaded += metrics["bytes_downloaded"]
+            summary.download_failures += metrics["download_failures"]
+            summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
 
             return result["entities_processed"]
 
@@ -719,76 +719,19 @@ class BaseMigrationCoordinator:
                     f"Quote extraction completed with {extractor_summary['error_count']} recoverable errors"
                 )
 
+            # Collect download metrics from extractor
+            metrics = self._quotes_extractor.get_download_metrics()
+            summary.attachments_processed += metrics["attachments_processed"]
+            summary.files_downloaded += metrics["files_downloaded"]
+            summary.total_bytes_downloaded += metrics["bytes_downloaded"]
+            summary.download_failures += metrics["download_failures"]
+            summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
+
             self._logger.info(f"Quote migration completed: {result['entities_processed']} quotes processed")
             return result["entities_processed"]
 
         except Exception as e:
             error_msg = f"Quote migration failed: {e}"
-            self._logger.error(error_msg)
-            summary.add_error(error_msg)
-            raise
-
-    def _migrate_attachments(self, summary: MigrationSummary) -> dict[str, int]:
-        """
-        Migrate all attachments using the dedicated AttachmentDownloader.
-
-        Uses the injected AttachmentDownloader to handle cursor-based pagination,
-        data transformation, file downloads, and persistence with comprehensive
-        error handling.
-
-        Args:
-            summary: Migration summary for error tracking
-
-        Returns:
-            Dictionary with attachment migration metrics:
-            - 'entities': Total number of attachments processed
-            - 'files_downloaded': Number of files successfully downloaded
-            - 'bytes_downloaded': Total bytes downloaded
-            - 'download_failures': Number of download failures
-
-        Raises:
-            JobberApiError: If API communication fails
-            MappingError: If attachment data transformation fails
-            RepositoryError: If database operations fail
-        """
-        if not self._attachment_downloader:
-            self._logger.info("Attachment migration requested but no AttachmentDownloader provided")
-            return {
-                "entities": 0,
-                "files_downloaded": 0,
-                "bytes_downloaded": 0,
-                "download_failures": 0,
-            }
-
-        try:
-            # Execute attachment extraction and download using dedicated downloader
-            result = self._attachment_downloader.extract()
-
-            # Track any errors from downloader summary
-            downloader_summary = self._attachment_downloader.get_extraction_summary()
-            if downloader_summary["error_count"] > 0:
-                summary.add_error(
-                    f"Attachment extraction completed with {downloader_summary['error_count']} recoverable errors"
-                )
-
-            files_downloaded = result.get("files_downloaded", 0)
-            bytes_downloaded = result.get("total_bytes_downloaded", 0)
-            download_failures = result.get("download_failures", 0)
-
-            self._logger.info(
-                f"Attachment migration completed: {result['entities_processed']} attachments processed, "
-                f"{files_downloaded} files downloaded ({bytes_downloaded} bytes)"
-            )
-
-            return {
-                "entities": result["entities_processed"],
-                "files_downloaded": files_downloaded,
-                "bytes_downloaded": bytes_downloaded,
-                "download_failures": download_failures,
-            }
-
-        except Exception as e:
-            error_msg = f"Attachment migration failed: {e}"
             self._logger.error(error_msg)
             summary.add_error(error_msg)
             raise
@@ -829,11 +772,6 @@ class BaseMigrationCoordinator:
             if self._notes_extractor:
                 report.add_extractor_summary(
                     "notes", self._notes_extractor.get_extraction_summary()
-                )
-
-            if self._attachment_downloader:
-                report.add_extractor_summary(
-                    "attachments", self._attachment_downloader.get_extraction_summary()
                 )
 
             # Save reports

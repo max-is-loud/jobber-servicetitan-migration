@@ -14,6 +14,9 @@ class MigrationSummary:
     Quote, Note, and Attachment with comprehensive metrics and error tracking.
     Includes skip tracking for resumable migrations.
     Not frozen to allow error collection during migration.
+
+    Attachment metrics are aggregated from entity extractors that download files
+    inline during extraction (Client, Invoice, Quote, Job, Request extractors).
     """
 
     clients_processed: int  # Number of client records successfully processed
@@ -21,14 +24,19 @@ class MigrationSummary:
     quotes_processed: int  # Number of quote records successfully processed
     notes_processed: int  # Number of note records successfully processed
     note_references_collected: int  # Number of note references collected for deferred processing
-    attachments_processed: int  # Number of attachment records successfully processed
-    files_downloaded: int  # Number of attachment files successfully downloaded
-    total_bytes_downloaded: int  # Total bytes of attachment files downloaded
-    download_failures: int  # Number of attachment download failures
     start_time: str  # ISO format timestamp when migration started
     end_time: str  # ISO format timestamp when migration completed
     duration_seconds: float  # Total migration time in seconds
     errors: List[str]  # List of non-fatal errors encountered during processing
+
+    # Attachment metrics (aggregated from entity extractors)
+    # Attachments are extracted inline with parent entities (Client, Invoice, Quote, Job, Request)
+    # and these metrics are collected from each extractor's download operations
+    attachments_processed: int = 0  # Number of attachment records successfully processed
+    files_downloaded: int = 0  # Number of attachment files successfully downloaded
+    total_bytes_downloaded: int = 0  # Total bytes of attachment files downloaded
+    download_failures: int = 0  # Number of attachment download failures
+    attachment_mapping_failures: int = 0  # Number of attachment mapping errors (field parsing failures)
 
     # Skip tracking fields for resumable migrations
     clients_skipped: int = 0  # Number of client records skipped (already exist)
@@ -152,6 +160,9 @@ class MigrationSummary:
 
         if self.download_failures > 0:
             summary_lines.append(f"  • {self.download_failures} download failures")
+
+        if self.attachment_mapping_failures > 0:
+            summary_lines.append(f"  • {self.attachment_mapping_failures} attachment mapping failures")
 
         if self.errors:
             summary_lines.append(f"  • {len(self.errors)} non-fatal errors")

@@ -84,6 +84,25 @@ class JobberClient:
                 endCursor
               }}
             }}
+            noteAttachments(first: {nested_notes_size}) {{
+              edges {{
+                node {{
+                  id
+                  note {{
+                    id
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
             createdAt
             updatedAt
           }}
@@ -123,6 +142,27 @@ class JobberClient:
                     message
                     createdAt
                   }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+            noteAttachments(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  id
+                  note {{
+                    ... on InvoiceNote {{
+                      id
+                    }}
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
                 }}
               }}
               pageInfo {{
@@ -178,6 +218,27 @@ class JobberClient:
                 endCursor
               }}
             }}
+            noteAttachments(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  id
+                  note {{
+                    ... on QuoteNote {{
+                      id
+                    }}
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
             createdAt
             transitionedAt
             updatedAt
@@ -201,31 +262,10 @@ class JobberClient:
     # 2. Fetch individual notes using node(id:) interface (see NOTE_BY_ID_QUERY)
     # This avoids nested query complexity that triggers API rate limiting.
 
-    # GraphQL query for fetching attachments with cursor pagination
-    # Attachments are file attachments linked to notes
-    ATTACHMENTS_QUERY = """
-    query GetAttachments($cursor: String) {
-      noteFiles(first: 100, after: $cursor) {
-        edges {
-          node {
-            id
-            note {
-              id
-            }
-            fileName
-            contentType
-            downloadUrl
-            fileSize
-            createdAt
-          }
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-      }
-    }
-    """
+    # NOTE: Attachments (noteAttachments) are NOT available as a top-level query.
+    # They are fields on parent entities (Client.noteAttachments, Job.noteAttachments, etc.)
+    # and must be fetched as part of the parent entity queries.
+    # See individual entity queries (CLIENTS_QUERY, JOBS_QUERY, etc.) for noteAttachments.
 
     def _get_jobs_query(self) -> str:
         """Get GraphQL query for fetching jobs with configurable pagination and optimized nested notes."""
@@ -264,6 +304,27 @@ class JobberClient:
                     message
                     createdAt
                   }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+            noteAttachments(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  id
+                  note {{
+                    ... on JobNote {{
+                      id
+                    }}
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
                 }}
               }}
               pageInfo {{
@@ -354,6 +415,27 @@ class JobberClient:
                     message
                     createdAt
                   }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+            noteAttachments(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  id
+                  note {{
+                    ... on RequestNote {{
+                      id
+                    }}
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
                 }}
               }}
               pageInfo {{
@@ -1099,40 +1181,10 @@ class JobberClient:
     # Notes are fetched individually using fetch_note_by_id() as part of the
     # deferred loading pattern. See NOTE_BY_ID_QUERY for the implementation.
 
-    def fetch_attachments(self, cursor: Optional[str] = None) -> dict[str, Any]:
-        """
-        Fetch attachments data from Jobber GraphQL API.
-
-        Retrieves attachment (note file) information using cursor-based pagination
-        with automatic authentication handling. Attachments are files linked to notes.
-        For OAuth2 users, expired tokens are automatically refreshed during the request.
-
-        Args:
-            cursor: Optional cursor for pagination (None for first page)
-
-        Returns:
-            Dictionary containing GraphQL response with attachments data
-
-        Raises:
-            JobberApiError: If API communication fails
-            ConfigurationError: If authentication configuration is invalid
-                               or OAuth2 token refresh fails
-        """
-        try:
-            response_data = self._execute_graphql_request(self.ATTACHMENTS_QUERY, cursor)
-
-            # Validate that attachments data exists in response
-            if response_data.get("data") is not None and "noteFiles" not in response_data["data"]:
-                raise JobberApiError("Invalid response structure: missing 'noteFiles' field in data")
-
-            return response_data
-
-        except (ConfigurationError, JobberApiError):
-            # Re-raise our domain exceptions as-is
-            raise
-        except Exception as e:
-            # Catch any unexpected errors and wrap them
-            raise JobberApiError(f"Unexpected error while fetching attachments: {e}") from e
+    # NOTE: Attachment fetching is NOT supported as a standalone query.
+    # Attachments (noteAttachments field) are fetched as part of parent entity queries
+    # (Client, Job, Request, Quote, Invoice). See parent entity extractors for
+    # noteAttachments processing.
 
     def fetch_jobs(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """

@@ -262,6 +262,20 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
+class AttachmentConfig:
+    """Attachment download configuration."""
+
+    auto_download: bool  # Automatically download attachment files
+
+    def __post_init__(self) -> None:
+        """Validate attachment configuration values."""
+        if not isinstance(self.auto_download, bool):
+            raise ValueError(
+                f"auto_download must be a boolean, got {type(self.auto_download).__name__}"
+            )
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Complete application configuration."""
 
@@ -272,6 +286,7 @@ class AppConfig:
     backoff: BackoffConfig
     logging: LoggingConfig
     database: DatabaseConfig
+    attachments: AttachmentConfig
 
     def __post_init__(self) -> None:
         """Validate application configuration."""

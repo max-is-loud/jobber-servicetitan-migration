@@ -13,6 +13,7 @@ from watchdog.observers import Observer
 from ..exceptions import ConfigurationError
 from .config_models import (
     AppConfig,
+    AttachmentConfig,
     BackoffConfig,
     DatabaseConfig,
     DelayConfig,
@@ -203,6 +204,12 @@ class ConfigManagerImpl:
                 wal_mode=database_data["wal_mode"],
             )
 
+            # Create attachment configuration (with default if not present for backwards compatibility)
+            attachment_data = config_data.get("attachments", {"auto_download": True})
+            attachments = AttachmentConfig(
+                auto_download=attachment_data.get("auto_download", True),
+            )
+
             return AppConfig(
                 rate_limits=rate_limits,
                 max_retries=config_data["max_retries"],
@@ -211,6 +218,7 @@ class ConfigManagerImpl:
                 backoff=backoff,
                 logging=logging,
                 database=database,
+                attachments=attachments,
             )
 
         except KeyError as e:
@@ -306,6 +314,15 @@ class ConfigManagerImpl:
             "default_path": self.config.database.default_path,
             "timeout": self.config.database.timeout,
             "wal_mode": self.config.database.wal_mode,
+        }
+
+    def get_attachment_config(self) -> dict[str, Any]:
+        """Get attachment download configuration."""
+        if not self.config:
+            raise ConfigurationError("Configuration not loaded")
+
+        return {
+            "auto_download": self.config.attachments.auto_download,
         }
 
     def reload_config(self, environment: str | None = None) -> None:

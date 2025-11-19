@@ -163,7 +163,7 @@ delays:
   #   - Increase to 2-3s if experiencing throttling
   #   - Reduce to 0.5s for aggressive migrations (not recommended)
   #   - Set to 0 to disable (rely entirely on rate limiter)
-  page_delay: 1
+  page_delay: 1.0
 
   # HTTP request timeout (seconds)
   # Maximum wait time for Jobber API response
@@ -276,6 +276,23 @@ database:
   #   - Safer (less corruption risk)
   # ⚠️  Only disable if compatibility issues with old SQLite versions
   wal_mode: true
+
+# Attachment Download Configuration
+# ----------------------------------
+# Controls how attachment files are downloaded during extraction.
+
+attachments:
+  # Automatically download attachment files during extraction
+  # When enabled: Downloads happen synchronously, blocking pagination
+  # When disabled: Only metadata is saved, files must be downloaded manually later
+  # Default: true (automatic downloads)
+  # TUNING:
+  #   - Set to false for faster extraction (metadata-only mode)
+  #   - Keep true for complete one-pass migrations
+  # PERFORMANCE NOTE: For large datasets (e.g., 42 clients × 5 attachments = 210 files),
+  # synchronous downloads can significantly slow pagination. Consider setting to false
+  # and downloading files in a separate batch process after metadata extraction.
+  auto_download: true
 
 # Configuration Notes
 # --------------------

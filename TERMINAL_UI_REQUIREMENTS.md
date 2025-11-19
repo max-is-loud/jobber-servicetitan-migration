@@ -21,6 +21,7 @@ Improve the TightBeam migration terminal UI by separating console logs from prog
 2. **Poor Readability**: Console output intermingles with progress indicators, creating a confusing display
 3. **Lost Context**: Important log messages scroll off-screen and are hard to review during execution
 4. **UX During Long Migrations**: Users cannot easily see both recent logs and current progress simultaneously
+5. **Total number of records processed / remaining always displays 0 / ?**: likely because we aren't first polling the db to create an index of somekind.
 
 ### Impact
 
@@ -79,6 +80,7 @@ Improve the TightBeam migration terminal UI by separating console logs from prog
 - Progress bars shall not scroll with log messages
 - Multiple progress bars shall be visible simultaneously (clients, invoices, quotes, etc.)
 - Progress bars shall update smoothly without flicker
+- Progress counters will reflect accurate number of processed vs total records.
 - Completion status shall be clearly indicated
 
 ### FR4: Real-Time Updates
@@ -87,7 +89,7 @@ Improve the TightBeam migration terminal UI by separating console logs from prog
 **Priority**: MUST HAVE
 
 - Log messages shall appear immediately in upper section
-- Progress bars shall reflect current state without delay
+- Progress bars & counters shall reflect current state without delay
 - Updates shall occur without screen flicker or tearing
 - Terminal shall remain responsive during heavy logging
 
@@ -166,8 +168,8 @@ Improve the TightBeam migration terminal UI by separating console logs from prog
 │  ┌───────────────────────────────────────────┐  │
 │  │ Progress Bars (fixed)                     │  │
 │  │ ────────────────────────────────────────  │  │
-│  │ Clients:  ████████░░░░  450/1000 (45%)   │  │
-│  │ Invoices: ██░░░░░░░░░░  120/2000 (6%)    │  │
+│  │ Clients:  ████████░░░░  450/1000 (45%)    │  │
+│  │ Invoices: ██░░░░░░░░░░  120/2000 (6%)     │  │
 │  └───────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────┘
 ```

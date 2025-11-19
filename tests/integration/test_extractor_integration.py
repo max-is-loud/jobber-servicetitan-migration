@@ -25,7 +25,7 @@ from src.config import ConfigManagerImpl
 from src.mappers import EntityMapper
 from src.repositories import Repository
 from src.interfaces import Logger
-from src.models import Client, Invoice, Note
+from src.models import Client, Invoice, Note, Attachment
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def mock_jobber_client():
     """Create a mock JobberClient with comprehensive responses."""
     client = Mock()  # Don't use spec for flexible mocking
 
-    # Mock clients response with nested notes
+    # Mock clients response with nested notes and attachments
     client.fetch_clients.return_value = {
         "data": {
             "clients": {
@@ -71,6 +71,22 @@ def mock_jobber_client():
                                     }
                                 ],
                                 "pageInfo": {"hasNextPage": False}
+                            },
+                            "noteAttachments": {
+                                "edges": [
+                                    {
+                                        "node": {
+                                            "id": "attachment_1",
+                                            "note": {"id": "note_1"},
+                                            "fileName": "test_file.pdf",
+                                            "contentType": "application/pdf",
+                                            "url": "https://example.com/files/test_file.pdf",
+                                            "fileSize": 12345,
+                                            "createdAt": "2023-11-15T10:06:00Z",
+                                        }
+                                    }
+                                ],
+                                "pageInfo": {"hasNextPage": False}
                             }
                         }
                     }
@@ -80,7 +96,7 @@ def mock_jobber_client():
         }
     }
 
-    # Mock invoices response with nested notes
+    # Mock invoices response with nested notes and attachments
     client.fetch_invoices.return_value = {
         "data": {
             "invoices": {
@@ -102,6 +118,22 @@ def mock_jobber_client():
                                             "body": "Test note for invoice",
                                             "createdAt": "2023-11-15T11:05:00Z",
                                             "updatedAt": "2023-11-15T11:05:00Z",
+                                        }
+                                    }
+                                ],
+                                "pageInfo": {"hasNextPage": False}
+                            },
+                            "noteAttachments": {
+                                "edges": [
+                                    {
+                                        "node": {
+                                            "id": "attachment_2",
+                                            "note": {"id": "note_2"},
+                                            "fileName": "invoice_doc.pdf",
+                                            "contentType": "application/pdf",
+                                            "url": "https://example.com/files/invoice_doc.pdf",
+                                            "fileSize": 54321,
+                                            "createdAt": "2023-11-15T11:06:00Z",
                                         }
                                     }
                                 ],
@@ -168,9 +200,23 @@ def mock_entity_mapper():
             updated_at=data.get("updatedAt", data.get("createdAt", "")),
         )
 
+    # Map attachments
+    def map_attachment(data):
+        return Attachment(
+            id=data["id"],
+            note_id=data.get("note", {}).get("id", ""),
+            file_name=data.get("fileName", ""),
+            content_type=data.get("contentType", ""),
+            original_url=data.get("url", ""),
+            local_file_path=f"./attachments/{data.get('note', {}).get('id', 'unknown')}/{data.get('fileName', 'unknown')}",
+            file_size=data.get("fileSize", 0),
+            created_at=data.get("createdAt", ""),
+        )
+
     mapper.map_client.side_effect = map_client
     mapper.map_invoice.side_effect = map_invoice
     mapper.map_note.side_effect = map_note
+    mapper.map_attachment.side_effect = map_attachment
 
     return mapper
 
@@ -182,6 +228,7 @@ def mock_repository():
     repo.save_clients.return_value = None
     repo.save_invoices.return_value = None
     repo.save_notes.return_value = None
+    repo.save_attachments.return_value = None
     repo.entity_exists.return_value = False
     return repo
 
@@ -191,6 +238,21 @@ def mock_logger():
     """Create a mock Logger."""
     logger = Mock()  # Don't use spec for flexible mocking
     return logger
+
+
+@pytest.fixture
+def mock_attachment_downloader():
+    """Mock AttachmentDownloader to prevent real HTTP requests."""
+    with patch('src.extractors.base_extractor.AttachmentDownloader') as mock_class:
+        mock_instance = Mock()
+        mock_instance.download_attachment.return_value = {
+            "success": True,
+            "local_file_path": "./attachments/mock/test_file.pdf",
+            "bytes_downloaded": 12345,
+            "error_message": None,
+        }
+        mock_class.return_value = mock_instance
+        yield mock_instance
 
 
 @pytest.mark.integration
@@ -203,7 +265,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test complete client extraction workflow with nested notes optimization.
 
@@ -242,6 +305,13 @@ class TestExtractorIntegration:
         assert len(saved_notes) >= 1, "Should save nested notes"
         assert any(note.id == "note_1" for note in saved_notes)
 
+        # Verify nested attachments were saved
+        mock_repository.save_attachments.assert_called()
+        saved_attachments = mock_repository.save_attachments.call_args[0][0]
+        assert len(saved_attachments) >= 1, "Should save nested attachments"
+        assert any(att.id == "attachment_1" for att in saved_attachments)
+        assert any(att.file_name == "test_file.pdf" for att in saved_attachments)
+
         # Verify API call optimization (only one fetch_clients call)
         assert mock_jobber_client.fetch_clients.call_count == 1
 
@@ -251,7 +321,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test complete invoice extraction workflow with nested notes optimization.
 
@@ -289,6 +360,13 @@ class TestExtractorIntegration:
         assert len(saved_notes) >= 1, "Should save nested notes"
         assert any(note.id == "note_2" for note in saved_notes)
 
+        # Verify nested attachments were saved
+        mock_repository.save_attachments.assert_called()
+        saved_attachments = mock_repository.save_attachments.call_args[0][0]
+        assert len(saved_attachments) >= 1, "Should save nested attachments"
+        assert any(att.id == "attachment_2" for att in saved_attachments)
+        assert any(att.file_name == "invoice_doc.pdf" for att in saved_attachments)
+
         # Verify API call optimization (only one fetch_invoices call)
         assert mock_jobber_client.fetch_invoices.call_count == 1
 
@@ -300,7 +378,8 @@ class TestExtractorIntegration:
         mock_logger,
         mock_config_manager,
         temp_database,
-        tmp_path
+        tmp_path,
+        mock_attachment_downloader
     ):
         """Test full migration flow with report generation.
 
@@ -342,17 +421,16 @@ class TestExtractorIntegration:
             invoices_extractor=invoices_extractor,
             quotes_extractor=None,
             notes_extractor=None,
-            attachment_downloader=None,
             report_output_dir=report_dir,
         )
 
         # Execute migration
-        summary = coordinator.run_migration()
+        summary = coordinator.migrate()
 
         # Verify migration completed
         assert summary is not None
-        assert summary.total_clients_processed >= 0
-        assert summary.total_invoices_processed >= 0
+        assert summary.clients_processed >= 0
+        assert summary.invoices_processed >= 0
 
         # Verify reports were generated
         report_files = list(report_dir.glob("*.txt"))
@@ -376,7 +454,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test error handling when notes pagination has issues.
 
@@ -445,7 +524,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test error handling when note mapping fails.
 
@@ -489,7 +569,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test that extraction summary includes nested notes metrics.
 
@@ -531,7 +612,8 @@ class TestReportGenerationIntegration:
         mock_repository,
         mock_logger,
         mock_config_manager,
-        tmp_path
+        tmp_path,
+        mock_attachment_downloader
     ):
         """Test that report generation errors don't fail the migration.
 
@@ -564,12 +646,11 @@ class TestReportGenerationIntegration:
                 invoices_extractor=None,
                 quotes_extractor=None,
                 notes_extractor=None,
-                attachment_downloader=None,
                 report_output_dir=invalid_report_dir,
             )
 
             # Execute migration - should succeed despite report failure
-            summary = coordinator.run_migration()
+            summary = coordinator.migrate()
 
             # Verify migration completed
             assert summary is not None
