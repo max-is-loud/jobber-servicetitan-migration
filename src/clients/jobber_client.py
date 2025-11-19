@@ -149,6 +149,25 @@ class JobberClient:
                 endCursor
               }}
             }}
+            noteAttachments(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  id
+                  note {{
+                    id
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
           }}
         }}
         pageInfo {{
@@ -190,6 +209,25 @@ class JobberClient:
                     message
                     createdAt
                   }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+            noteAttachments(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  id
+                  note {{
+                    id
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
                 }}
               }}
               pageInfo {{
@@ -371,6 +409,23 @@ class JobberClient:
                     message
                     createdAt
                   }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+            noteAttachments(first: {nested_notes_limit}) {{
+              edges {{
+                node {{
+                  id
+                  note {{ id }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
                 }}
               }}
               pageInfo {{

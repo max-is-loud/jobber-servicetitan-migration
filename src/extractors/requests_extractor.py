@@ -7,7 +7,7 @@ from ..clients import JobberClient
 from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import Request
+from ..models import Request, Note, Attachment
 from ..repositories import Repository
 from .base_extractor import BaseExtractor
 
@@ -101,19 +101,19 @@ class RequestsExtractor(BaseExtractor[Request]):
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: Request
-    ) -> dict[str, List[Note]]:
-        """Extract notes related to the request.
+    ) -> dict[str, Any]:
+        """Extract notes and attachments related to the request.
 
-        Extracts nested note data from the request query response. Notes are
-        fetched inline with the request query using optimized pagination
-        (configurable via pagination.nested_notes) to reduce API costs by 60-70%.
+        Extracts nested note and attachment data from the request query response.
+        Both are fetched inline with the request query using optimized pagination
+        (configurable via pagination.nested_notes) to reduce API costs.
 
         Args:
             node: Request data from API
             primary_entity: The request that was mapped
 
         Returns:
-            Dictionary with notes list
+            Dictionary with notes and attachments lists
         """
         related = {}
 
@@ -147,17 +147,49 @@ class RequestsExtractor(BaseExtractor[Request]):
                         f"settings.yaml to fetch more notes inline."
                     )
 
+        # Extract attachments if present
+        attachments_data = node.get("noteAttachments", {})
+        request_attachments = attachments_data.get("edges", [])
+        attachments_page_info = attachments_data.get("pageInfo", {})
+
+        if request_attachments:
+            attachments = []
+            for attachment_edge in request_attachments:
+                attachment_node = attachment_edge.get("node", {})
+                if attachment_node:
+                    try:
+                        attachment = self._entity_mapper.map_attachment(attachment_node)
+                        attachments.append(attachment)
+                    except MappingError as e:
+                        self._logger.debug(
+                            f"Failed to map attachment for request {primary_entity.id}: {e}"
+                        )
+            if attachments:
+                related["attachments"] = attachments
+
+                # Warn if there are more attachments that weren't fetched
+                if attachments_page_info.get("hasNextPage", False):
+                    self._logger.warning(
+                        f"Request {primary_entity.id} has additional attachments beyond the "
+                        f"{len(attachments)} fetched. Increase pagination.nested_notes in "
+                        f"settings.yaml to fetch more attachments inline."
+                    )
+
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
-        """Save notes related to requests.
+    def _save_related_entities(self, related_entities: dict[str, Any]) -> None:
+        """Save notes and attachments related to requests.
 
         Args:
-            related_entities: Dictionary with notes list
+            related_entities: Dictionary with notes and attachments lists
         """
         notes = related_entities.get("notes", [])
         if notes:
             self._repository.save_notes(notes)
+
+        attachments = related_entities.get("attachments", [])
+        if attachments:
+            self._repository.save_attachments(attachments)
 
     def _get_entities_from_last_batch(self) -> List[Request]:
         """Get requests from the last extraction batch.
