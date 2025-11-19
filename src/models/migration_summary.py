@@ -36,6 +36,7 @@ class MigrationSummary:
     files_downloaded: int = 0  # Number of attachment files successfully downloaded
     total_bytes_downloaded: int = 0  # Total bytes of attachment files downloaded
     download_failures: int = 0  # Number of attachment download failures
+    attachment_mapping_failures: int = 0  # Number of attachment mapping errors (field parsing failures)
 
     # Skip tracking fields for resumable migrations
     clients_skipped: int = 0  # Number of client records skipped (already exist)
@@ -159,6 +160,9 @@ class MigrationSummary:
 
         if self.download_failures > 0:
             summary_lines.append(f"  • {self.download_failures} download failures")
+
+        if self.attachment_mapping_failures > 0:
+            summary_lines.append(f"  • {self.attachment_mapping_failures} attachment mapping failures")
 
         if self.errors:
             summary_lines.append(f"  • {len(self.errors)} non-fatal errors")

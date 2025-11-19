@@ -527,6 +527,7 @@ class BaseMigrationCoordinator:
             summary.files_downloaded += metrics["files_downloaded"]
             summary.total_bytes_downloaded += metrics["bytes_downloaded"]
             summary.download_failures += metrics["download_failures"]
+            summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
 
             return result["entities_processed"]
 
@@ -599,6 +600,7 @@ class BaseMigrationCoordinator:
             summary.files_downloaded += metrics["files_downloaded"]
             summary.total_bytes_downloaded += metrics["bytes_downloaded"]
             summary.download_failures += metrics["download_failures"]
+            summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
 
             return result["entities_processed"]
 
@@ -723,6 +725,7 @@ class BaseMigrationCoordinator:
             summary.files_downloaded += metrics["files_downloaded"]
             summary.total_bytes_downloaded += metrics["bytes_downloaded"]
             summary.download_failures += metrics["download_failures"]
+            summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
 
             self._logger.info(f"Quote migration completed: {result['entities_processed']} quotes processed")
             return result["entities_processed"]

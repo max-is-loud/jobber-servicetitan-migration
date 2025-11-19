@@ -640,12 +640,14 @@ class BaseExtractor(ABC, Generic[T]):
             - files_downloaded: Number of files successfully downloaded
             - bytes_downloaded: Total bytes downloaded
             - download_failures: Number of failed downloads
+            - attachment_mapping_failures: Number of attachment mapping errors
         """
         return {
             "attachments_processed": 0,
             "files_downloaded": 0,
             "bytes_downloaded": 0,
             "download_failures": 0,
+            "attachment_mapping_failures": 0,
         }
 
     def _update_extraction_summary(

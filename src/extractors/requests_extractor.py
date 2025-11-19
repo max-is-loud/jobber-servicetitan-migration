@@ -60,6 +60,7 @@ class RequestsExtractor(BaseExtractor[Request]):
         self._files_downloaded = 0
         self._bytes_downloaded = 0
         self._download_failures = 0
+        self._attachment_mapping_failures = 0
 
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """Fetch a page of requests from the Jobber API.
@@ -171,7 +172,8 @@ class RequestsExtractor(BaseExtractor[Request]):
                         attachment = self._entity_mapper.map_attachment(attachment_node)
                         attachments.append(attachment)
                     except MappingError as e:
-                        self._logger.debug(
+                        self._attachment_mapping_failures += 1
+                        self._logger.warning(
                             f"Failed to map attachment for request {primary_entity.id}: {e}"
                         )
             if attachments:
@@ -258,6 +260,7 @@ class RequestsExtractor(BaseExtractor[Request]):
             "files_downloaded": self._files_downloaded,
             "bytes_downloaded": self._bytes_downloaded,
             "download_failures": self._download_failures,
+            "attachment_mapping_failures": self._attachment_mapping_failures,
         }
 
     def get_entity_count(self) -> int:
