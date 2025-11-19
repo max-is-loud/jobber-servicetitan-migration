@@ -240,6 +240,21 @@ def mock_logger():
     return logger
 
 
+@pytest.fixture
+def mock_attachment_downloader():
+    """Mock AttachmentDownloader to prevent real HTTP requests."""
+    with patch('src.extractors.base_extractor.AttachmentDownloader') as mock_class:
+        mock_instance = Mock()
+        mock_instance.download_attachment.return_value = {
+            "success": True,
+            "local_file_path": "./attachments/mock/test_file.pdf",
+            "bytes_downloaded": 12345,
+            "error_message": None,
+        }
+        mock_class.return_value = mock_instance
+        yield mock_instance
+
+
 @pytest.mark.integration
 class TestExtractorIntegration:
     """Integration tests for new extractors with nested notes optimization."""
@@ -250,7 +265,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test complete client extraction workflow with nested notes optimization.
 
@@ -305,7 +321,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test complete invoice extraction workflow with nested notes optimization.
 
@@ -361,7 +378,8 @@ class TestExtractorIntegration:
         mock_logger,
         mock_config_manager,
         temp_database,
-        tmp_path
+        tmp_path,
+        mock_attachment_downloader
     ):
         """Test full migration flow with report generation.
 
@@ -436,7 +454,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test error handling when notes pagination has issues.
 
@@ -505,7 +524,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test error handling when note mapping fails.
 
@@ -549,7 +569,8 @@ class TestExtractorIntegration:
         mock_entity_mapper,
         mock_repository,
         mock_logger,
-        mock_config_manager
+        mock_config_manager,
+        mock_attachment_downloader
     ):
         """Test that extraction summary includes nested notes metrics.
 
@@ -591,7 +612,8 @@ class TestReportGenerationIntegration:
         mock_repository,
         mock_logger,
         mock_config_manager,
-        tmp_path
+        tmp_path,
+        mock_attachment_downloader
     ):
         """Test that report generation errors don't fail the migration.
 

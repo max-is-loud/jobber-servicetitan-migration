@@ -640,9 +640,8 @@ class BaseExtractor(ABC, Generic[T]):
     def get_download_metrics(self) -> dict[str, int]:
         """Get attachment download metrics.
 
-        Override in subclasses that download attachments.
-        Default implementation returns zero metrics for extractors
-        that don't handle attachments.
+        Returns instance variable values for extractors that download attachments.
+        Extractors that don't handle attachments will return zeros (default values).
 
         Returns:
             Dictionary with download statistics:
@@ -653,11 +652,11 @@ class BaseExtractor(ABC, Generic[T]):
             - attachment_mapping_failures: Number of attachment mapping errors
         """
         return {
-            "attachments_processed": 0,
-            "files_downloaded": 0,
-            "bytes_downloaded": 0,
-            "download_failures": 0,
-            "attachment_mapping_failures": 0,
+            "attachments_processed": self._attachments_processed,
+            "files_downloaded": self._files_downloaded,
+            "bytes_downloaded": self._bytes_downloaded,
+            "download_failures": self._download_failures,
+            "attachment_mapping_failures": self._attachment_mapping_failures,
         }
 
     def _update_extraction_summary(
@@ -727,20 +726,26 @@ class BaseExtractor(ABC, Generic[T]):
             notes = []
             for note_edge in entity_notes:
                 note_node = note_edge.get("node", {})
-                if note_node:
-                    try:
-                        # Add parent entity relationship to note data
-                        # Uses entity_name to create dynamic relationship field (e.g., "client", "invoice")
-                        note_data = {
-                            **note_node,
-                            self._entity_name: {"id": primary_entity.id},
-                        }
-                        note = self._entity_mapper.map_note(note_data)
-                        notes.append(note)
-                    except MappingError as e:
-                        self._logger.debug(
-                            f"Failed to map note for {self._entity_name} {primary_entity.id}: {e}"
-                        )
+                # Skip empty nodes or nodes missing ID (can happen with union fragments)
+                if not note_node or not note_node.get("id"):
+                    self._logger.debug(
+                        f"Skipping note with missing data for {self._entity_name} {primary_entity.id}"
+                    )
+                    continue
+
+                try:
+                    # Add parent entity relationship to note data
+                    # Uses entity_name to create dynamic relationship field (e.g., "client", "invoice")
+                    note_data = {
+                        **note_node,
+                        self._entity_name: {"id": primary_entity.id},
+                    }
+                    note = self._entity_mapper.map_note(note_data)
+                    notes.append(note)
+                except MappingError as e:
+                    self._logger.debug(
+                        f"Failed to map note for {self._entity_name} {primary_entity.id}: {e}"
+                    )
             if notes:
                 related["notes"] = notes
 
@@ -787,7 +792,8 @@ class BaseExtractor(ABC, Generic[T]):
         """Save notes and attachments to repository.
 
         Common implementation for saving notes and downloading/saving attachments.
-        Downloads attachment files and updates metadata with local file paths before saving.
+        Downloads attachment files and updates metadata with local file paths before saving,
+        unless auto_download is disabled in configuration.
 
         Args:
             related_entities: Dictionary with 'notes' and 'attachments' lists
@@ -802,6 +808,18 @@ class BaseExtractor(ABC, Generic[T]):
         if attachments:
             # Track total attachments processed
             self._attachments_processed += len(attachments)
+
+            # Check if automatic downloading is enabled
+            attachment_config = self._config_manager.get_attachment_config()
+            auto_download = attachment_config.get("auto_download", True)
+
+            if not auto_download:
+                # Metadata-only mode: save attachments without downloading files
+                self._logger.debug(
+                    f"Skipping download of {len(attachments)} attachment(s) (auto_download=false)"
+                )
+                self._repository.save_attachments(attachments)
+                return
 
             # Download files and update attachment metadata
             attachments_with_files = []

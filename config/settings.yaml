@@ -277,6 +277,23 @@ database:
   # ⚠️  Only disable if compatibility issues with old SQLite versions
   wal_mode: true
 
+# Attachment Download Configuration
+# ----------------------------------
+# Controls how attachment files are downloaded during extraction.
+
+attachments:
+  # Automatically download attachment files during extraction
+  # When enabled: Downloads happen synchronously, blocking pagination
+  # When disabled: Only metadata is saved, files must be downloaded manually later
+  # Default: true (automatic downloads)
+  # TUNING:
+  #   - Set to false for faster extraction (metadata-only mode)
+  #   - Keep true for complete one-pass migrations
+  # PERFORMANCE NOTE: For large datasets (e.g., 42 clients × 5 attachments = 210 files),
+  # synchronous downloads can significantly slow pagination. Consider setting to false
+  # and downloading files in a separate batch process after metadata extraction.
+  auto_download: true
+
 # Configuration Notes
 # --------------------
 # 1. After changing settings, test with small migrations first

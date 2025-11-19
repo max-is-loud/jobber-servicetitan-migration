@@ -30,12 +30,18 @@ class AttachmentDownloader:
     - Retry logic for failed downloads
     """
 
+    # HTTP timeout constants (in seconds)
+    DEFAULT_CONNECT_TIMEOUT = 30  # Connection establishment timeout
+    DEFAULT_READ_TIMEOUT = 300  # Read timeout for large file downloads (5 minutes)
+
     def __init__(
         self,
         logger: Logger,
         base_download_path: str = "./attachments",
         max_retries: int = 3,
         chunk_size: int = 8192,
+        connect_timeout: int = DEFAULT_CONNECT_TIMEOUT,
+        read_timeout: int = DEFAULT_READ_TIMEOUT,
     ) -> None:
         """Initialize AttachmentDownloader with required dependencies.
 
@@ -44,11 +50,15 @@ class AttachmentDownloader:
             base_download_path: Base directory for attachment storage
             max_retries: Maximum retry attempts for failed downloads
             chunk_size: Chunk size in bytes for streaming downloads
+            connect_timeout: HTTP connection timeout in seconds
+            read_timeout: HTTP read timeout in seconds
         """
         self._logger = logger
         self._base_download_path = base_download_path
         self._max_retries = max_retries
         self._chunk_size = chunk_size
+        self._connect_timeout = connect_timeout
+        self._read_timeout = read_timeout
 
         # Setup HTTP session with retry logic
         self._session = requests.Session()
@@ -66,13 +76,21 @@ class AttachmentDownloader:
         Path(self._base_download_path).mkdir(parents=True, exist_ok=True)
 
         # Configure allowed domains for SSRF protection
-        # Jobber attachments are hosted on their CDN and S3 buckets
+        # NOTE: These domains should be verified against actual Jobber attachment URLs
+        # and narrowed to specific S3 buckets/CloudFront distributions if possible.
+        # Current configuration allows known Jobber domains and their specific CDN endpoints.
         self._allowed_domains = {
+            # Jobber main domains
             "getjobber.com",
             "cdn.getjobber.com",
             "assets.getjobber.com",
-            "s3.amazonaws.com",  # Jobber may use AWS S3
-            "cloudfront.net",  # Common CDN for Jobber assets
+            # Jobber-specific S3 buckets (narrowed from broad s3.amazonaws.com)
+            # TODO: Replace with actual Jobber S3 bucket names once identified
+            "jobber-attachments.s3.amazonaws.com",
+            "jobber-assets.s3.amazonaws.com",
+            # Jobber-specific CloudFront distributions (narrowed from broad cloudfront.net)
+            # TODO: Replace with actual CloudFront distribution IDs once identified
+            "d123456abcdef.cloudfront.net",  # Example - replace with actual distribution
         }
 
     def _validate_url(self, url: str) -> tuple[bool, str]:
@@ -216,7 +234,7 @@ class AttachmentDownloader:
             response = self._session.get(
                 attachment.original_url,
                 stream=True,
-                timeout=(30, 300),  # Connect timeout 30s, read timeout 5min
+                timeout=(self._connect_timeout, self._read_timeout),
                 allow_redirects=False,  # Prevent redirect following for additional security
             )
             response.raise_for_status()
