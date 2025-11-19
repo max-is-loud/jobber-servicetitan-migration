@@ -1548,3 +1548,427 @@ class JobberClient:
         except Exception as e:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(f"Unexpected error while fetching note {note_id}: {e}") from e
+
+    # ========================================================================
+    # Map Mode Query Variants - Lightweight queries for discovery pass
+    # ========================================================================
+    # These queries fetch minimal fields (id, updatedAt, totalCount) to enable
+    # fast entity discovery and relation counting. Used in multi-pass migration
+    # strategy to estimate extraction effort before full data retrieval.
+    # Cost: ~5-10 points per query vs ~100-500 for full queries
+
+    def _get_clients_map_query(self) -> str:
+        """Get lightweight GraphQL query for clients map mode."""
+        return """
+    query GetClientsMap($cursor: String) {
+      clients(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+            notes {
+              totalCount
+            }
+            noteAttachments {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+    """
+
+    def _get_invoices_map_query(self) -> str:
+        """Get lightweight GraphQL query for invoices map mode."""
+        return """
+    query GetInvoicesMap($cursor: String) {
+      invoices(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+            notes {
+              totalCount
+            }
+            noteAttachments {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+    """
+
+    def _get_quotes_map_query(self) -> str:
+        """Get lightweight GraphQL query for quotes map mode."""
+        return """
+    query GetQuotesMap($cursor: String) {
+      quotes(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+            lineItems {
+              totalCount
+            }
+            notes {
+              totalCount
+            }
+            noteAttachments {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+    """
+
+    def _get_jobs_map_query(self) -> str:
+        """Get lightweight GraphQL query for jobs map mode."""
+        return """
+    query GetJobsMap($cursor: String) {
+      jobs(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+            notes {
+              totalCount
+            }
+            noteAttachments {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+    """
+
+    def _get_properties_map_query(self) -> str:
+        """Get lightweight GraphQL query for properties map mode."""
+        return """
+    query GetPropertiesMap($cursor: String) {
+      properties(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+          }
+        }
+      }
+    }
+    """
+
+    def _get_requests_map_query(self) -> str:
+        """Get lightweight GraphQL query for requests map mode."""
+        return """
+    query GetRequestsMap($cursor: String) {
+      requests(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+            notes {
+              totalCount
+            }
+            noteAttachments {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+    """
+
+    def _get_users_map_query(self) -> str:
+        """Get lightweight GraphQL query for users map mode."""
+        return """
+    query GetUsersMap($cursor: String) {
+      users(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            lastLoginAt
+          }
+        }
+      }
+    }
+    """
+
+    def _get_expenses_map_query(self) -> str:
+        """Get lightweight GraphQL query for expenses map mode."""
+        return """
+    query GetExpensesMap($cursor: String) {
+      expenses(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+          }
+        }
+      }
+    }
+    """
+
+    def _get_visits_map_query(self) -> str:
+        """Get lightweight GraphQL query for visits map mode."""
+        return """
+    query GetVisitsMap($cursor: String) {
+      visits(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            createdAt
+          }
+        }
+      }
+    }
+    """
+
+    def _get_timesheet_entries_map_query(self) -> str:
+        """Get lightweight GraphQL query for timesheet entries map mode."""
+        return """
+    query GetTimesheetEntriesMap($cursor: String) {
+      timesheetEntries(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+          }
+        }
+      }
+    }
+    """
+
+    def _get_products_services_map_query(self) -> str:
+        """Get lightweight GraphQL query for products/services map mode."""
+        return """
+    query GetProductsServicesMap($cursor: String) {
+      productsAndServices(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+          }
+        }
+      }
+    }
+    """
+
+    def _get_tax_rates_map_query(self) -> str:
+        """Get lightweight GraphQL query for tax rates map mode."""
+        return """
+    query GetTaxRatesMap($cursor: String) {
+      taxRates(first: 50, after: $cursor) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            updatedAt
+          }
+        }
+      }
+    }
+    """
+
+    def fetch_clients_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch clients with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_clients_map_query(), cursor)
+            if response_data.get("data") is not None and "clients" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'clients' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching clients map: {e}") from e
+
+    def fetch_invoices_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch invoices with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_invoices_map_query(), cursor)
+            if response_data.get("data") is not None and "invoices" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'invoices' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching invoices map: {e}") from e
+
+    def fetch_quotes_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch quotes with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_quotes_map_query(), cursor)
+            if response_data.get("data") is not None and "quotes" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'quotes' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching quotes map: {e}") from e
+
+    def fetch_jobs_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch jobs with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_jobs_map_query(), cursor)
+            if response_data.get("data") is not None and "jobs" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'jobs' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching jobs map: {e}") from e
+
+    def fetch_properties_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch properties with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_properties_map_query(), cursor)
+            if response_data.get("data") is not None and "properties" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'properties' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching properties map: {e}") from e
+
+    def fetch_requests_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch requests with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_requests_map_query(), cursor)
+            if response_data.get("data") is not None and "requests" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'requests' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching requests map: {e}") from e
+
+    def fetch_users_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch users with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_users_map_query(), cursor)
+            if response_data.get("data") is not None and "users" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'users' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching users map: {e}") from e
+
+    def fetch_expenses_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch expenses with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_expenses_map_query(), cursor)
+            if response_data.get("data") is not None and "expenses" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'expenses' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching expenses map: {e}") from e
+
+    def fetch_visits_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch visits with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_visits_map_query(), cursor)
+            if response_data.get("data") is not None and "visits" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'visits' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching visits map: {e}") from e
+
+    def fetch_timesheet_entries_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch timesheet entries with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_timesheet_entries_map_query(), cursor)
+            if response_data.get("data") is not None and "timesheetEntries" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'timesheetEntries' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching timesheet entries map: {e}") from e
+
+    def fetch_products_services_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch products/services with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_products_services_map_query(), cursor)
+            if response_data.get("data") is not None and "productsAndServices" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'productsAndServices' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching products/services map: {e}") from e
+
+    def fetch_tax_rates_map(self, cursor: Optional[str] = None) -> dict[str, Any]:
+        """Fetch tax rates with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_tax_rates_map_query(), cursor)
+            if response_data.get("data") is not None and "taxRates" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'taxRates' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching tax rates map: {e}") from e
