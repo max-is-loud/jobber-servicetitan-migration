@@ -53,7 +53,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
             skip_existing_entities=skip_existing_entities,
         )
         # Track entities from last batch for extract_all
-        self\._last_batch_entities: List\[Quote\] = \[\]
+        self._last_batch_entities: List[Quote] = []
 
         # Initialize attachment downloader for file downloads
         self._attachment_downloader = AttachmentDownloader(logger=logger)

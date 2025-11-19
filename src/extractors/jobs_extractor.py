@@ -46,7 +46,7 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
             entity_name="job",
         )
         # Track entities from last batch for extract_all
-        self\._last_batch_entities: List\[Job\] = \[\]
+        self._last_batch_entities: List[Job] = []
 
         # Initialize attachment downloader for file downloads
         self._attachment_downloader = AttachmentDownloader(logger=logger)

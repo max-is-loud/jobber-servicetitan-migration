@@ -50,7 +50,7 @@ class RequestsExtractor(BaseExtractor[Request]):
             entity_name="request",
         )
         # Track entities from last batch for extract_all
-        self\._last_batch_entities: List\[Request\] = \[\]
+        self._last_batch_entities: List[Request] = []
 
         # Initialize attachment downloader for file downloads
         self._attachment_downloader = AttachmentDownloader(logger=logger)
