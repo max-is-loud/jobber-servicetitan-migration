@@ -149,6 +149,10 @@ class MapModeCoordinator:
                     description=f"Mapped {entity_type} (done)",
                     visible=True,
                 )
+                try:
+                    progress.remove_task(task_id)
+                except KeyError:
+                    pass
 
                 # Track results
                 entity_results[entity_type] = result
