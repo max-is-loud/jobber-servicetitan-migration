@@ -5,6 +5,7 @@ service dependencies used across CLI commands.
 """
 
 import sqlite3
+import atexit
 from pathlib import Path
 from typing import Optional
 
@@ -49,6 +50,7 @@ class ServiceFactory:
 
         # Initialize schema including oauth_tokens table
         repository.init_schema()
+        atexit.register(repository.close)
 
         return repository
 

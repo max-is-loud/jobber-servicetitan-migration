@@ -1,7 +1,7 @@
 """Migration commands for TightBeam CLI."""
 
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, List, Optional
 
 import typer
 
@@ -219,6 +219,141 @@ def migrate_callback(
             enable_adaptive_optimization=enable_adaptive_optimization,
             dry_run=dry_run,
         )
+
+
+@migrate_app.command("map")
+def migrate_map(
+    ctx: typer.Context,
+    entities: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--entity",
+            "--entities",
+            help="Entity types to include (repeat option). Defaults to all supported types.",
+        ),
+    ] = None,
+    snapshot_label: Annotated[
+        Optional[str],
+        typer.Option(
+            "--snapshot-label",
+            help="Optional label for the map snapshot and reports.",
+        ),
+    ] = None,
+    report_dir: Annotated[
+        Path,
+        typer.Option(
+            "--report-dir",
+            help="Directory to write map reports (Markdown and JSON).",
+        ),
+    ] = Path("reports"),
+) -> None:
+    """
+    Run map mode to inventory entities and relation counts before full extraction.
+    """
+    from src.auth import AuthProvider
+    from src.config import ConfigManagerImpl
+    from src.coordinators.map_mode_coordinator import MapModeCoordinator
+    from src.exceptions import ConfigurationError
+    from src.loggers import RichLogger
+    from src.reports import MapReportGenerator
+
+    config = ctx.obj or {}
+    db_path = config.get("db", Path("tightbeam.sqlite"))
+    verbose = config.get("verbose", False)
+    enable_cost_monitoring = config.get("enable_cost_monitoring", True)
+
+    logger = RichLogger(verbose=verbose)
+
+    # Normalize entity selections and validate against supported types
+    available_entity_types = MapModeCoordinator.supported_entity_types()
+    if entities:
+        selected_entity_types = [
+            entity.strip()
+            for raw in entities
+            for entity in raw.split(",")
+            if entity.strip()
+        ]
+    else:
+        selected_entity_types = available_entity_types
+
+    invalid_types = [et for et in selected_entity_types if et not in available_entity_types]
+    if invalid_types:
+        console.print(f"[red]{ERROR_EMOJI} Invalid entity types:[/red] {', '.join(invalid_types)}")
+        console.print(f"[yellow]{INFO_EMOJI} Supported types:[/yellow] {', '.join(available_entity_types)}")
+        raise typer.Exit(1)
+
+    repository = None
+    try:
+        repository = ServiceFactory.create_repository(db_path)
+        oauth_manager = ServiceFactory.create_oauth2_manager()
+        auth_provider = AuthProvider(oauth_manager, repository)
+        config_manager = ConfigManagerImpl()
+
+        # Map mode is lightweight - use aggressive optimization by default
+        optimization_level = "aggressive"
+        jobber_client = ServiceFactory.create_rate_limited_jobber_client(
+            auth_provider=auth_provider,
+            repository=repository,
+            config_manager=config_manager,
+            optimization_level=optimization_level,
+            enable_cost_monitoring=enable_cost_monitoring,
+        )
+
+        logger.info(
+            f"Starting map pass for {len(selected_entity_types)} entity types "
+            f"with {optimization_level.upper()} optimization"
+        )
+
+        coordinator = MapModeCoordinator(
+            jobber_client=jobber_client,
+            repository=repository,
+            logger=logger,
+        )
+
+        map_result = coordinator.run_map_pass(
+            entity_types=selected_entity_types,
+            label=snapshot_label,
+        )
+
+        # Analyze hotspots and density for reporting
+        hotspots_by_type = {
+            entity_type: coordinator.identify_hotspots(map_result["snapshot_id"], entity_type)
+            for entity_type in selected_entity_types
+        }
+        density_stats_by_type = {
+            entity_type: coordinator.get_density_stats(map_result["snapshot_id"], entity_type)
+            for entity_type in selected_entity_types
+        }
+
+        # Generate reports
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_generator = MapReportGenerator(output_dir=report_dir)
+        result_label = map_result["label"] or snapshot_label or "map-pass"
+        markdown_path, json_path = report_generator.generate_report(
+            snapshot_id=map_result["snapshot_id"],
+            label=result_label,
+            entity_results=map_result["entity_results"],
+            totals=map_result["totals"],
+            duration=map_result["duration"],
+            hotspots_by_type=hotspots_by_type,
+            density_stats_by_type=density_stats_by_type,
+        )
+
+        console.print(
+            f"[green]{MIGRATION_EMOJI} Map pass completed for snapshot {map_result['snapshot_id']}[/green]"
+        )
+        console.print(f"{INFO_EMOJI} Label: {result_label}")
+        console.print(f"{INFO_EMOJI} Markdown report: {markdown_path}")
+        console.print(f"{INFO_EMOJI} JSON report: {json_path}")
+    except ConfigurationError as e:
+        console.print(f"[red]{ERROR_EMOJI} Configuration Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:  # pragma: no cover - CLI catch-all
+        console.print(f"[red]{ERROR_EMOJI} Map pass failed:[/red] {e}")
+        raise typer.Exit(1) from e
+    finally:
+        if repository:
+            repository.close()
 
 
 @migrate_app.command("all")

@@ -95,18 +95,18 @@ class TestExtractModeIntegration:
 
         inventory_items = [
             EntityInventory(
-                id=1,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id="client_1",
-                created_at="2023-11-15T10:00:00Z",
+                discovered_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
+                updated_at="2023-11-15T10:00:00Z",
             ),
             EntityInventory(
-                id=2,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id="client_2",
-                created_at="2023-11-15T10:00:00Z",
+                discovered_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
+                updated_at="2023-11-15T10:00:00Z",
             ),
         ]
         mock_repository.get_entity_inventory.return_value = inventory_items
@@ -116,23 +116,17 @@ class TestExtractModeIntegration:
 
         queue_items = [
             ExtractQueueItem(
-                id=1,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id="client_1",
                 status="pending",
-                attempt_count=0,
-                created_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
                 updated_at="2023-11-15T10:00:00Z",
             ),
             ExtractQueueItem(
-                id=2,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id="client_2",
                 status="pending",
-                attempt_count=0,
-                created_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
                 updated_at="2023-11-15T10:00:00Z",
             ),
         ]
@@ -202,11 +196,11 @@ class TestExtractModeIntegration:
 
         inventory_items = [
             EntityInventory(
-                id=1,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id="client_1",
-                created_at="2023-11-15T10:00:00Z",
+                discovered_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
+                updated_at="2023-11-15T10:00:00Z",
             ),
         ]
         mock_repository.get_entity_inventory.return_value = inventory_items
@@ -215,13 +209,10 @@ class TestExtractModeIntegration:
         from src.models import ExtractQueueItem
 
         queue_item = ExtractQueueItem(
-            id=1,
-            map_snapshot_id="snapshot_integration_123",
             entity_type="clients",
             entity_id="client_1",
             status="pending",
-            attempt_count=0,
-            created_at="2023-11-15T10:00:00Z",
+            map_snapshot_id="snapshot_integration_123",
             updated_at="2023-11-15T10:00:00Z",
         )
 
@@ -236,14 +227,11 @@ class TestExtractModeIntegration:
         from src.models import AttachmentQueueItem
 
         attachment_queue_item = AttachmentQueueItem(
-            id=1,
-            map_snapshot_id="snapshot_integration_123",
             attachment_id="attach_1",
             parent_type="clients",
             parent_id="client_1",
             status="pending",
-            attempt_count=0,
-            created_at="2023-11-15T10:00:00Z",
+            map_snapshot_id="snapshot_integration_123",
             updated_at="2023-11-15T10:00:00Z",
         )
 
@@ -285,7 +273,7 @@ class TestExtractModeIntegration:
             mock_fetch.return_value = {"id": "client_1", "firstName": "John", "lastName": "Doe"}
 
             # Mock attachment downloader
-            with patch("src.coordinators.extract_mode_coordinator.AttachmentDownloader") as mock_downloader_class:
+            with patch("src.extractors.attachment_downloader.AttachmentDownloader") as mock_downloader_class:
                 mock_downloader = Mock()
                 mock_downloader.download_attachment.return_value = {
                     "success": True,
@@ -316,11 +304,11 @@ class TestExtractModeIntegration:
 
         inventory_items = [
             EntityInventory(
-                id=i,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id=f"client_{i}",
-                created_at="2023-11-15T10:00:00Z",
+                discovered_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
+                updated_at="2023-11-15T10:00:00Z",
             )
             for i in range(1, 4)
         ]
@@ -331,13 +319,10 @@ class TestExtractModeIntegration:
 
         queue_items = [
             ExtractQueueItem(
-                id=i,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id=f"client_{i}",
                 status="pending",
-                attempt_count=0,
-                created_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
                 updated_at="2023-11-15T10:00:00Z",
             )
             for i in range(1, 3)
@@ -395,11 +380,11 @@ class TestExtractModeIntegration:
 
         inventory_items = [
             EntityInventory(
-                id=1,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id="client_1",
-                created_at="2023-11-15T10:00:00Z",
+                discovered_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
+                updated_at="2023-11-15T10:00:00Z",
             ),
         ]
         mock_repository.get_entity_inventory.return_value = inventory_items
@@ -408,15 +393,13 @@ class TestExtractModeIntegration:
         from src.models import ExtractQueueItem
 
         failed_item = ExtractQueueItem(
-            id=1,
-            map_snapshot_id="snapshot_integration_123",
             entity_type="clients",
             entity_id="client_1",
             status="failed",
-            attempt_count=1,
+            map_snapshot_id="snapshot_integration_123",
             last_error="Previous error",
-            created_at="2023-11-15T10:00:00Z",
             updated_at="2023-11-15T10:00:00Z",
+            attempt_count=1,
         )
 
         def queue_side_effect(snapshot_id, entity_type, status=None):
@@ -466,11 +449,11 @@ class TestExtractModeIntegration:
 
         inventory_items = [
             EntityInventory(
-                id=1,
-                map_snapshot_id="snapshot_integration_123",
                 entity_type="clients",
                 entity_id="client_1",
-                created_at="2023-11-15T10:00:00Z",
+                discovered_at="2023-11-15T10:00:00Z",
+                map_snapshot_id="snapshot_integration_123",
+                updated_at="2023-11-15T10:00:00Z",
             ),
         ]
         mock_repository.get_entity_inventory.return_value = inventory_items
@@ -540,16 +523,14 @@ class TestExtractModeIntegration:
         from src.models import AttachmentQueueItem
 
         failed_attachment = AttachmentQueueItem(
-            id=1,
-            map_snapshot_id="snapshot_integration_123",
             attachment_id="attach_1",
             parent_type="clients",
             parent_id="client_1",
             status="failed",
-            attempt_count=1,
+            map_snapshot_id="snapshot_integration_123",
             last_error="Network error",
-            created_at="2023-11-15T10:00:00Z",
             updated_at="2023-11-15T10:00:00Z",
+            attempt_count=1,
         )
 
         def attachment_queue_side_effect(snapshot_id, status=None):
@@ -575,7 +556,7 @@ class TestExtractModeIntegration:
         mock_repository.get_attachment_by_id.return_value = attachment
 
         # Mock attachment downloader
-        with patch("src.coordinators.extract_mode_coordinator.AttachmentDownloader") as mock_downloader_class:
+        with patch("src.extractors.attachment_downloader.AttachmentDownloader") as mock_downloader_class:
             mock_downloader = Mock()
             mock_downloader.download_attachment.return_value = {
                 "success": True,

@@ -45,6 +45,21 @@ class Repository:
         """
         self._connection = connection
 
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+        try:
+            if self._connection:
+                self._connection.close()
+        except sqlite3.Error:
+            pass
+
+    def __del__(self) -> None:
+        """Ensure connections are closed when repository is garbage collected."""
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def _migrate_existing_tables(self) -> None:
         """Migrate existing tables to add new columns for enhanced models.
 
