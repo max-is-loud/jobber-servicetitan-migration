@@ -374,7 +374,6 @@ class TestJobberClientMapModeQueries:
                         {
                             "node": {
                                 "id": "tax_1",
-                                "updatedAt": "2023-11-15T10:00:00Z",
                             }
                         }
                     ],

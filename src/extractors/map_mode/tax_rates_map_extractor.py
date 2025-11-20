@@ -56,6 +56,6 @@ class TaxRatesMapExtractor(BaseMapExtractor):
             entity_id=node["id"],
             discovered_at=self._get_current_timestamp(),
             map_snapshot_id=self._map_snapshot_id,
-            updated_at=node.get("updatedAt"),
+            updated_at=None,
             estimated_relations_json=json.dumps({}),  # No relations tracked
         )
