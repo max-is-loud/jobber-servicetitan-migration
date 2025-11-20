@@ -315,7 +315,7 @@ class TestJobberClientMapModeQueries:
         """Test fetch_timesheet_entries_map returns properly structured response."""
         mock_response = {
             "data": {
-                "timesheetEntries": {
+                "timeSheetEntries": {
                     "totalCount": 400,
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
                     "edges": [
@@ -335,7 +335,7 @@ class TestJobberClientMapModeQueries:
         with patch.object(jobber_client, "_execute_graphql_request", return_value=mock_response):
             result = jobber_client.fetch_timesheet_entries_map()
 
-        assert result["data"]["timesheetEntries"]["totalCount"] == 400
+        assert result["data"]["timeSheetEntries"]["totalCount"] == 400
 
     # Test products & services map mode query
     def test_fetch_products_services_map_returns_valid_response(self, jobber_client):

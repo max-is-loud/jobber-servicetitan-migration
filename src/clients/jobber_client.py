@@ -1773,7 +1773,7 @@ class JobberClient:
         """Get lightweight GraphQL query for timesheet entries map mode."""
         return """
     query GetTimesheetEntriesMap($cursor: String) {
-      timesheetEntries(first: 50, after: $cursor) {
+      timeSheetEntries(first: 50, after: $cursor) {
         totalCount
         pageInfo {
           hasNextPage
@@ -1940,8 +1940,8 @@ class JobberClient:
         """Fetch timesheet entries with minimal fields for map mode (discovery pass)."""
         try:
             response_data = self._execute_graphql_request(self._get_timesheet_entries_map_query(), cursor)
-            if response_data.get("data") is not None and "timesheetEntries" not in response_data["data"]:
-                raise JobberApiError("Invalid response structure: missing 'timesheetEntries' field in data")
+            if response_data.get("data") is not None and "timeSheetEntries" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'timeSheetEntries' field in data")
             return response_data
         except (ConfigurationError, JobberApiError):
             raise
