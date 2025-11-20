@@ -192,9 +192,6 @@ class TestJobberClientMapModeQueries:
                         {
                             "node": {
                                 "id": "property_1",
-                                "updatedAt": "2023-11-15T10:00:00Z",
-                                "notes": {"totalCount": 1},
-                                "noteAttachments": {"totalCount": 0},
                             }
                         }
                     ],

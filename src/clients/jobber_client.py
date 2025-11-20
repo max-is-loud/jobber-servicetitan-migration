@@ -1677,7 +1677,6 @@ class JobberClient:
         edges {
           node {
             id
-            updatedAt
           }
         }
       }
