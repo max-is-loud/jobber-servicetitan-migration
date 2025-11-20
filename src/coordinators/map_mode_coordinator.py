@@ -126,6 +126,7 @@ class MapModeCoordinator:
             TextColumn("[cyan]{task.fields[mapped]} mapped"),
             TimeElapsedColumn(),
             console=self._console,
+            transient=True,
         ) as progress:
             for entity_type in entity_types:
                 # Create progress task
@@ -139,8 +140,14 @@ class MapModeCoordinator:
                 extractor = self._create_extractor(entity_type, snapshot.id, progress_cb=_increment)
                 result = extractor.extract()
 
-                # Update progress
-                progress.update(task_id, mapped=result["total_entities"])
+                # Update and remove progress line for completed task
+                progress.update(
+                    task_id,
+                    mapped=result["total_entities"],
+                    description=f"Mapped {entity_type} (done)",
+                    completed=True,
+                )
+                progress.remove_task(task_id)
 
                 # Track results
                 entity_results[entity_type] = result
