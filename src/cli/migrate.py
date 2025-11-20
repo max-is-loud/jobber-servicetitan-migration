@@ -356,6 +356,150 @@ def migrate_map(
             repository.close()
 
 
+@migrate_app.command("extract")
+def migrate_extract(
+    ctx: typer.Context,
+    snapshot_id: Annotated[
+        str,
+        typer.Option("--snapshot-id", help="Map snapshot ID to extract from"),
+    ],
+    entities: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--entity",
+            "--entities",
+            help="Entity types to extract (repeat option, defaults to snapshot set)",
+        ),
+    ] = None,
+    report_dir: Annotated[
+        Path,
+        typer.Option(
+            "--report-dir",
+            help="Directory to write extract reports (Markdown and JSON).",
+        ),
+    ] = Path("reports"),
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Resume from existing extract queues instead of recreating them.",
+        ),
+    ] = False,
+) -> None:
+    """
+    Run extract mode to hydrate full data from a map snapshot.
+    """
+    from src.auth import AuthProvider
+    from src.config import ConfigManagerImpl
+    from src.coordinators.extract_mode_coordinator import ExtractModeCoordinator
+    from src.exceptions import ConfigurationError
+    from src.loggers import RichLogger
+    from src.mappers import EntityMapper
+    from src.reports import ExtractReportGenerator
+
+    config = ctx.obj or {}
+    db_path = config.get("db", Path("tightbeam.sqlite"))
+    verbose = config.get("verbose", False)
+    enable_cost_monitoring = config.get("enable_cost_monitoring", True)
+
+    logger = RichLogger(verbose=verbose)
+
+    # Normalize entity selections and validate against supported types
+    available_entity_types = ExtractModeCoordinator.supported_entity_types()
+    selected_entity_types: Optional[List[str]]
+    if entities:
+        selected_entity_types = [
+            entity.strip()
+            for raw in entities
+            for entity in raw.split(",")
+            if entity.strip()
+        ]
+    else:
+        selected_entity_types = None
+
+    if selected_entity_types:
+        invalid_types = [et for et in selected_entity_types if et not in available_entity_types]
+        if invalid_types:
+            console.print(f"[red]{ERROR_EMOJI} Invalid entity types:[/red] {', '.join(invalid_types)}")
+            console.print(f"[yellow]{INFO_EMOJI} Supported types:[/yellow] {', '.join(available_entity_types)}")
+            raise typer.Exit(1)
+
+    repository = None
+    try:
+        repository = ServiceFactory.create_repository(db_path)
+
+        # Validate snapshot exists and fetch label for reporting
+        snapshot = repository.get_map_snapshot(snapshot_id)
+        if not snapshot:
+            console.print(f"[red]{ERROR_EMOJI} Map snapshot not found:[/red] {snapshot_id}")
+            raise typer.Exit(1)
+
+        oauth_manager = ServiceFactory.create_oauth2_manager()
+        auth_provider = AuthProvider(oauth_manager, repository)
+        config_manager = ConfigManagerImpl()
+
+        # Extract mode uses moderate optimization by default
+        optimization_level = "moderate"
+        jobber_client = ServiceFactory.create_rate_limited_jobber_client(
+            auth_provider=auth_provider,
+            repository=repository,
+            config_manager=config_manager,
+            optimization_level=optimization_level,
+            enable_cost_monitoring=enable_cost_monitoring,
+        )
+
+        logger.info(
+            f"Starting extract pass for snapshot {snapshot_id} "
+            f"with {optimization_level.upper()} optimization"
+        )
+
+        entity_mapper = EntityMapper()
+
+        coordinator = ExtractModeCoordinator(
+            jobber_client=jobber_client,
+            entity_mapper=entity_mapper,
+            repository=repository,
+            logger=logger,
+            config_manager=config_manager,
+        )
+
+        extract_result = coordinator.run_extract_pass(
+            snapshot_id=snapshot_id,
+            entity_types=selected_entity_types,
+            resume=resume,
+        )
+
+        # Generate reports
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_generator = ExtractReportGenerator(output_dir=report_dir)
+        result_label = snapshot.label or snapshot_id
+        markdown_path, json_path = report_generator.generate_report(
+            snapshot_id=snapshot_id,
+            label=result_label,
+            entity_results=extract_result["entity_results"],
+            attachment_result=extract_result["attachment_result"],
+            discrepancies=extract_result["discrepancies"],
+            totals=extract_result["totals"],
+            duration=extract_result["duration"],
+        )
+
+        console.print(
+            f"[green]{MIGRATION_EMOJI} Extract pass completed for snapshot {snapshot_id}[/green]"
+        )
+        console.print(f"{INFO_EMOJI} Label: {result_label}")
+        console.print(f"{INFO_EMOJI} Markdown report: {markdown_path}")
+        console.print(f"{INFO_EMOJI} JSON report: {json_path}")
+    except ConfigurationError as e:
+        console.print(f"[red]{ERROR_EMOJI} Configuration Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:  # pragma: no cover - CLI catch-all
+        console.print(f"[red]{ERROR_EMOJI} Extract pass failed:[/red] {e}")
+        raise typer.Exit(1) from e
+    finally:
+        if repository:
+            repository.close()
+
+
 @migrate_app.command("all")
 def migrate_all(
     ctx: typer.Context,

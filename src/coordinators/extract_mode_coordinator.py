@@ -53,6 +53,11 @@ class ExtractModeCoordinator:
         "taxRates": TaxRatesExtractor,
     }
 
+    @classmethod
+    def supported_entity_types(cls) -> List[str]:
+        """Return supported entity types for extract mode."""
+        return sorted(cls._EXTRACTOR_MAP.keys())
+
     def __init__(
         self,
         jobber_client: JobberClient,
