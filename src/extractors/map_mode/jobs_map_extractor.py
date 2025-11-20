@@ -1,7 +1,7 @@
 """JobsMapExtractor for lightweight job entity discovery."""
 
 import json
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 from ...clients import JobberClient
 from ...interfaces import Logger
@@ -19,6 +19,7 @@ class JobsMapExtractor(BaseMapExtractor):
         repository: Repository,
         logger: Logger,
         map_snapshot_id: str,
+        progress_callback: Optional[Callable[[int], None]] = None,
     ) -> None:
         """Initialize JobsMapExtractor.
 
@@ -34,6 +35,7 @@ class JobsMapExtractor(BaseMapExtractor):
             logger=logger,
             map_snapshot_id=map_snapshot_id,
             entity_type_name="jobs",
+            progress_callback=progress_callback,
         )
 
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:

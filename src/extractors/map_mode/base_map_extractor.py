@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 from ...clients import JobberClient
 from ...interfaces import Logger
@@ -26,6 +26,7 @@ class BaseMapExtractor(ABC):
         logger: Logger,
         map_snapshot_id: str,
         entity_type_name: str,
+        progress_callback: Optional[Callable[[int], None]] = None,
     ) -> None:
         """Initialize BaseMapExtractor with required dependencies.
 
@@ -41,6 +42,7 @@ class BaseMapExtractor(ABC):
         self._logger = logger
         self._map_snapshot_id = map_snapshot_id
         self._entity_type_name = entity_type_name
+        self._progress_callback = progress_callback
 
         # Extraction statistics
         self._total_entities = 0
@@ -127,6 +129,8 @@ class BaseMapExtractor(ABC):
             if entities:
                 self._save_entities(entities)
                 self._total_entities += len(entities)
+                if self._progress_callback:
+                    self._progress_callback(len(entities))
 
             self._total_pages += 1
 

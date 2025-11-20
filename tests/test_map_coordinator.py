@@ -148,7 +148,7 @@ class TestMapModeCoordinator:
             "entity_type": "invoices",
         }
 
-        def create_extractor_side_effect(entity_type, snapshot_id):
+        def create_extractor_side_effect(entity_type, snapshot_id, **kwargs):
             if entity_type == "clients":
                 return mock_clients_extractor
             elif entity_type == "invoices":

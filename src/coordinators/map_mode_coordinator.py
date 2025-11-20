@@ -131,8 +131,12 @@ class MapModeCoordinator:
                 # Create progress task
                 task_id = progress.add_task(f"Mapping {entity_type}...", total=None, mapped=0)
 
+                def _increment(count: int, tid: TaskID = task_id) -> None:
+                    current = progress.tasks[tid].fields.get("mapped", 0)
+                    progress.update(tid, mapped=current + count)
+
                 # Run extractor
-                extractor = self._create_extractor(entity_type, snapshot.id)
+                extractor = self._create_extractor(entity_type, snapshot.id, progress_cb=_increment)
                 result = extractor.extract()
 
                 # Update progress
@@ -193,7 +197,7 @@ class MapModeCoordinator:
         self._repository.save_map_snapshot(snapshot)
         return snapshot
 
-    def _create_extractor(self, entity_type: str, snapshot_id: str):
+    def _create_extractor(self, entity_type: str, snapshot_id: str, progress_cb=None):
         """Create map mode extractor for the specified entity type.
 
         Args:
@@ -209,6 +213,7 @@ class MapModeCoordinator:
             repository=self._repository,
             logger=self._logger,
             map_snapshot_id=snapshot_id,
+            progress_callback=progress_cb,
         )
 
     def identify_hotspots(
