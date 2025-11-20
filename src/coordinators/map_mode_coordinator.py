@@ -116,6 +116,9 @@ class MapModeCoordinator:
         entity_results = {}
         total_entities = 0
 
+        # Add a spacer line so subsequent progress output doesn't overlap prior logs
+        self._console.print()
+
         # Run extraction with Rich progress display
         with Progress(
             TextColumn("[bold blue]{task.description}"),
@@ -127,7 +130,6 @@ class MapModeCoordinator:
             for entity_type in entity_types:
                 # Create progress task
                 task_id = progress.add_task(f"Mapping {entity_type}...", total=1)
-                self._logger.info(f"Starting map mode extraction for {entity_type}")
 
                 # Run extractor
                 extractor = self._create_extractor(entity_type, snapshot.id)
