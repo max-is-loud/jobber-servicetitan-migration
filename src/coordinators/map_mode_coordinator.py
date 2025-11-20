@@ -5,15 +5,7 @@ from datetime import datetime
 from typing import Any, List, Optional
 
 from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskID,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
+from rich.progress import Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 
 from ..clients import JobberClient
 from ..extractors.map_mode import (
@@ -131,21 +123,20 @@ class MapModeCoordinator:
         with Progress(
             SpinnerColumn(),
             TextColumn("[bold blue]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
+            TextColumn("[cyan]{task.fields[mapped]} mapped"),
             TimeElapsedColumn(),
             console=self._console,
         ) as progress:
             for entity_type in entity_types:
                 # Create progress task
-                task_id = progress.add_task(f"Mapping {entity_type}...", total=1)
+                task_id = progress.add_task(f"Mapping {entity_type}...", total=None, mapped=0)
 
                 # Run extractor
                 extractor = self._create_extractor(entity_type, snapshot.id)
                 result = extractor.extract()
 
                 # Update progress
-                progress.update(task_id, completed=1)
+                progress.update(task_id, mapped=result["total_entities"])
 
                 # Track results
                 entity_results[entity_type] = result
