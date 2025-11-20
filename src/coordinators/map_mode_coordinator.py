@@ -138,6 +138,8 @@ class MapModeCoordinator:
 
                 # Run extractor
                 extractor = self._create_extractor(entity_type, snapshot.id, progress_cb=_increment)
+                # Add a blank line to keep log output from colliding with progress row
+                self._console.line()
                 result = extractor.extract()
 
                 # Update progress line for completed task
