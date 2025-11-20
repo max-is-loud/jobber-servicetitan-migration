@@ -126,7 +126,8 @@ class MapModeCoordinator:
         ) as progress:
             for entity_type in entity_types:
                 # Create progress task
-                task_id = progress.add_task(f"Extracting {entity_type}...", total=1)
+                task_id = progress.add_task(f"Mapping {entity_type}...", total=1)
+                self._logger.info(f"Starting map mode extraction for {entity_type}")
 
                 # Run extractor
                 extractor = self._create_extractor(entity_type, snapshot.id)
@@ -140,7 +141,7 @@ class MapModeCoordinator:
                 total_entities += result["total_entities"]
 
                 self._logger.success(
-                    f"Completed {entity_type}: {result['total_entities']} entities"
+                    f"Completed {entity_type}: {result['total_entities']} entities in {result['total_pages']} pages"
                 )
 
         # Calculate duration

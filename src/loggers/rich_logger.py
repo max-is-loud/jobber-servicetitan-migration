@@ -33,7 +33,7 @@ class RichLogger(Logger):
         Args:
             message: The message to log
         """
-        self.console.print(f"[green]INFO[/green]: {message}")
+        self.console.print(f"[yellow]INFO[/yellow]: {message}")
 
     def debug(self, message: str) -> None:
         """Print debug message if verbose mode is enabled.
