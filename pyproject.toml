@@ -21,10 +21,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Utilities",
 ]
-dependencies = [
-    "pytest>=8.3.5",
-    "pytest-cov>=5.0.0",
-]
 
 [tool.poetry]
 name = "tightbeam-v2"

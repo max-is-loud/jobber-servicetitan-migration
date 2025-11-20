@@ -79,6 +79,7 @@ class AdaptivePerformanceOptimizer:
         max_page_size: int = 100,
         min_page_delay: float = 0.1,
         max_page_delay: float = 10.0,
+        persist_settings: bool = True,
     ):
         """Initialize the adaptive optimizer.
 
@@ -100,6 +101,7 @@ class AdaptivePerformanceOptimizer:
         self.max_page_size = max_page_size
         self.min_page_delay = min_page_delay
         self.max_page_delay = max_page_delay
+        self._persist_settings = persist_settings
 
         # Performance tracking
         self.metrics = PerformanceMetrics()
@@ -295,6 +297,8 @@ class AdaptivePerformanceOptimizer:
 
     def _apply_settings(self) -> None:
         """Apply current settings to the configuration manager."""
+        if not self._persist_settings:
+            return
         try:
             # Update configuration (this will trigger hot-reload)
             import yaml

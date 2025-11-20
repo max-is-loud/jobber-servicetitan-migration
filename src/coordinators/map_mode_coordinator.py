@@ -88,6 +88,7 @@ class MapModeCoordinator:
                 logger=self._logger,
                 target_throttle_rate=0.05,
                 optimization_interval=10,
+                persist_settings=False,
             )
 
     def run_map_pass(

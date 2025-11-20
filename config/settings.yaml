@@ -1,51 +1,306 @@
+# TightBeam Configuration Settings
+# =================================
+# Self-documenting configuration for rate limiting, pagination, and performance tuning.
+# All settings can be adjusted based on client migration requirements and API behavior.
+
+# Rate Limiting Configuration
+# ----------------------------
+# Controls request throttling to avoid exceeding Jobber API rate limits.
+# Uses token bucket algorithm: tokens regenerate over time, consumed per request.
+#
+# Jobber API limits: ~600 requests/minute (10 req/sec) under normal conditions.
+# Choose optimization level based on migration size and urgency:
+#   - conservative: Safest, slowest (~4 req/sec) - use for first-time migrations
+#   - moderate: Balanced performance (~10 req/sec) - recommended default
+#   - aggressive: Fastest, higher throttle risk (~8 req/sec) - use for urgent migrations
+#
+# ⚠️  WARNING: Aggressive settings may trigger 429 errors if other API consumers active.
+# See: docs/architecture/rate-limiting.md for detailed analysis
+
 rate_limits:
   conservative:
+    # Maximum tokens in bucket (burst capacity)
+    # Higher = allows more burst requests, but increases throttling risk
     capacity: 250
+
+    # Tokens added per minute (sustained request rate)
+    # 240/min ≈ 4 requests/second
+    # Lower rate reduces API throttling but increases migration time
     refill_rate: 240
+
+    # Starting tokens (available immediately at migration start)
+    # Lower initial = slower start but safer
     initial_tokens: 40
+
+    # Safety margin (0.0-1.0): percentage of capacity reserved as buffer
+    # 0.52 = keep 52% tokens in reserve to handle rate limit fluctuations
+    # Higher margin = more conservative, fewer throttle events
+    # RECOMMENDATION: Don't reduce below 0.4 to avoid excessive throttling
     safety_margin: 0.52
+
   moderate:
+    # Balanced profile for typical client migrations
+    # Targets ~10 req/sec (Jobber's documented limit)
     capacity: 600
-    refill_rate: 600
+    refill_rate: 600  # 600/min = 10 req/sec
     initial_tokens: 150
-    safety_margin: 0.1
+    safety_margin: 0.1  # 10% reserve - minimal buffering
+
   aggressive:
+    # Fast profile for urgent migrations or small datasets
+    # ⚠️  May cause throttling if client has other active integrations
     capacity: 500
-    refill_rate: 480
+    refill_rate: 480  # 480/min ≈ 8 req/sec
     initial_tokens: 100
-    safety_margin: 0.04
+    safety_margin: 0.04  # Only 4% reserve - minimal safety buffer
+
+# Maximum retry attempts for rate-limited requests
+# Applies exponential backoff on 429 (throttled) responses
+# Default: 15 retries (adequate for most scenarios)
+# TUNING:
+#   - Increase to 20-25 for very large migrations or unstable API
+#   - Reduce to 10 for faster failure detection
+# NOTE: With max_delay of 300s, 15 retries = up to 75 minutes total wait time
 max_retries: 15
+
+# Pagination Settings
+# --------------------
+# Number of entities to fetch per GraphQL query (per page).
+# Jobber GraphQL uses cursor-based pagination with cost calculation.
+#
+# GraphQL Cost Formula: ~1 point per entity + fields requested
+# Example: Fetching 50 clients with nested fields ≈ 50-100 points per query
+#
+# ⚠️  CRITICAL: Larger page sizes increase query cost and may hit rate limits faster.
+# Smaller pages = more queries but lower cost per query = more stable.
+#
+# TUNING GUIDE:
+#   - Start with defaults (30-50 entities/page)
+#   - If seeing throttling: reduce page sizes
+#   - If migration too slow: increase page sizes (but monitor throttling rate)
+#   - For entities with many nested fields: use smaller pages (10-20)
+
 pagination:
-  clients: 51
-  invoices: 51
+  # Client entities (includes nested properties, contacts)
+  # Default: 42 (tested sweet spot for client complexity)
+  # Reduce to 20-30 if clients have many properties/contacts
+  clients: 42
+
+  # Invoice entities (includes line items, payments)
+  # Default: 10 (invoices are heavy with line items)
+  # ⚠️  Don't increase above 20 - invoice queries are expensive
+  invoices: 10
+
+  # Quote entities (includes line items, approval workflow)
+  # Default: 50 (quotes are lighter than invoices)
+  # Can increase to 75-100 for clients with simple quotes
   quotes: 50
+
+  # Job entities (includes visits, tasks, team assignments)
+  # Default: 30 (balanced for typical job complexity)
   jobs: 30
+
+  # Property/service location entities
+  # Default: 30 (properties are lightweight)
+  # Can increase to 50-75 safely
   properties: 30
+
+  # Service request entities
+  # Default: 30
   requests: 30
+
+  # Team member/user entities
+  # Default: 30 (users are lightweight, usually small dataset)
+  # Can increase to 50-100 - most clients have <100 users
   users: 30
+
+  # Expense entities (job-related costs)
+  # Default: 30
   expenses: 30
+
+  # Visit/appointment entities
+  # Default: 30
   visits: 30
+
+  # Timesheet/time tracking entries
+  # Default: 30 (can be large dataset for active teams)
+  # Keep at 30 or reduce to 20 for clients with extensive time tracking
   timesheet_entries: 30
+
+  # Product/service catalog items
+  # Default: 30 (usually small dataset <500 items)
+  # Can increase to 50-100 safely
   product_services: 30
+
+  # Tax rate configuration entities
+  # Default: 30 (very small dataset, usually <20 rates)
+  # Can increase to 50-100 safely
   tax_rates: 30
+
+  # Nested notes fetching (for optimized inline note extraction)
+  # Default: 10 (balances cost reduction with typical note counts)
+  # ⚠️  This is used in nested queries within parent entities (clients, jobs, invoices)
+  # TUNING:
+  #   - Reduce to 5 if most entities have few notes (reduces query cost)
+  #   - Increase to 20 if clients have many notes and need full batch (increases cost)
+  #   - Keep at 10 for optimal 60-70% cost reduction vs individual fetches
+  # See: docs/architecture/notes-optimization.md for analysis
   nested_notes: 10
+
+  # Default page size for any entity type not specified above
+  # Used as fallback when new entity types are added
   default: 30
+
+# Timing & Delay Configuration
+# -----------------------------
+# Controls request pacing and timeout behaviors.
+
 delays:
+  # Delay between pagination requests (seconds)
+  # Adds breathing room between consecutive GraphQL queries
+  # Default: 1 second
+  # TUNING:
+  #   - Increase to 2-3s if experiencing throttling
+  #   - Reduce to 0.5s for aggressive migrations (not recommended)
+  #   - Set to 0 to disable (rely entirely on rate limiter)
   page_delay: 1.0
+
+  # HTTP request timeout (seconds)
+  # Maximum wait time for Jobber API response
+  # Default: 30 seconds (sufficient for complex queries)
+  # TUNING:
+  #   - Increase to 60s if queries timeout on large datasets
+  #   - Reduce to 15-20s for faster failure detection
+  # ⚠️  Don't set below 15s - complex queries need time to execute
   request_timeout: 30.0
+
+  # Base delay for retry attempts (seconds)
+  # Initial wait time before retrying a failed request
+  # Default: 2 seconds (with exponential backoff from here)
+  # Works with backoff.multiplier for exponential growth
   retry_base_delay: 2.0
+
+# Exponential Backoff Configuration
+# ----------------------------------
+# Controls retry behavior when rate limits are hit (429 errors).
+# Uses exponential backoff: delay doubles with each retry.
+#
+# Delay Calculation: min(initial_delay * (multiplier ^ retry_count), max_delay)
+# Example: 5s, 10s, 20s, 40s, 80s, 160s, 300s (capped at max_delay)
+
 backoff:
+  # Initial delay when first 429 error encountered (seconds)
+  # Default: 5 seconds
+  # TUNING:
+  #   - Increase to 10s if experiencing rapid consecutive 429s
+  #   - Reduce to 2-3s for faster recovery (may cause more retries)
   initial_delay: 5.0
+
+  # Maximum delay between retries (seconds)
+  # Default: 300 seconds (5 minutes)
+  # Caps exponential growth to avoid excessive wait times
+  # TUNING:
+  #   - Reduce to 120s (2 min) if migrations timing out
+  #   - Increase to 600s (10 min) for severe rate limit situations
+  # NOTE: ServiceFactory hardcodes max_retries=15, so max total wait ≈ 75 minutes
   max_delay: 300.0
+
+  # Exponential multiplier for backoff growth
+  # Default: 2.0 (delay doubles each retry)
+  # TUNING:
+  #   - Reduce to 1.5 for gentler backoff progression
+  #   - Increase to 3.0 for aggressive backoff (faster cap at max_delay)
   multiplier: 2.0
+
+  # Jitter factor (0.0-1.0): randomization to prevent thundering herd
+  # Adds ±20% random variance to delay times
+  # Default: 0.2 (±20% jitter)
+  # Prevents multiple TightBeam instances from synchronizing retries
+  # RECOMMENDATION: Keep at 0.1-0.3, don't disable (0.0)
   jitter_factor: 0.2
+
+# Logging Configuration
+# ----------------------
+# Controls console output verbosity and debugging information.
+
 logging:
+  # Enable detailed cost monitoring output
+  # Shows GraphQL query costs, token bucket state, throttle statistics
+  # Default: true
+  # TUNING:
+  #   - Set to false for cleaner console output in production
+  #   - Keep true during optimization and troubleshooting
   verbose_cost_monitoring: true
+
+  # Enable performance metrics logging
+  # Shows migration speed, entities/minute, rate limiting effectiveness
+  # Default: true
+  # Minimal overhead, recommended to keep enabled
   performance_logging: true
+
+  # Python logging level
+  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  # Default: DEBUG (shows all diagnostic information)
+  # TUNING:
+  #   - Use INFO for normal operations (reduces log volume)
+  #   - Use DEBUG for troubleshooting rate limiting or API issues
+  #   - Use WARNING for production (only errors and warnings)
   level: DEBUG
+
+# Database Configuration
+# -----------------------
+# SQLite database settings for migration data persistence.
+
 database:
+  # Default database filename
+  # Used when --db flag not specified in CLI commands
+  # Default: tightbeam.db (in current working directory)
+  # RECOMMENDATION: Use separate databases per client for isolation
+  # Example: client_name_2025-01-17.db
   default_path: tightbeam.db
+
+  # Database connection timeout (seconds)
+  # Max wait time when database is locked by another process
+  # Default: 30 seconds
+  # TUNING:
+  #   - Increase to 60s if multiple processes accessing same database
+  #   - Reduce to 10s for faster failure detection
   timeout: 30.0
+
+  # Enable Write-Ahead Logging (WAL) mode
+  # Improves concurrent access and write performance
+  # Default: true (recommended for all scenarios)
+  # BENEFITS:
+  #   - Better concurrency (readers don't block writers)
+  #   - Faster commits (writes are batched)
+  #   - Safer (less corruption risk)
+  # ⚠️  Only disable if compatibility issues with old SQLite versions
   wal_mode: true
+
+# Attachment Download Configuration
+# ----------------------------------
+# Controls how attachment files are downloaded during extraction.
+
 attachments:
+  # Automatically download attachment files during extraction
+  # When enabled: Downloads happen synchronously, blocking pagination
+  # When disabled: Only metadata is saved, files must be downloaded manually later
+  # Default: true (automatic downloads)
+  # TUNING:
+  #   - Set to false for faster extraction (metadata-only mode)
+  #   - Keep true for complete one-pass migrations
+  # PERFORMANCE NOTE: For large datasets (e.g., 42 clients × 5 attachments = 210 files),
+  # synchronous downloads can significantly slow pagination. Consider setting to false
+  # and downloading files in a separate batch process after metadata extraction.
   auto_download: true
+
+# Configuration Notes
+# --------------------
+# 1. After changing settings, test with small migrations first
+# 2. Monitor throttle rate in logs: <5% is healthy, >10% needs tuning
+# 3. If uncertain, start with 'conservative' rate limit profile
+# 4. See TROUBLESHOOTING.md for common configuration issues
+# 5. See docs/architecture/rate-limiting.md for technical deep-dive
+#
+# Default optimization level: moderate (set in src/constants.py)
+# Override with: --optimization-level conservative|moderate|aggressive
