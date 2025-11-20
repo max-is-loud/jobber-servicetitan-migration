@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..extractors.map_mode import (
     ClientsMapExtractor,
     ExpensesMapExtractor,
@@ -24,6 +25,7 @@ from ..extractors.map_mode import (
 )
 from ..interfaces import Logger
 from ..models import MapSnapshot
+from ..performance import AdaptivePerformanceOptimizer
 from ..repositories import Repository
 
 
@@ -62,6 +64,8 @@ class MapModeCoordinator:
         jobber_client: JobberClient,
         repository: Repository,
         logger: Logger,
+        config_manager: Optional[ConfigManagerImpl] = None,
+        enable_adaptive_optimization: bool = False,
     ) -> None:
         """Initialize MapModeCoordinator.
 
@@ -69,11 +73,22 @@ class MapModeCoordinator:
             jobber_client: Client for Jobber GraphQL API communication
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            config_manager: Optional configuration manager for pagination/delay settings
+            enable_adaptive_optimization: Enable adaptive paging/delay tuning
         """
         self._jobber_client = jobber_client
         self._repository = repository
         self._logger = logger
         self._console = Console()
+        self._config_manager = config_manager or ConfigManagerImpl()
+        self._adaptive_optimizer: Optional[AdaptivePerformanceOptimizer] = None
+        if enable_adaptive_optimization:
+            self._adaptive_optimizer = AdaptivePerformanceOptimizer(
+                config_manager=self._config_manager,
+                logger=self._logger,
+                target_throttle_rate=0.05,
+                optimization_interval=10,
+            )
 
     def run_map_pass(
         self,
@@ -102,6 +117,8 @@ class MapModeCoordinator:
             ValueError: If invalid entity types are provided
         """
         self._logger.info(f"Starting map mode extraction for entity types: {entity_types}")
+        if self._adaptive_optimizer:
+            self._logger.info("🤖 Adaptive optimization enabled for map pass (auto-tuning page size/delays)")
 
         # Validate entity types
         invalid_types = [et for et in entity_types if et not in self._EXTRACTOR_MAP]
@@ -115,6 +132,7 @@ class MapModeCoordinator:
         start_time = datetime.utcnow()
         entity_results = {}
         total_entities = 0
+        mapped_counts: dict[TaskID, int] = {}
 
         # Add a spacer line so subsequent progress output doesn't overlap prior logs
         self._console.print()
@@ -131,10 +149,11 @@ class MapModeCoordinator:
             for entity_type in entity_types:
                 # Create progress task
                 task_id = progress.add_task(f"Mapping {entity_type}...", total=None, mapped=0)
+                mapped_counts[task_id] = 0
 
                 def _increment(count: int, tid: TaskID = task_id) -> None:
-                    current = progress.tasks[tid].fields.get("mapped", 0)
-                    progress.update(tid, mapped=current + count)
+                    mapped_counts[tid] = mapped_counts.get(tid, 0) + count
+                    progress.update(tid, mapped=mapped_counts[tid])
 
                 # Run extractor
                 extractor = self._create_extractor(entity_type, snapshot.id, progress_cb=_increment)
@@ -143,6 +162,7 @@ class MapModeCoordinator:
                 result = extractor.extract()
 
                 # Update progress line for completed task
+                mapped_counts[task_id] = result["total_entities"]
                 progress.update(
                     task_id,
                     total=result["total_entities"] or 1,
@@ -151,10 +171,6 @@ class MapModeCoordinator:
                     description=f"Mapped {entity_type} (done)",
                     visible=True,
                 )
-                try:
-                    progress.remove_task(task_id)
-                except KeyError:
-                    pass
 
                 # Track results
                 entity_results[entity_type] = result
@@ -172,6 +188,16 @@ class MapModeCoordinator:
             f"Map pass completed: {total_entities} total entities across "
             f"{len(entity_types)} types in {duration:.1f}s"
         )
+
+        if self._adaptive_optimizer:
+            perf_summary = self._adaptive_optimizer.get_performance_summary()
+            self._logger.info(
+                "Adaptive optimization summary: "
+                f"page_size={perf_summary['current_page_size']}, "
+                f"page_delay={perf_summary['current_page_delay']}, "
+                f"throttle_rate={perf_summary['throttle_rate']}, "
+                f"throughput={perf_summary['current_throughput']}"
+            )
 
         return {
             "snapshot_id": snapshot.id,
@@ -227,6 +253,7 @@ class MapModeCoordinator:
             repository=self._repository,
             logger=self._logger,
             map_snapshot_id=snapshot_id,
+            adaptive_optimizer=self._adaptive_optimizer,
             progress_callback=progress_cb,
         )
 

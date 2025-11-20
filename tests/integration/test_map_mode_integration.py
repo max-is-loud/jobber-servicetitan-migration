@@ -6,7 +6,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 
+from src.auth import AuthProvider
 from src.clients import JobberClient
+from src.config import ConfigManagerImpl
 from src.coordinators.map_mode_coordinator import MapModeCoordinator
 from src.extractors.map_mode import ClientsMapExtractor, InvoicesMapExtractor
 from src.interfaces import Logger
@@ -42,24 +44,26 @@ class TestMapModeIntegration:
         return logger
 
     @pytest.fixture
-    def mock_config(self):
-        """Create mock configuration."""
-        config = Mock()
-        config.get_jobber_api_url.return_value = "https://api.getjobber.com/api/graphql"
-        config.get_jobber_access_token.return_value = "test_token"
-        return config
+    def mock_config_manager(self):
+        """Create mock configuration manager for pagination sizes."""
+        config_manager = Mock(spec=ConfigManagerImpl)
+        config_manager.get_pagination_config.return_value = 50
+        return config_manager
 
     @pytest.fixture
-    def mock_oauth_provider(self):
-        """Create mock OAuth provider."""
-        provider = Mock()
-        provider.get_access_token.return_value = "test_token"
-        return provider
+    def mock_auth_provider(self):
+        """Create mock AuthProvider."""
+        return Mock(spec=AuthProvider)
 
     @pytest.fixture
-    def jobber_client(self, mock_config, mock_oauth_provider):
+    def jobber_client(self, mock_auth_provider, mock_config_manager):
         """Create JobberClient with mocked dependencies."""
-        return JobberClient(mock_config, mock_oauth_provider)
+        http_client = Mock()
+        return JobberClient(
+            auth_provider=mock_auth_provider,
+            http_client=http_client,
+            config_manager=mock_config_manager,
+        )
 
     @pytest.fixture
     def coordinator(self, jobber_client, repository, mock_logger):

@@ -261,6 +261,7 @@ def migrate_map(
     db_path = config.get("db", Path("tightbeam.sqlite"))
     verbose = config.get("verbose", False)
     enable_cost_monitoring = config.get("enable_cost_monitoring", True)
+    enable_adaptive_optimization = config.get("enable_adaptive_optimization", False)
 
     logger = RichLogger(verbose=verbose)
 
@@ -308,6 +309,8 @@ def migrate_map(
             jobber_client=jobber_client,
             repository=repository,
             logger=logger,
+            config_manager=config_manager,
+            enable_adaptive_optimization=enable_adaptive_optimization,
         )
 
         map_result = coordinator.run_map_pass(
@@ -628,6 +631,7 @@ def migrate_all(
     actual_resume = resume if resume is not None else config.get("resume", False)
 
     connection = None
+    repository = None
 
     try:
         # Create database connection with Rich logger
@@ -956,6 +960,11 @@ def migrate_all(
         console.print("     - JOBBER_TOKEN")
 
         sys.exit(1)
+    finally:
+        if repository:
+            repository.close()
+        elif connection:
+            connection.close()
 
 
 @migrate_app.command("quotes")

@@ -5,6 +5,7 @@ from typing import Any, Callable, List, Optional
 
 from ...clients import JobberClient
 from ...interfaces import Logger
+from ...performance import AdaptivePerformanceOptimizer
 from ...models import EntityInventory
 from ...repositories import Repository
 from .base_map_extractor import BaseMapExtractor
@@ -19,6 +20,7 @@ class RequestsMapExtractor(BaseMapExtractor):
         repository: Repository,
         logger: Logger,
         map_snapshot_id: str,
+        adaptive_optimizer: Optional[AdaptivePerformanceOptimizer] = None,
         progress_callback: Optional[Callable[[int], None]] = None,
     ) -> None:
         """Initialize RequestsMapExtractor.
@@ -35,12 +37,13 @@ class RequestsMapExtractor(BaseMapExtractor):
             logger=logger,
             map_snapshot_id=map_snapshot_id,
             entity_type_name="requests",
+            adaptive_optimizer=adaptive_optimizer,
             progress_callback=progress_callback,
         )
 
-    def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
+    def _fetch_page(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
         """Fetch a page of requests using map mode query."""
-        return self._jobber_client.fetch_requests_map(cursor)
+        return self._jobber_client.fetch_requests_map(cursor, page_size)
 
     def _extract_edges_and_page_info(
         self, response: dict[str, Any]

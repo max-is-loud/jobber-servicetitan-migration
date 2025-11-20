@@ -38,6 +38,7 @@ def _execute_entity_extraction(
         resume: Skip entities that already exist in database
     """
     connection = None
+    repository = None
 
     try:
         # Create database connection and logger
@@ -313,5 +314,7 @@ def _execute_entity_extraction(
         logger.error(f"Error during {entity_type} extraction: {e}")
         exit_code = 1
     finally:
-        if connection:
-            connection.close() 
+        if repository:
+            repository.close()
+        elif connection:
+            connection.close()
