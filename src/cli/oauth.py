@@ -452,6 +452,8 @@ def oauth_status() -> None:
     status_table.add_column("Status", justify="left")
     status_table.add_column("Details", justify="left")
 
+    recommendations: list[str] = []
+
     # Check for environment token first
     jobber_token = os.environ.get("JOBBER_TOKEN")
     if jobber_token:
@@ -520,7 +522,7 @@ def oauth_status() -> None:
 
         status_table.add_row(
             "Authentication Mode",
-            "[blue]OAuth2[/blue]",
+            "[blue]🔐 OAuth2[/blue]",
             "OAuth2 environment variables configured",
         )
 
@@ -551,19 +553,11 @@ def oauth_status() -> None:
                     "Authentication working correctly",
                 )
             except Exception as e:
-                status_table.add_row("Token Validation", "[red]⚠️ Failed[/red]", f"Error: {e}")
-                status_table.add_row(
-                    "Recommendation",
-                    "[yellow]💡 Action Needed[/yellow]",
-                    "Run 'tightbeam oauth init' to re-authorize",
-                )
+                status_table.add_row("Token Validation", "[red]❌ Failed[/red]", f"Error: {e}")
+                recommendations.append("💡 Action Needed: Run 'tightbeam oauth init' to re-authorize.")
         else:
-            status_table.add_row("Token Storage", "[yellow]⚠️ Missing[/yellow]", "No tokens stored yet")
-            status_table.add_row(
-                "Recommendation",
-                "[yellow]💡 Action Needed[/yellow]",
-                "Run 'tightbeam oauth init' to complete setup",
-            )
+            status_table.add_row("Token Storage", "[red]❌ Missing[/red]", "No tokens stored yet")
+            recommendations.append("💡 Action Needed: Run 'tightbeam oauth init' to complete setup.")
 
     except ConfigurationError:
         status_table.add_row(
@@ -577,8 +571,11 @@ def oauth_status() -> None:
             "[blue]OAuth2 Setup[/blue]",
             "Configure OAuth2 and run 'tightbeam oauth init'",
         )
+        recommendations.append("💡 Action Needed: Configure auth and rerun 'tightbeam oauth init'.")
 
     console.print(status_table)
+    for rec in recommendations:
+        console.print(rec)
 
 
 @oauth_app.command("clear")
