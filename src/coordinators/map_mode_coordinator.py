@@ -5,7 +5,15 @@ from datetime import datetime
 from typing import Any, List, Optional
 
 from rich.console import Console
-from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 from ..clients import JobberClient
 from ..extractors.map_mode import (
@@ -121,10 +129,11 @@ class MapModeCoordinator:
 
         # Run extraction with Rich progress display
         with Progress(
+            SpinnerColumn(),
             TextColumn("[bold blue]{task.description}"),
             BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
             console=self._console,
         ) as progress:
             for entity_type in entity_types:
@@ -136,7 +145,7 @@ class MapModeCoordinator:
                 result = extractor.extract()
 
                 # Update progress
-                progress.update(task_id, advance=1)
+                progress.update(task_id, completed=1)
 
                 # Track results
                 entity_results[entity_type] = result
