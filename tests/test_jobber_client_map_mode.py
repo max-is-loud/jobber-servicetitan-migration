@@ -345,7 +345,7 @@ class TestJobberClientMapModeQueries:
         """Test fetch_products_services_map returns properly structured response."""
         mock_response = {
             "data": {
-                "productsAndServices": {
+                "productOrServices": {
                     "totalCount": 75,
                     "pageInfo": {"hasNextPage": True, "endCursor": "cursor_prod"},
                     "edges": [
@@ -363,7 +363,7 @@ class TestJobberClientMapModeQueries:
         with patch.object(jobber_client, "_execute_graphql_request", return_value=mock_response):
             result = jobber_client.fetch_products_services_map()
 
-        assert result["data"]["productsAndServices"]["totalCount"] == 75
+        assert result["data"]["productOrServices"]["totalCount"] == 75
 
     # Test tax rates map mode query
     def test_fetch_tax_rates_map_returns_valid_response(self, jobber_client):

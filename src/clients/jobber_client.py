@@ -1794,7 +1794,7 @@ class JobberClient:
         """Get lightweight GraphQL query for products/services map mode."""
         return """
     query GetProductsServicesMap($cursor: String) {
-      productsAndServices(first: 50, after: $cursor) {
+      productOrServices(first: 50, after: $cursor) {
         totalCount
         pageInfo {
           hasNextPage
@@ -1953,8 +1953,8 @@ class JobberClient:
         """Fetch products/services with minimal fields for map mode (discovery pass)."""
         try:
             response_data = self._execute_graphql_request(self._get_products_services_map_query(), cursor)
-            if response_data.get("data") is not None and "productsAndServices" not in response_data["data"]:
-                raise JobberApiError("Invalid response structure: missing 'productsAndServices' field in data")
+            if response_data.get("data") is not None and "productOrServices" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'productOrServices' field in data")
             return response_data
         except (ConfigurationError, JobberApiError):
             raise

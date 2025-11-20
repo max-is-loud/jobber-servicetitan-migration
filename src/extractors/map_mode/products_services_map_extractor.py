@@ -44,7 +44,7 @@ class ProductsServicesMapExtractor(BaseMapExtractor):
         self, response: dict[str, Any]
     ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from products/services API response."""
-        products_data = response.get("data", {}).get("productsAndServices", {})
+        products_data = response.get("data", {}).get("productOrServices", {})
         edges = products_data.get("edges", [])
         page_info = products_data.get("pageInfo", {})
         return edges, page_info
