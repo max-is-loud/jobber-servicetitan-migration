@@ -62,6 +62,10 @@ class RichLogger(Logger):
         """
         self.console.print(f"[yellow]WARNING[/yellow]: {message}")
 
+    def success(self, message: str) -> None:
+        """Print success message using Rich formatting."""
+        self.console.print(f"[bold green]SUCCESS[/bold green]: {message}")
+
     def log_summary(self, summary: dict[str, Any]) -> None:
         """Format and display structured summary data using Rich table.
 
