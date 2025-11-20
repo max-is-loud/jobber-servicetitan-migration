@@ -1937,6 +1937,44 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve all attachments: {e}") from e
 
+    def get_attachment_by_id(self, attachment_id: str) -> Optional[Attachment]:
+        """Retrieve a single attachment by ID.
+
+        Args:
+            attachment_id: Unique identifier of the attachment
+
+        Returns:
+            Attachment entity if found, None otherwise
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                "SELECT id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at FROM attachments WHERE id = ?",  # noqa: E501
+                (attachment_id,),
+            )
+            row = cursor.fetchone()
+            cursor.close()
+
+            if not row:
+                return None
+
+            return Attachment(
+                id=row[0],
+                note_id=row[1],
+                file_name=row[2],
+                content_type=row[3],
+                original_url=row[4],
+                local_file_path=row[5],
+                file_size=row[6],
+                created_at=row[7],
+            )
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve attachment {attachment_id}: {e}") from e
+
     def save_note_references(self, references: List[dict[str, str]]) -> None:
         """Batch save note references to temporary storage.
 

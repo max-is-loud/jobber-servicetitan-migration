@@ -102,6 +102,7 @@ class BaseExtractor(ABC, Generic[T]):
         entity_name: str,
         config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize BaseExtractor with required dependencies.
 
@@ -114,6 +115,9 @@ class BaseExtractor(ABC, Generic[T]):
             entity_name: Human-readable name of entity for logging
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
+            **kwargs: Additional optional parameters:
+                - queue_attachments: If True, queue attachments instead of downloading (default: False)
+                - map_snapshot_id: Required if queue_attachments is True, for attachment queue foreign key
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
@@ -152,6 +156,11 @@ class BaseExtractor(ABC, Generic[T]):
         self._bytes_downloaded = 0
         self._download_failures = 0
         self._attachment_mapping_failures = 0
+
+        # Extract mode attachment queuing (Phase 3)
+        self._queue_attachments = kwargs.get("queue_attachments", False)
+        self._map_snapshot_id = kwargs.get("map_snapshot_id")
+        self._attachments_queued = 0  # Track attachments added to queue
 
     def _should_skip_entity(self, entity_id: str) -> bool:
         """Check if an entity should be skipped based on existence in database.
@@ -244,6 +253,122 @@ class BaseExtractor(ABC, Generic[T]):
             entities: List of entities to save
         """
         ...
+
+    def _fetch_single(self, entity_id: str) -> Optional[dict[str, Any]]:
+        """Fetch a single entity by ID using GraphQL node interface.
+
+        This method uses the GraphQL node(id:) interface to fetch a single entity.
+        Subclasses can override this if they need custom single-entity fetching logic.
+
+        Args:
+            entity_id: The ID of the entity to fetch
+
+        Returns:
+            Entity node data dictionary, or None if not found
+
+        Raises:
+            JobberApiError: If API communication fails
+        """
+        # Default implementation: fetch a page and filter by ID
+        # Subclasses should override with node(id:) interface if available
+        try:
+            response = self._fetch_page(cursor=None)
+            edges, _ = self._extract_edges_and_page_info(response)
+
+            for edge in edges:
+                node = edge.get("node", {})
+                if node.get("id") == entity_id:
+                    return node
+
+            return None
+        except Exception as e:
+            self._logger.debug(f"Failed to fetch single entity {entity_id}: {e}")
+            return None
+
+    def extract_single(self, entity_id: str) -> dict[str, Any]:
+        """Extract a single entity by ID for queue-based extraction.
+
+        Used in extract mode to fetch and process individual entities from the
+        extract queue. Performs complete extraction for one entity including
+        related entities (notes, attachments, etc.).
+
+        Args:
+            entity_id: The ID of the entity to extract
+
+        Returns:
+            Dictionary containing extraction results:
+            - 'success': bool - Whether extraction succeeded
+            - 'entity_id': str - The entity ID that was extracted
+            - 'entity_found': bool - Whether the entity was found in API
+            - 'error': Optional[str] - Error message if extraction failed
+
+        Raises:
+            JobberApiError: If API communication fails
+            MappingError: If entity mapping fails
+            RepositoryError: If database operations fail
+        """
+        self._logger.debug(f"Extracting single {self._entity_name}: {entity_id}")
+
+        try:
+            # Fetch single entity
+            node = self._fetch_single(entity_id)
+
+            if not node:
+                self._logger.warning(f"{self._entity_name} not found: {entity_id}")
+                return {
+                    "success": False,
+                    "entity_id": entity_id,
+                    "entity_found": False,
+                    "error": f"Entity not found: {entity_id}",
+                }
+
+            # Map entity to domain model
+            entity = self._map_entity(node)
+
+            # Extract related entities
+            related_entities = self._extract_related_entities(node, entity)
+
+            # Save entity and related entities
+            self._save_entities([entity])
+            if related_entities:
+                self._save_related_entities(related_entities)
+
+            self._logger.success(f"Successfully extracted {self._entity_name}: {entity_id}")
+
+            return {
+                "success": True,
+                "entity_id": entity_id,
+                "entity_found": True,
+                "error": None,
+            }
+
+        except MappingError as e:
+            error_msg = f"Mapping error for {self._entity_name} {entity_id}: {e}"
+            self._logger.error(error_msg)
+            return {
+                "success": False,
+                "entity_id": entity_id,
+                "entity_found": True,
+                "error": error_msg,
+            }
+        except RepositoryError as e:
+            error_msg = f"Repository error for {self._entity_name} {entity_id}: {e}"
+            self._logger.error(error_msg)
+            return {
+                "success": False,
+                "entity_id": entity_id,
+                "entity_found": True,
+                "error": error_msg,
+            }
+        except Exception as e:
+            error_msg = f"Unexpected error extracting {self._entity_name} {entity_id}: {e}"
+            self._logger.error(error_msg)
+            return {
+                "success": False,
+                "entity_id": entity_id,
+                "entity_found": False,
+                "error": error_msg,
+            }
 
     def _extract_related_entities(
         self, node: dict[str, Any], primary_entity: T
@@ -792,8 +917,9 @@ class BaseExtractor(ABC, Generic[T]):
         """Save notes and attachments to repository.
 
         Common implementation for saving notes and downloading/saving attachments.
-        Downloads attachment files and updates metadata with local file paths before saving,
-        unless auto_download is disabled in configuration.
+        In queue mode (queue_attachments=True), attachments are added to attachment_queue
+        for later batch processing. Otherwise, downloads attachment files and updates metadata
+        with local file paths before saving (unless auto_download is disabled).
 
         Args:
             related_entities: Dictionary with 'notes' and 'attachments' lists
@@ -803,9 +929,13 @@ class BaseExtractor(ABC, Generic[T]):
         if notes:
             self._repository.save_notes(notes)
 
-        # Download and save attachments if present
+        # Handle attachments (queue or download)
         attachments = related_entities.get("attachments", [])
         if attachments:
+            # Extract mode: queue attachments for later batch processing
+            if self._queue_attachments:
+                self._queue_attachments_for_download(attachments)
+                return
             # Track total attachments processed
             self._attachments_processed += len(attachments)
 
@@ -854,3 +984,58 @@ class BaseExtractor(ABC, Generic[T]):
 
             # Save all attachments with updated file paths
             self._repository.save_attachments(attachments_with_files)
+
+    def _queue_attachments_for_download(self, attachments: List[Attachment]) -> None:
+        """Queue attachments for batch download processing.
+
+        Used in extract mode to decouple attachment downloads from entity extraction.
+        Adds attachments to attachment_queue table for later processing, enabling:
+        - Retry of failed downloads without re-fetching parent entity
+        - Batch download processing with separate progress tracking
+        - Status tracking per attachment (pending/in_progress/done/failed)
+
+        Args:
+            attachments: List of Attachment domain models to queue
+
+        Raises:
+            ConfigurationError: If map_snapshot_id is not set (required for queuing)
+        """
+        if not self._map_snapshot_id:
+            raise ConfigurationError(
+                "map_snapshot_id is required when queue_attachments=True"
+            )
+
+        # Prepare attachment queue items
+        attachment_queue_items = []
+        for attachment in attachments:
+            # Determine parent entity ID from note_id pattern
+            # Note IDs follow pattern: {parent_type}_{parent_id}_note_{note_number}
+            # Example: "client_12345_note_1" -> parent_type="clients", parent_id="12345"
+            note_id_parts = attachment.note_id.split("_")
+            if len(note_id_parts) >= 2:
+                parent_type = f"{note_id_parts[0]}s"  # Convert singular to plural
+                parent_id = note_id_parts[1]
+            else:
+                # Fallback: use entity_name if note_id pattern doesn't match
+                parent_type = self._entity_name
+                parent_id = attachment.note_id.split("_")[0] if "_" in attachment.note_id else attachment.note_id
+
+            attachment_queue_items.append({
+                "attachment_id": attachment.id,
+                "parent_type": parent_type,
+                "parent_id": parent_id,
+            })
+
+        # Save attachments metadata first
+        self._repository.save_attachments(attachments)
+
+        # Add to attachment queue
+        if attachment_queue_items:
+            self._repository.create_attachment_queue(
+                snapshot_id=self._map_snapshot_id,
+                attachments=attachment_queue_items,
+            )
+            self._attachments_queued += len(attachment_queue_items)
+            self._logger.debug(
+                f"Queued {len(attachment_queue_items)} attachment(s) for download"
+            )
