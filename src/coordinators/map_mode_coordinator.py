@@ -129,9 +129,6 @@ class MapModeCoordinator:
             transient=True,
         ) as progress:
             for entity_type in entity_types:
-                # Clear prior task rendering before starting next task to avoid clutter
-                progress.refresh(clear=True)
-
                 # Create progress task
                 task_id = progress.add_task(f"Mapping {entity_type}...", total=None, mapped=0)
 
@@ -154,7 +151,6 @@ class MapModeCoordinator:
                 )
                 try:
                     progress.remove_task(task_id)
-                    progress.refresh(clear=True)
                 except KeyError:
                     pass
 
