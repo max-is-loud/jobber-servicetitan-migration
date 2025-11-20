@@ -126,14 +126,14 @@ class MapModeCoordinator:
         ) as progress:
             for entity_type in entity_types:
                 # Create progress task
-                task_id = progress.add_task(f"Extracting {entity_type}...", total=None)
+                task_id = progress.add_task(f"Extracting {entity_type}...", total=1)
 
                 # Run extractor
                 extractor = self._create_extractor(entity_type, snapshot.id)
                 result = extractor.extract()
 
                 # Update progress
-                progress.update(task_id, completed=True, total=1)
+                progress.update(task_id, advance=1)
 
                 # Track results
                 entity_results[entity_type] = result
