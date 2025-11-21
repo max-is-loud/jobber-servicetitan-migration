@@ -962,21 +962,72 @@ class TestMigrateReconcileCommand(TestCLIRunner):
         monkeypatch.setenv("JOBBER_TOKEN", "test_token")
 
         with patch("src.cli.migrate._check_authentication"):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "reconcile",
-                    "--snapshot-id",
-                    "test-snapshot",
-                    "--entity",
-                    "clients",
-                    "--entity",
-                    "invoices",
-                    "--help",
-                ],
-            )
-            assert result.exit_code == 0
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository to return a valid snapshot
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = Mock(
+                    snapshot_id="test-snapshot",
+                    label="test-label",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+                # Include clients and invoices in inventory
+                mock_repo_instance.get_entity_inventory.return_value = [
+                    Mock(entity_type="clients", entity_id="client-1"),
+                    Mock(entity_type="invoices", entity_id="invoice-1"),
+                    Mock(entity_type="jobs", entity_id="job-1"),  # Should be ignored
+                ]
+                mock_repo.return_value = mock_repo_instance
+
+                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
+                    with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
+                        with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
+                            with patch("src.coordinators.extract_mode_coordinator.ExtractModeCoordinator"):
+                                # Mock supported entity types
+                                mock_map.supported_entity_types.return_value = ["clients", "invoices", "jobs", "quotes"]
+
+                                # Mock map coordinator
+                                mock_map_instance = Mock()
+                                mock_map_instance.run_map_pass.return_value = {
+                                    "snapshot_id": "new-snapshot",
+                                    "label": "test-label-reconcile",
+                                    "entity_results": {},
+                                    "totals": {},
+                                    "duration": 10.0,
+                                }
+                                mock_map.return_value = mock_map_instance
+
+                                # Mock empty queues
+                                mock_repo_instance.get_extract_queue.return_value = []
+                                mock_repo_instance.get_attachment_queue.return_value = []
+
+                                result = runner.invoke(
+                                    app,
+                                    [
+                                        "migrate",
+                                        "reconcile",
+                                        "--snapshot-id",
+                                        "test-snapshot",
+                                        "--entity",
+                                        "clients",
+                                        "--entity",
+                                        "invoices",
+                                    ],
+                                )
+
+                                # Should succeed
+                                assert result.exit_code == 0
+
+                                # Verify map pass was called with only the specified entities
+                                mock_map_instance.run_map_pass.assert_called_once()
+                                # Check kwargs instead of positional args
+                                call_kwargs = mock_map_instance.run_map_pass.call_args.kwargs
+                                assert "entity_types" in call_kwargs or len(mock_map_instance.run_map_pass.call_args.args) > 0
+                                # Get entity types from either args or kwargs
+                                if mock_map_instance.run_map_pass.call_args.args:
+                                    entity_types = mock_map_instance.run_map_pass.call_args.args[0]
+                                else:
+                                    entity_types = call_kwargs.get("entity_types", [])
+                                assert set(entity_types) == {"clients", "invoices"}
 
     def test_migrate_reconcile_with_invalid_entity(self, runner, monkeypatch):
         """Test migrate reconcile with invalid entity type."""
@@ -1014,19 +1065,63 @@ class TestMigrateReconcileCommand(TestCLIRunner):
         monkeypatch.setenv("JOBBER_TOKEN", "test_token")
 
         with patch("src.cli.migrate._check_authentication"):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "reconcile",
-                    "--snapshot-id",
-                    "test-snapshot",
-                    "--report-dir",
-                    "./custom-reports",
-                    "--help",
-                ],
-            )
-            assert result.exit_code == 0
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository to return a valid snapshot
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = Mock(
+                    snapshot_id="test-snapshot",
+                    label="test-label",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+                mock_repo_instance.get_entity_inventory.return_value = [
+                    Mock(entity_type="clients", entity_id="client-1"),
+                ]
+                mock_repo.return_value = mock_repo_instance
+
+                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
+                    with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
+                        with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
+                            with patch("src.coordinators.extract_mode_coordinator.ExtractModeCoordinator"):
+                                with patch("pathlib.Path.mkdir") as mock_mkdir:
+                                    with patch("pathlib.Path.write_text") as mock_write_text:
+                                        # Mock supported entity types
+                                        mock_map.supported_entity_types.return_value = ["clients", "invoices", "jobs", "quotes"]
+
+                                        # Mock map coordinator
+                                        mock_map_instance = Mock()
+                                        mock_map_instance.run_map_pass.return_value = {
+                                            "snapshot_id": "new-snapshot",
+                                            "label": "test-label-reconcile",
+                                            "entity_results": {},
+                                            "totals": {},
+                                            "duration": 10.0,
+                                        }
+                                        mock_map.return_value = mock_map_instance
+
+                                        # Mock empty queues
+                                        mock_repo_instance.get_extract_queue.return_value = []
+                                        mock_repo_instance.get_attachment_queue.return_value = []
+
+                                        result = runner.invoke(
+                                            app,
+                                            [
+                                                "migrate",
+                                                "reconcile",
+                                                "--snapshot-id",
+                                                "test-snapshot",
+                                                "--report-dir",
+                                                "./custom-reports",
+                                            ],
+                                        )
+
+                                        # Should succeed
+                                        if result.exit_code != 0:
+                                            print(f"Error output: {result.stdout}")
+                                        assert result.exit_code == 0
+
+                                        # Verify custom report directory was created
+                                        # The mkdir should be called for the custom report path
+                                        assert mock_mkdir.called
 
     def test_migrate_reconcile_empty_snapshot(self, runner, monkeypatch):
         """Test migrate reconcile with empty snapshot (no entities)."""
