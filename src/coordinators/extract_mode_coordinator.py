@@ -553,8 +553,6 @@ class ExtractModeCoordinator:
             logger=self._logger,
             config_manager=self._config_manager,
             skip_existing_entities=False,  # Extract mode doesn't skip
-            queue_attachments=True,  # Queue attachments for batch processing
-            map_snapshot_id=snapshot_id,  # Required for attachment queue foreign key
         )
 
     def get_queue_status(

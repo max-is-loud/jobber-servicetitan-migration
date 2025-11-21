@@ -56,11 +56,22 @@ class ExpensesMapExtractor(BaseMapExtractor):
 
     def _map_entity(self, node: dict[str, Any]) -> EntityInventory:
         """Map an expense node to EntityInventory."""
+        # Extract relation counts from node
+        relations = {}
+
+        # Extract notes count if available
+        if "notes" in node and isinstance(node["notes"], dict):
+            relations["notes"] = node["notes"].get("totalCount", 0)
+
+        # Extract note attachments count if available (stored as "attachments" key)
+        if "noteAttachments" in node and isinstance(node["noteAttachments"], dict):
+            relations["attachments"] = node["noteAttachments"].get("totalCount", 0)
+
         return EntityInventory(
             entity_type="expenses",
             entity_id=node["id"],
             discovered_at=self._get_current_timestamp(),
             map_snapshot_id=self._map_snapshot_id,
             updated_at=node.get("updatedAt"),
-            estimated_relations_json=json.dumps({}),  # No relations tracked
+            estimated_relations_json=json.dumps(relations),
         )
