@@ -1144,3 +1144,152 @@ class TestMigrateReconcileCommand(TestCLIRunner):
                 # Should exit gracefully with nothing to reconcile
                 assert result.exit_code == 0
                 assert "Nothing to reconcile" in result.stdout or "No entity types" in result.stdout
+
+    def test_migrate_reconcile_failed_attachment_retry(self, runner, monkeypatch):
+        """Test migrate reconcile Phase 4: retry failed attachment downloads."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository to return a valid snapshot with entities
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = Mock(
+                    snapshot_id="test-snapshot",
+                    label="test-label",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+                # Include entities in inventory so reconcile continues
+                # Reconcile calls get_entity_inventory 3 times:
+                # 1. To get entity types from original snapshot
+                # 2. To get original inventory for comparison
+                # 3. To get new inventory for comparison
+                mock_repo_instance.get_entity_inventory.side_effect = [
+                    # First call: determine entity types
+                    [
+                        Mock(entity_type="clients", entity_id="client-1"),
+                        Mock(entity_type="clients", entity_id="client-2"),
+                    ],
+                    # Second call: original inventory for comparison
+                    [
+                        Mock(entity_type="clients", entity_id="client-1"),
+                        Mock(entity_type="clients", entity_id="client-2"),
+                    ],
+                    # Third call: new inventory (same entities, no deltas)
+                    [
+                        Mock(entity_type="clients", entity_id="client-1"),
+                        Mock(entity_type="clients", entity_id="client-2"),
+                    ],
+                ]
+
+                # Mock failed attachments that need retry
+                failed_attachment_1 = Mock(id="att-1", parent_type="clients", parent_id="client-1")
+                failed_attachment_2 = Mock(id="att-2", parent_type="clients", parent_id="client-2")
+                mock_repo_instance.get_attachment_queue.return_value = [
+                    failed_attachment_1,
+                    failed_attachment_2,
+                ]
+
+                # Track update_attachment_queue_status calls
+                mock_repo_instance.update_attachment_queue_status = Mock()
+
+                # Mock create_extract_queue (used for delta entities)
+                mock_repo_instance.create_extract_queue = Mock()
+
+                # Mock empty extract queue
+                mock_repo_instance.get_extract_queue.return_value = []
+
+                mock_repo.return_value = mock_repo_instance
+
+                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
+                    with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
+                        with patch("src.config.ConfigManagerImpl"):
+                            with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
+                                with patch(
+                                    "src.coordinators.extract_mode_coordinator.ExtractModeCoordinator"
+                                ) as mock_extract:
+                                    with patch("src.mappers.EntityMapper"):
+                                                        # Mock supported entity types
+                                                        mock_map.supported_entity_types.return_value = [
+                                                            "clients",
+                                                            "invoices",
+                                                            "jobs",
+                                                        ]
+
+                                                        # Mock map coordinator
+                                                        mock_map_instance = Mock()
+                                                        mock_map_instance.run_map_pass.return_value = {
+                                                            "snapshot_id": "new-snapshot",
+                                                            "label": "test-label-reconcile",
+                                                            "entity_results": {},
+                                                            "totals": {},
+                                                            "duration": 10.0,
+                                                        }
+                                                        mock_map.return_value = mock_map_instance
+
+                                                        # Mock extract coordinator
+                                                        mock_extract_instance = Mock()
+                                                        mock_extract_instance.run_extract_pass.return_value = {
+                                                            "entity_results": {},
+                                                            "attachment_result": {},
+                                                            "discrepancies": [],
+                                                            "totals": {},
+                                                            "duration": 5.0,
+                                                        }
+                                                        mock_extract.return_value = mock_extract_instance
+
+                                                        # Mock Path operations for report generation
+                                                        with patch("pathlib.Path.mkdir"):
+                                                            with patch("pathlib.Path.write_text"):
+                                                                result = runner.invoke(
+                                                                    app,
+                                                                    [
+                                                                        "migrate",
+                                                                        "reconcile",
+                                                                        "--snapshot-id",
+                                                                        "test-snapshot",
+                                                                    ],
+                                                                )
+
+                                                                # Should succeed
+                                                                assert result.exit_code == 0
+
+                                                                # Verify failed attachments were reset to pending
+                                                                assert (
+                                                                    mock_repo_instance.update_attachment_queue_status.call_count
+                                                                    == 2
+                                                                )
+                                                                mock_repo_instance.update_attachment_queue_status.assert_any_call(
+                                                                    "att-1", status="pending", error_message=None
+                                                                )
+                                                                mock_repo_instance.update_attachment_queue_status.assert_any_call(
+                                                                    "att-2", status="pending", error_message=None
+                                                                )
+
+                                                                # Verify extract coordinator was called for attachment retry
+                                                                # Should be called at least once with entity_types=None and resume=True
+                                                                extract_calls = (
+                                                                    mock_extract_instance.run_extract_pass.call_args_list
+                                                                )
+                                                                assert len(extract_calls) >= 1
+
+                                                                # Find the attachment retry call (entity_types=None, resume=True)
+                                                                attachment_retry_call = None
+                                                                for call in extract_calls:
+                                                                    kwargs = call.kwargs
+                                                                    if (
+                                                                        kwargs.get("entity_types") is None
+                                                                        and kwargs.get("resume") is True
+                                                                    ):
+                                                                        attachment_retry_call = call
+                                                                        break
+
+                                                                assert attachment_retry_call is not None, (
+                                                                    "Expected extract coordinator call with "
+                                                                    "entity_types=None and resume=True"
+                                                                )
+
+                                                                # Verify success message in output
+                                                                assert (
+                                                                    "Attachment retry completed" in result.stdout
+                                                                    or "Phase 4" in result.stdout
+                                                                )
