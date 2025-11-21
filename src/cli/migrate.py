@@ -503,6 +503,629 @@ def migrate_extract(
             repository.close()
 
 
+@migrate_app.command("reconcile")
+def migrate_reconcile(
+    ctx: typer.Context,
+    snapshot_id: Annotated[
+        str,
+        typer.Option("--snapshot-id", help="Map snapshot ID to reconcile"),
+    ],
+    entities: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--entity",
+            "--entities",
+            help="Entity types to reconcile (defaults to types with discrepancies)",
+        ),
+    ] = None,
+    report_dir: Annotated[
+        Path,
+        typer.Option(
+            "--report-dir",
+            help="Directory to write reconciliation reports.",
+        ),
+    ] = Path("reports"),
+) -> None:
+    """
+    Run reconciliation pass to close gaps and handle data drift.
+
+    Reconciliation re-runs map mode for entity types, compares with the original
+    map snapshot, identifies missing/new entities, and extracts only the deltas.
+    Also retries failed attachment downloads.
+
+    Typical use cases:
+    - Close completeness gaps after initial extraction
+    - Handle data drift (entities added/modified during migration)
+    - Retry failed attachment downloads
+    - Verify final extraction completeness
+
+    Examples:
+        # Reconcile all entity types with discrepancies
+        tightbeam migrate reconcile --snapshot-id abc123
+
+        # Reconcile specific entity types
+        tightbeam migrate reconcile --snapshot-id abc123 --entity clients --entity invoices
+    """
+    from src.auth import AuthProvider
+    from src.config import ConfigManagerImpl
+    from src.coordinators.extract_mode_coordinator import ExtractModeCoordinator
+    from src.coordinators.map_mode_coordinator import MapModeCoordinator
+    from src.exceptions import ConfigurationError
+    from src.loggers import RichLogger
+    from src.mappers import EntityMapper
+
+    config = ctx.obj or {}
+    db_path = config.get("db", Path("tightbeam.sqlite"))
+    verbose = config.get("verbose", False)
+    enable_cost_monitoring = config.get("enable_cost_monitoring", True)
+
+    logger = RichLogger(verbose=verbose)
+
+    repository = None
+    try:
+        repository = ServiceFactory.create_repository(db_path)
+
+        # Validate snapshot exists
+        snapshot = repository.get_map_snapshot(snapshot_id)
+        if not snapshot:
+            console.print(f"[red]{ERROR_EMOJI} Map snapshot not found:[/red] {snapshot_id}")
+            raise typer.Exit(1)
+
+        console.print(f"\n[bold cyan]{MIGRATION_EMOJI} Starting Reconciliation Pass[/bold cyan]")
+        console.print(f"{INFO_EMOJI} Original snapshot: {snapshot_id} ({snapshot.label or 'unlabeled'})")
+        console.print(f"{INFO_EMOJI} Created: {snapshot.created_at}\n")
+
+        # Determine which entity types to reconcile
+        if entities:
+            selected_entity_types = [
+                entity.strip()
+                for raw in entities
+                for entity in raw.split(",")
+                if entity.strip()
+            ]
+            # Validate entity types
+            available_types = MapModeCoordinator.supported_entity_types()
+            invalid_types = [et for et in selected_entity_types if et not in available_types]
+            if invalid_types:
+                console.print(f"[red]{ERROR_EMOJI} Invalid entity types:[/red] {', '.join(invalid_types)}")
+                console.print(f"[yellow]{INFO_EMOJI} Supported types:[/yellow] {', '.join(available_types)}")
+                raise typer.Exit(1)
+        else:
+            # Get entity types from original snapshot that have extract queues
+            original_inventory = repository.get_entity_inventory(snapshot_id)
+            selected_entity_types = list(set(inv.entity_type for inv in original_inventory))
+
+            if not selected_entity_types:
+                console.print(f"[yellow]{INFO_EMOJI} No entity types found in snapshot {snapshot_id}[/yellow]")
+                console.print(f"{INFO_EMOJI} Nothing to reconcile.")
+                return
+
+        console.print(f"{INFO_EMOJI} Reconciling {len(selected_entity_types)} entity types: {', '.join(selected_entity_types)}\n")
+
+        oauth_manager = ServiceFactory.create_oauth2_manager()
+        auth_provider = AuthProvider(oauth_manager, repository)
+        config_manager = ConfigManagerImpl()
+
+        # === PHASE 1: Re-run Map Pass ===
+        console.print(f"[bold yellow]{MIGRATION_EMOJI} Phase 1: Re-mapping Entities[/bold yellow]")
+
+        # Use aggressive optimization for map mode (lightweight queries)
+        map_optimization = "aggressive"
+        map_client = ServiceFactory.create_rate_limited_jobber_client(
+            auth_provider=auth_provider,
+            repository=repository,
+            config_manager=config_manager,
+            optimization_level=map_optimization,
+            enable_cost_monitoring=enable_cost_monitoring,
+        )
+
+        logger.info(
+            f"Re-running map pass for {len(selected_entity_types)} entity types "
+            f"with {map_optimization.upper()} optimization"
+        )
+
+        map_coordinator = MapModeCoordinator(
+            jobber_client=map_client,
+            repository=repository,
+            logger=logger,
+            config_manager=config_manager,
+            enable_adaptive_optimization=False,
+        )
+
+        # Run new map pass with label indicating reconciliation
+        reconcile_label = f"{snapshot.label or snapshot_id}-reconcile"
+        new_map_result = map_coordinator.run_map_pass(
+            entity_types=selected_entity_types,
+            label=reconcile_label,
+        )
+
+        new_snapshot_id = new_map_result["snapshot_id"]
+        console.print(
+            f"[green]{MIGRATION_EMOJI} New map snapshot created: {new_snapshot_id}[/green]\n"
+        )
+
+        # === PHASE 2: Compare Maps and Identify Deltas ===
+        console.print(f"[bold yellow]{MIGRATION_EMOJI} Phase 2: Comparing Maps[/bold yellow]")
+
+        # Get original and new inventories
+        original_inventory = repository.get_entity_inventory(snapshot_id)
+        new_inventory = repository.get_entity_inventory(new_snapshot_id)
+
+        # Build maps of entity_type -> set of entity_ids
+        original_ids_by_type = {}
+        for inv in original_inventory:
+            if inv.entity_type not in original_ids_by_type:
+                original_ids_by_type[inv.entity_type] = set()
+            original_ids_by_type[inv.entity_type].add(inv.entity_id)
+
+        new_ids_by_type = {}
+        for inv in new_inventory:
+            if inv.entity_type not in new_ids_by_type:
+                new_ids_by_type[inv.entity_type] = set()
+            new_ids_by_type[inv.entity_type].add(inv.entity_id)
+
+        # Identify deltas (new entities that appeared since original map)
+        delta_counts = {}
+        for entity_type in selected_entity_types:
+            original_ids = original_ids_by_type.get(entity_type, set())
+            new_ids = new_ids_by_type.get(entity_type, set())
+            delta_ids = new_ids - original_ids
+            delta_counts[entity_type] = len(delta_ids)
+
+            if delta_ids:
+                logger.info(f"Found {len(delta_ids)} new {entity_type} entities")
+                # Add delta entities to original snapshot's extract queue
+                for entity_id in delta_ids:
+                    repository.create_extract_queue(
+                        snapshot_id=snapshot_id,  # Add to original snapshot queue
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        status="pending",
+                    )
+
+        total_deltas = sum(delta_counts.values())
+        console.print(f"{INFO_EMOJI} Found {total_deltas} new entities across all types")
+        for entity_type, count in delta_counts.items():
+            if count > 0:
+                console.print(f"  • {entity_type}: {count} new")
+        console.print()
+
+        # === PHASE 3: Extract Deltas ===
+        if total_deltas > 0:
+            console.print(f"[bold yellow]{MIGRATION_EMOJI} Phase 3: Extracting Delta Entities[/bold yellow]")
+
+            # Use moderate optimization for extraction
+            extract_optimization = "moderate"
+            extract_client = ServiceFactory.create_rate_limited_jobber_client(
+                auth_provider=auth_provider,
+                repository=repository,
+                config_manager=config_manager,
+                optimization_level=extract_optimization,
+                enable_cost_monitoring=enable_cost_monitoring,
+            )
+
+            logger.info(
+                f"Extracting {total_deltas} delta entities "
+                f"with {extract_optimization.upper()} optimization"
+            )
+
+            entity_mapper = EntityMapper()
+            extract_coordinator = ExtractModeCoordinator(
+                jobber_client=extract_client,
+                entity_mapper=entity_mapper,
+                repository=repository,
+                logger=logger,
+                config_manager=config_manager,
+            )
+
+            # Run extraction with resume=True to process pending queue items
+            extract_result = extract_coordinator.run_extract_pass(
+                snapshot_id=snapshot_id,  # Use original snapshot ID
+                entity_types=selected_entity_types,
+                resume=True,  # Process pending items only
+            )
+
+            console.print(
+                f"[green]{MIGRATION_EMOJI} Delta extraction completed[/green]\n"
+            )
+        else:
+            console.print(f"[green]{INFO_EMOJI} No new entities found - extraction up to date[/green]\n")
+            extract_result = {
+                "entity_results": {},
+                "attachment_result": {},
+                "discrepancies": [],
+                "totals": {},
+                "duration": 0.0,
+            }
+
+        # === PHASE 4: Retry Failed Attachments ===
+        console.print(f"[bold yellow]{MIGRATION_EMOJI} Phase 4: Retrying Failed Attachments[/bold yellow]")
+
+        failed_attachments = repository.get_attachment_queue(snapshot_id, status="failed")
+        if failed_attachments:
+            logger.info(f"Found {len(failed_attachments)} failed attachments to retry")
+
+            # Reset failed attachments to pending
+            for attachment in failed_attachments:
+                repository.update_attachment_queue_status(
+                    attachment.id,
+                    status="pending",
+                    error_message=None,
+                )
+
+            # Re-run extract with resume to process failed attachments
+            extract_optimization = "moderate"
+            extract_client = ServiceFactory.create_rate_limited_jobber_client(
+                auth_provider=auth_provider,
+                repository=repository,
+                config_manager=config_manager,
+                optimization_level=extract_optimization,
+                enable_cost_monitoring=enable_cost_monitoring,
+            )
+
+            entity_mapper = EntityMapper()
+            extract_coordinator = ExtractModeCoordinator(
+                jobber_client=extract_client,
+                entity_mapper=entity_mapper,
+                repository=repository,
+                logger=logger,
+                config_manager=config_manager,
+            )
+
+            # Run attachment processing only
+            retry_result = extract_coordinator.run_extract_pass(
+                snapshot_id=snapshot_id,
+                entity_types=None,  # No entities, just attachments
+                resume=True,
+            )
+
+            console.print(
+                f"[green]{MIGRATION_EMOJI} Attachment retry completed[/green]\n"
+            )
+        else:
+            console.print(f"[green]{INFO_EMOJI} No failed attachments to retry[/green]\n")
+
+        # === PHASE 5: Generate Final Report ===
+        console.print(f"[bold yellow]{MIGRATION_EMOJI} Phase 5: Generating Reconciliation Report[/bold yellow]")
+
+        report_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create reconciliation summary
+        from datetime import datetime
+        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        report_filename = f"reconcile-{snapshot.label or snapshot_id}-{timestamp}.md"
+        report_path = report_dir / report_filename
+
+        # Build reconciliation report content
+        report_lines = [
+            f"# Reconciliation Report",
+            f"",
+            f"**Original Snapshot:** {snapshot_id}",
+            f"**Label:** {snapshot.label or 'unlabeled'}",
+            f"**New Snapshot:** {new_snapshot_id}",
+            f"**Reconciliation Date:** {datetime.utcnow().isoformat()}Z",
+            f"",
+            f"## Summary",
+            f"",
+            f"- **Entity Types Reconciled:** {len(selected_entity_types)}",
+            f"- **New Entities Found:** {total_deltas}",
+            f"- **Failed Attachments Retried:** {len(failed_attachments) if failed_attachments else 0}",
+            f"",
+            f"## Delta Entities by Type",
+            f"",
+        ]
+
+        for entity_type in selected_entity_types:
+            count = delta_counts.get(entity_type, 0)
+            report_lines.append(f"- **{entity_type}:** {count} new entities")
+
+        report_lines.extend([
+            f"",
+            f"## Completeness Status",
+            f"",
+        ])
+
+        # Check final completeness
+        for entity_type in selected_entity_types:
+            original_count = len(original_ids_by_type.get(entity_type, set()))
+            new_count = len(new_ids_by_type.get(entity_type, set()))
+
+            # Count extracted entities
+            queue_items = repository.get_extract_queue(snapshot_id, entity_type)
+            extracted_count = sum(1 for item in queue_items if item.status == "done")
+
+            completeness = (extracted_count / new_count * 100) if new_count > 0 else 0
+
+            report_lines.append(
+                f"- **{entity_type}:** {extracted_count}/{new_count} extracted ({completeness:.1f}%)"
+            )
+
+        report_lines.extend([
+            f"",
+            f"---",
+            f"",
+            f"Generated with [TightBeam](https://github.com/yourusername/tightbeam)",
+        ])
+
+        report_content = "\n".join(report_lines)
+        report_path.write_text(report_content)
+
+        console.print(f"[green]{MIGRATION_EMOJI} Reconciliation report: {report_path}[/green]")
+        console.print(f"\n[bold green]✅ Reconciliation Complete![/bold green]")
+
+    except ConfigurationError as e:
+        console.print(f"[red]{ERROR_EMOJI} Configuration Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:  # pragma: no cover - CLI catch-all
+        console.print(f"[red]{ERROR_EMOJI} Reconciliation failed:[/red] {e}")
+        raise typer.Exit(1) from e
+    finally:
+        if repository:
+            repository.close()
+
+
+@migrate_app.command("start")
+def migrate_start(
+    ctx: typer.Context,
+    use_multi_pass: Annotated[
+        bool,
+        typer.Option(
+            "--use-multi-pass",
+            help="Use multi-pass map+extract strategy instead of single-pass migration",
+        ),
+    ] = False,
+    entities: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--entity",
+            "--entities",
+            help="Entity types to include (multi-pass only, repeat option). Defaults to all supported types.",
+        ),
+    ] = None,
+    snapshot_label: Annotated[
+        Optional[str],
+        typer.Option(
+            "--snapshot-label",
+            help="Optional label for the map snapshot and reports (multi-pass only).",
+        ),
+    ] = None,
+    report_dir: Annotated[
+        Path,
+        typer.Option(
+            "--report-dir",
+            help="Directory to write reports (multi-pass only).",
+        ),
+    ] = Path("reports"),
+    resume: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--resume",
+            help="Resume migration from last checkpoint (extract phase only in multi-pass)",
+        ),
+    ] = None,
+) -> None:
+    """
+    Start migration (single-pass or multi-pass).
+
+    By default, runs traditional single-pass migration extracting all data at once.
+    Use --use-multi-pass flag to run the new multi-pass strategy (map + extract).
+
+    Single-pass mode (default):
+        Fetches and stores all entity data in one pass, similar to 'migrate all'.
+        Best for smaller datasets or when you want immediate results.
+
+    Multi-pass mode (--use-multi-pass):
+        First runs map pass to inventory entities, then extract pass to fetch full data.
+        Provides better progress tracking, error recovery, and completeness validation.
+        Best for large datasets or when you need detailed analysis before extraction.
+
+    Examples:
+        # Single-pass (traditional)
+        tightbeam migrate start
+
+        # Multi-pass strategy
+        tightbeam migrate start --use-multi-pass
+
+        # Multi-pass with specific entities
+        tightbeam migrate start --use-multi-pass --entity clients --entity invoices
+    """
+    from src.auth import AuthProvider
+    from src.config import ConfigManagerImpl
+    from src.coordinators.extract_mode_coordinator import ExtractModeCoordinator
+    from src.coordinators.map_mode_coordinator import MapModeCoordinator
+    from src.exceptions import ConfigurationError
+    from src.loggers import RichLogger
+    from src.mappers import EntityMapper
+    from src.reports import ExtractReportGenerator, MapReportGenerator
+
+    config = ctx.obj or {}
+    db_path = config.get("db", Path("tightbeam.sqlite"))
+    verbose = config.get("verbose", False)
+    enable_cost_monitoring = config.get("enable_cost_monitoring", True)
+    enable_adaptive_optimization = config.get("enable_adaptive_optimization", False)
+
+    if use_multi_pass:
+        # Multi-pass mode: Run map + extract in sequence
+        console.print(f"\n[bold cyan]{MIGRATION_EMOJI} Starting Multi-Pass Migration[/bold cyan]")
+        console.print(f"{INFO_EMOJI} This will run map pass followed by extract pass\n")
+
+        logger = RichLogger(verbose=verbose)
+
+        # Normalize entity selections
+        available_entity_types = MapModeCoordinator.supported_entity_types()
+        if entities:
+            selected_entity_types = [
+                entity.strip()
+                for raw in entities
+                for entity in raw.split(",")
+                if entity.strip()
+            ]
+        else:
+            selected_entity_types = available_entity_types
+
+        invalid_types = [et for et in selected_entity_types if et not in available_entity_types]
+        if invalid_types:
+            console.print(f"[red]{ERROR_EMOJI} Invalid entity types:[/red] {', '.join(invalid_types)}")
+            console.print(f"[yellow]{INFO_EMOJI} Supported types:[/yellow] {', '.join(available_entity_types)}")
+            raise typer.Exit(1)
+
+        repository = None
+        try:
+            repository = ServiceFactory.create_repository(db_path)
+            oauth_manager = ServiceFactory.create_oauth2_manager()
+            auth_provider = AuthProvider(oauth_manager, repository)
+            config_manager = ConfigManagerImpl()
+
+            # === PHASE 1: MAP PASS ===
+            console.print(f"[bold yellow]{MIGRATION_EMOJI} Phase 1: Map Pass[/bold yellow]")
+
+            # Map mode is lightweight - use aggressive optimization
+            map_optimization = "aggressive"
+            map_client = ServiceFactory.create_rate_limited_jobber_client(
+                auth_provider=auth_provider,
+                repository=repository,
+                config_manager=config_manager,
+                optimization_level=map_optimization,
+                enable_cost_monitoring=enable_cost_monitoring,
+            )
+
+            logger.info(
+                f"Starting map pass for {len(selected_entity_types)} entity types "
+                f"with {map_optimization.upper()} optimization"
+            )
+
+            map_coordinator = MapModeCoordinator(
+                jobber_client=map_client,
+                repository=repository,
+                logger=logger,
+                config_manager=config_manager,
+                enable_adaptive_optimization=enable_adaptive_optimization,
+            )
+
+            map_result = map_coordinator.run_map_pass(
+                entity_types=selected_entity_types,
+                label=snapshot_label,
+            )
+
+            # Analyze hotspots and density for reporting
+            hotspots_by_type = {
+                entity_type: map_coordinator.identify_hotspots(map_result["snapshot_id"], entity_type)
+                for entity_type in selected_entity_types
+            }
+            density_stats_by_type = {
+                entity_type: map_coordinator.get_density_stats(map_result["snapshot_id"], entity_type)
+                for entity_type in selected_entity_types
+            }
+
+            # Generate map reports
+            report_dir.mkdir(parents=True, exist_ok=True)
+            map_report_generator = MapReportGenerator(output_dir=report_dir)
+            result_label = map_result["label"] or snapshot_label or "map-pass"
+            map_markdown, map_json = map_report_generator.generate_report(
+                snapshot_id=map_result["snapshot_id"],
+                label=result_label,
+                entity_results=map_result["entity_results"],
+                totals=map_result["totals"],
+                duration=map_result["duration"],
+                hotspots_by_type=hotspots_by_type,
+                density_stats_by_type=density_stats_by_type,
+            )
+
+            snapshot_id = map_result["snapshot_id"]
+            console.print(
+                f"[green]{MIGRATION_EMOJI} Map pass completed for snapshot {snapshot_id}[/green]"
+            )
+            console.print(f"{INFO_EMOJI} Label: {result_label}")
+            console.print(f"{INFO_EMOJI} Markdown report: {map_markdown}")
+            console.print(f"{INFO_EMOJI} JSON report: {map_json}\n")
+
+            # === PHASE 2: EXTRACT PASS ===
+            console.print(f"[bold yellow]{MIGRATION_EMOJI} Phase 2: Extract Pass[/bold yellow]")
+
+            # Extract mode uses moderate optimization
+            extract_optimization = "moderate"
+            extract_client = ServiceFactory.create_rate_limited_jobber_client(
+                auth_provider=auth_provider,
+                repository=repository,
+                config_manager=config_manager,
+                optimization_level=extract_optimization,
+                enable_cost_monitoring=enable_cost_monitoring,
+            )
+
+            logger.info(
+                f"Starting extract pass for snapshot {snapshot_id} "
+                f"with {extract_optimization.upper()} optimization"
+            )
+
+            entity_mapper = EntityMapper()
+            extract_coordinator = ExtractModeCoordinator(
+                jobber_client=extract_client,
+                entity_mapper=entity_mapper,
+                repository=repository,
+                logger=logger,
+                config_manager=config_manager,
+            )
+
+            extract_result = extract_coordinator.run_extract_pass(
+                snapshot_id=snapshot_id,
+                entity_types=None,  # Use all types from snapshot
+                resume=resume or False,
+            )
+
+            # Generate extract reports
+            extract_report_generator = ExtractReportGenerator(output_dir=report_dir)
+            snapshot = repository.get_map_snapshot(snapshot_id)
+            extract_label = snapshot.label if snapshot else snapshot_id
+            extract_markdown, extract_json = extract_report_generator.generate_report(
+                snapshot_id=snapshot_id,
+                label=extract_label,
+                entity_results=extract_result["entity_results"],
+                attachment_result=extract_result["attachment_result"],
+                discrepancies=extract_result["discrepancies"],
+                totals=extract_result["totals"],
+                duration=extract_result["duration"],
+            )
+
+            console.print(
+                f"[green]{MIGRATION_EMOJI} Extract pass completed for snapshot {snapshot_id}[/green]"
+            )
+            console.print(f"{INFO_EMOJI} Label: {extract_label}")
+            console.print(f"{INFO_EMOJI} Markdown report: {extract_markdown}")
+            console.print(f"{INFO_EMOJI} JSON report: {extract_json}")
+
+            console.print(f"\n[bold green]✅ Multi-Pass Migration Complete![/bold green]")
+
+        except ConfigurationError as e:
+            console.print(f"[red]{ERROR_EMOJI} Configuration Error:[/red] {e}")
+            raise typer.Exit(1) from e
+        except Exception as e:  # pragma: no cover - CLI catch-all
+            console.print(f"[red]{ERROR_EMOJI} Migration failed:[/red] {e}")
+            raise typer.Exit(1) from e
+        finally:
+            if repository:
+                repository.close()
+
+    else:
+        # Single-pass mode: Delegate to migrate_all
+        console.print(f"\n[bold cyan]{MIGRATION_EMOJI} Starting Single-Pass Migration[/bold cyan]")
+        console.print(f"{INFO_EMOJI} Using traditional full extraction (use --use-multi-pass for new strategy)\n")
+
+        # Call migrate_all with the same context and parameters
+        migrate_all(
+            ctx=ctx,
+            db=db_path,
+            verbose=verbose,
+            deferred_notes=config.get("deferred_notes", True),
+            enable_notes_persistence=config.get("enable_notes_persistence", False),
+            resume=resume,
+            optimization_level=config.get("optimization_level", "moderate"),
+            enable_cost_monitoring=enable_cost_monitoring,
+            cost_monitoring_verbose=config.get("cost_monitoring_verbose", False),
+            enable_adaptive_optimization=enable_adaptive_optimization,
+            dry_run=config.get("dry_run", False),
+        )
+
+
 @migrate_app.command("all")
 def migrate_all(
     ctx: typer.Context,

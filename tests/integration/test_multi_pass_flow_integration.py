@@ -99,7 +99,7 @@ class TestMultiPassFlowIntegration:
 
         # Attachment queue methods
         repo.create_attachment_queue.side_effect = lambda sid, attachments: self._create_attachment_queue(repo, sid, attachments)
-        repo.get_attachment_queue.side_effect = lambda sid, s=None: self._get_attachment_queue(repo, sid, s)
+        repo.get_attachment_queue.side_effect = lambda sid, status=None, **kwargs: self._get_attachment_queue(repo, sid, status)
         repo.update_attachment_queue_status.side_effect = lambda item: self._update_attachment_status(repo, item)
 
         # Entity storage
@@ -340,23 +340,27 @@ class TestMultiPassFlowIntegration:
         return {
             "data": {
                 "clients": {
-                    "nodes": [
+                    "edges": [
                         {
-                            "id": f"client_{i}",
-                            "name": f"Test Client {i}",
-                            "email": f"client_{i}@example.com",
-                            "createdAt": "2024-01-01T00:00:00Z",
-                            "updatedAt": "2024-01-01T00:00:00Z",
-                            "notes": {
-                                "nodes": [
-                                    {"id": f"note_{j}", "content": f"Note {j}"}
-                                    for j in range(2)
-                                ]
-                            },
-                            "attachments": {
-                                "nodes": [
-                                    {"id": f"attach_{i}", "url": f"https://example.com/client_{i}.pdf"}
-                                ]
+                            "node": {
+                                "id": f"client_{i}",
+                                "name": f"Test Client {i}",
+                                "email": f"client_{i}@example.com",
+                                "createdAt": "2024-01-01T00:00:00Z",
+                                "updatedAt": "2024-01-01T00:00:00Z",
+                                "notes": {
+                                    "edges": [
+                                        {"node": {"id": f"note_{j}", "content": f"Note {j}"}}
+                                        for j in range(2)
+                                    ],
+                                    "pageInfo": {"hasNextPage": False}
+                                },
+                                "noteAttachments": {
+                                    "edges": [
+                                        {"node": {"id": f"attach_{i}", "url": f"https://example.com/client_{i}.pdf"}}
+                                    ],
+                                    "pageInfo": {"hasNextPage": False}
+                                }
                             }
                         }
                         for i in range(5)
@@ -371,18 +375,29 @@ class TestMultiPassFlowIntegration:
         return {
             "data": {
                 "invoices": {
-                    "nodes": [
+                    "edges": [
                         {
-                            "id": f"invoice_{i}",
-                            "number": f"INV-{i:04d}",
-                            "total": 1000.00 + (i * 100),
-                            "createdAt": "2024-01-01T00:00:00Z",
-                            "updatedAt": "2024-01-01T00:00:00Z",
-                            "lineItems": {
-                                "nodes": [
-                                    {"id": f"line_{j}", "description": f"Item {j}", "amount": 100.00}
-                                    for j in range(3)
-                                ]
+                            "node": {
+                                "id": f"invoice_{i}",
+                                "number": f"INV-{i:04d}",
+                                "total": 1000.00 + (i * 100),
+                                "createdAt": "2024-01-01T00:00:00Z",
+                                "updatedAt": "2024-01-01T00:00:00Z",
+                                "lineItems": {
+                                    "edges": [
+                                        {"node": {"id": f"line_{j}", "description": f"Item {j}", "amount": 100.00}}
+                                        for j in range(3)
+                                    ],
+                                    "pageInfo": {"hasNextPage": False}
+                                },
+                                "notes": {
+                                    "edges": [],
+                                    "pageInfo": {"hasNextPage": False}
+                                },
+                                "noteAttachments": {
+                                    "edges": [],
+                                    "pageInfo": {"hasNextPage": False}
+                                }
                             }
                         }
                         for i in range(3)
@@ -414,22 +429,31 @@ class TestMultiPassFlowIntegration:
 
     def _map_client_data(self, data: Dict) -> Client:
         """Map raw client data to Client model."""
+        # Split name into first_name and last_name
+        full_name = data.get("name", "Test Client")
+        name_parts = full_name.rsplit(" ", 1)
+        first_name = name_parts[0] if len(name_parts) > 0 else "Test"
+        last_name = name_parts[1] if len(name_parts) > 1 else "Client"
+
         return Client(
             id=data["id"],
-            name=data.get("name"),
-            email=data.get("email"),
-            created_at=data.get("createdAt"),
-            updated_at=data.get("updatedAt"),
+            first_name=first_name,
+            last_name=last_name,
+            email=data.get("email", ""),
+            phone=data.get("phone", ""),
+            created_at=data.get("createdAt", ""),
         )
 
     def _map_invoice_data(self, data: Dict) -> Invoice:
         """Map raw invoice data to Invoice model."""
+        total_cents = int(data.get("total", 0) * 100) if data.get("total") else 0
         return Invoice(
             id=data["id"],
-            number=data.get("number"),
-            total=data.get("total"),
-            created_at=data.get("createdAt"),
-            updated_at=data.get("updatedAt"),
+            client_id=data.get("clientId", "unknown"),
+            number=data.get("number", ""),
+            total_cents=total_cents,
+            status=data.get("status", "draft"),
+            issued_at=data.get("createdAt", ""),
         )
 
     def _save_snapshot(self, repo, snapshot: MapSnapshot) -> None:

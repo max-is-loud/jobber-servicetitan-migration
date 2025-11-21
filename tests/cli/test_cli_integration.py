@@ -173,8 +173,10 @@ class TestMigrateCommands(TestCLIRunner):
         result = runner.invoke(app, ["migrate", "--help"])
         assert result.exit_code == 0
         assert "migrate" in result.stdout.lower() or "migration" in result.stdout.lower()
+        assert "start" in result.stdout
         assert "map" in result.stdout
         assert "extract" in result.stdout
+        assert "reconcile" in result.stdout
         assert "all" in result.stdout
 
     def test_migrate_global_options_help(self, runner):
@@ -651,3 +653,397 @@ class TestCommandCombinations(TestCLIRunner):
                 ],
             )
             assert result.exit_code == 0
+
+
+class TestMigrateStartCommand(TestCLIRunner):
+    """Test migrate start command with backward compatibility."""
+
+    def test_migrate_start_help(self, runner, monkeypatch):
+        """Test migrate start --help displays help text."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        result = runner.invoke(app, ["migrate", "start", "--help"])
+        assert result.exit_code == 0
+        assert "start" in result.stdout.lower() or "migration" in result.stdout.lower()
+        assert "--use-multi-pass" in result.stdout
+        assert "single-pass" in result.stdout.lower()
+        assert "multi-pass" in result.stdout.lower()
+
+    def test_migrate_start_shows_multi_pass_options(self, runner, monkeypatch):
+        """Test migrate start help shows multi-pass specific options."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        result = runner.invoke(app, ["migrate", "start", "--help"])
+        assert result.exit_code == 0
+        assert "--entity" in result.stdout or "--entities" in result.stdout
+        assert "--snapshot-label" in result.stdout
+        assert "--report-dir" in result.stdout
+        assert "--resume" in result.stdout
+
+    def test_migrate_start_single_pass_default(self, runner, monkeypatch):
+        """Test migrate start defaults to single-pass mode."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.migrate.migrate_all") as mock_all:
+                with patch("src.cli.services.ServiceFactory.create_repository"):
+                    result = runner.invoke(app, ["migrate", "start"])
+                    # Should delegate to migrate_all when --use-multi-pass is not specified
+                    assert mock_all.called
+
+    def test_migrate_start_multi_pass_flag(self, runner, monkeypatch):
+        """Test migrate start --use-multi-pass runs multi-pass strategy."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
+                    with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
+                        with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
+                            with patch("src.coordinators.extract_mode_coordinator.ExtractModeCoordinator") as mock_extract:
+                                # Mock repository instance
+                                mock_repo_instance = Mock()
+                                mock_repo_instance.get_map_snapshot.return_value = Mock(label="test-label")
+                                mock_repo.return_value = mock_repo_instance
+
+                                # Mock map coordinator
+                                mock_map_instance = Mock()
+                                mock_map_instance.run_map_pass.return_value = {
+                                    "snapshot_id": "test-snapshot",
+                                    "label": "test-label",
+                                    "entity_results": {},
+                                    "totals": {},
+                                    "duration": 10.0,
+                                }
+                                mock_map_instance.identify_hotspots.return_value = []
+                                mock_map_instance.get_density_stats.return_value = {}
+                                mock_map.return_value = mock_map_instance
+
+                                # Mock extract coordinator
+                                mock_extract_instance = Mock()
+                                mock_extract_instance.run_extract_pass.return_value = {
+                                    "entity_results": {},
+                                    "attachment_result": {},
+                                    "discrepancies": [],
+                                    "totals": {},
+                                    "duration": 20.0,
+                                }
+                                mock_extract.return_value = mock_extract_instance
+
+                                # Mock report generators
+                                with patch("src.reports.MapReportGenerator") as mock_map_report:
+                                    with patch("src.reports.ExtractReportGenerator") as mock_extract_report:
+                                        mock_map_report.return_value.generate_report.return_value = ("map.md", "map.json")
+                                        mock_extract_report.return_value.generate_report.return_value = ("extract.md", "extract.json")
+
+                                        result = runner.invoke(app, ["migrate", "start", "--use-multi-pass"])
+
+                                        # Verify both coordinators were called
+                                        assert mock_map_instance.run_map_pass.called
+                                        assert mock_extract_instance.run_extract_pass.called
+
+    def test_migrate_start_multi_pass_with_entities(self, runner, monkeypatch):
+        """Test migrate start --use-multi-pass with specific entities."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "start",
+                    "--use-multi-pass",
+                    "--entity",
+                    "clients",
+                    "--entity",
+                    "invoices",
+                    "--help",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_migrate_start_multi_pass_with_snapshot_label(self, runner, monkeypatch):
+        """Test migrate start --use-multi-pass with snapshot label."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "start",
+                    "--use-multi-pass",
+                    "--snapshot-label",
+                    "test-migration",
+                    "--help",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_migrate_start_multi_pass_with_report_dir(self, runner, monkeypatch):
+        """Test migrate start --use-multi-pass with custom report directory."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "start",
+                    "--use-multi-pass",
+                    "--report-dir",
+                    "./custom-reports",
+                    "--help",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_migrate_start_multi_pass_with_resume(self, runner, monkeypatch):
+        """Test migrate start --use-multi-pass with resume flag."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            result = runner.invoke(
+                app,
+                ["migrate", "start", "--use-multi-pass", "--resume", "--help"],
+            )
+            assert result.exit_code == 0
+
+    def test_migrate_start_backward_compatibility(self, runner, monkeypatch):
+        """Test migrate start maintains backward compatibility with single-pass."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        # Verify that 'migrate start' without --use-multi-pass behaves like 'migrate all'
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.migrate.migrate_all") as mock_all:
+                with patch("src.cli.services.ServiceFactory.create_repository"):
+                    runner.invoke(app, ["migrate", "start"])
+
+                    # Should call migrate_all (single-pass behavior)
+                    assert mock_all.called
+                    # Verify it was called with correct parameters
+                    assert mock_all.call_count == 1
+
+    def test_migrate_start_multi_pass_invalid_entity(self, runner, monkeypatch):
+        """Test migrate start --use-multi-pass with invalid entity type."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository"):
+                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
+                    result = runner.invoke(
+                        app,
+                        ["migrate", "start", "--use-multi-pass", "--entity", "invalid_entity"],
+                    )
+                    # Should fail with invalid entity type
+                    assert result.exit_code != 0
+                    assert "Invalid entity" in result.stdout or "invalid" in result.stdout.lower()
+
+    def test_migrate_start_all_options_combined(self, runner, monkeypatch, temp_db):
+        """Test migrate start with all options combined."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "--db",
+                    temp_db,
+                    "--verbose",
+                    "--adaptive",
+                    "start",
+                    "--use-multi-pass",
+                    "--entity",
+                    "clients",
+                    "--snapshot-label",
+                    "full-test",
+                    "--report-dir",
+                    "./reports",
+                    "--resume",
+                    "--help",
+                ],
+            )
+            assert result.exit_code == 0
+
+
+class TestMigrateReconcileCommand(TestCLIRunner):
+    """Test migrate reconcile command."""
+
+    def test_migrate_reconcile_help(self, runner, monkeypatch):
+        """Test migrate reconcile --help displays help text."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        result = runner.invoke(app, ["migrate", "reconcile", "--help"])
+        assert result.exit_code == 0
+        assert "reconcile" in result.stdout.lower() or "reconciliation" in result.stdout.lower()
+        assert "--snapshot-id" in result.stdout
+        assert "data drift" in result.stdout.lower()
+
+    def test_migrate_reconcile_requires_snapshot_id(self, runner, monkeypatch):
+        """Test migrate reconcile requires --snapshot-id parameter."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            result = runner.invoke(app, ["migrate", "reconcile"])
+            # Should fail with missing required parameter
+            assert result.exit_code != 0
+
+    def test_migrate_reconcile_with_snapshot_id(self, runner, monkeypatch):
+        """Test migrate reconcile with valid snapshot ID."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository to return a valid snapshot
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = Mock(
+                    snapshot_id="test-snapshot",
+                    label="test-label",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+                mock_repo_instance.get_entity_inventory.return_value = [
+                    Mock(entity_type="clients", entity_id="client-1"),
+                    Mock(entity_type="invoices", entity_id="invoice-1"),
+                ]
+                mock_repo.return_value = mock_repo_instance
+
+                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
+                    with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
+                        with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
+                            with patch("src.coordinators.extract_mode_coordinator.ExtractModeCoordinator"):
+                                # Mock map coordinator to return new snapshot
+                                mock_map_instance = Mock()
+                                mock_map_instance.run_map_pass.return_value = {
+                                    "snapshot_id": "new-snapshot",
+                                    "label": "test-label-reconcile",
+                                    "entity_results": {},
+                                    "totals": {},
+                                    "duration": 10.0,
+                                }
+                                mock_map.return_value = mock_map_instance
+
+                                # Mock extract queues and attachment queues
+                                mock_repo_instance.get_extract_queue.return_value = []
+                                mock_repo_instance.get_attachment_queue.return_value = []
+
+                                result = runner.invoke(
+                                    app, ["migrate", "reconcile", "--snapshot-id", "test-snapshot"]
+                                )
+
+                                # Verify snapshot was retrieved
+                                assert mock_repo_instance.get_map_snapshot.called
+
+    def test_migrate_reconcile_with_invalid_snapshot(self, runner, monkeypatch):
+        """Test migrate reconcile with non-existent snapshot ID."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository to return None (snapshot not found)
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = None
+                mock_repo.return_value = mock_repo_instance
+
+                result = runner.invoke(
+                    app, ["migrate", "reconcile", "--snapshot-id", "invalid-snapshot"]
+                )
+
+                # Should fail with snapshot not found error
+                assert result.exit_code != 0
+                assert "not found" in result.stdout.lower() or "error" in result.stdout.lower()
+
+    def test_migrate_reconcile_with_specific_entities(self, runner, monkeypatch):
+        """Test migrate reconcile with specific entity types."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "reconcile",
+                    "--snapshot-id",
+                    "test-snapshot",
+                    "--entity",
+                    "clients",
+                    "--entity",
+                    "invoices",
+                    "--help",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_migrate_reconcile_with_invalid_entity(self, runner, monkeypatch):
+        """Test migrate reconcile with invalid entity type."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository to return valid snapshot
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = Mock(
+                    snapshot_id="test-snapshot",
+                    label="test-label",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+                mock_repo.return_value = mock_repo_instance
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "migrate",
+                        "reconcile",
+                        "--snapshot-id",
+                        "test-snapshot",
+                        "--entity",
+                        "invalid_entity",
+                    ],
+                )
+
+                # Should fail with invalid entity error
+                assert result.exit_code != 0
+                assert "Invalid entity" in result.stdout or "invalid" in result.stdout.lower()
+
+    def test_migrate_reconcile_with_report_dir(self, runner, monkeypatch):
+        """Test migrate reconcile with custom report directory."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "reconcile",
+                    "--snapshot-id",
+                    "test-snapshot",
+                    "--report-dir",
+                    "./custom-reports",
+                    "--help",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_migrate_reconcile_empty_snapshot(self, runner, monkeypatch):
+        """Test migrate reconcile with empty snapshot (no entities)."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository with valid snapshot but no inventory
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = Mock(
+                    snapshot_id="test-snapshot",
+                    label="test-label",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+                mock_repo_instance.get_entity_inventory.return_value = []  # Empty inventory
+                mock_repo.return_value = mock_repo_instance
+
+                result = runner.invoke(
+                    app, ["migrate", "reconcile", "--snapshot-id", "test-snapshot"]
+                )
+
+                # Should exit gracefully with nothing to reconcile
+                assert result.exit_code == 0
+                assert "Nothing to reconcile" in result.stdout or "No entity types" in result.stdout
