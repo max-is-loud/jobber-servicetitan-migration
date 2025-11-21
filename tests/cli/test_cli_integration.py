@@ -1413,3 +1413,148 @@ class TestMigrateReconcileCommand(TestCLIRunner):
                                                                     "Found 2 new entities" in result.stdout
                                                                     or "2 new" in result.stdout
                                                                 )
+
+    def test_migrate_reconcile_report_generation(self, runner, monkeypatch):
+        """Test migrate reconcile Phase 5: generates correct report content."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository to return a valid snapshot
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = Mock(
+                    snapshot_id="original-snapshot-123",
+                    label="test-migration-label",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+
+                # Mock inventories with deltas (2 new clients)
+                original_inventory = [
+                    Mock(entity_type="clients", entity_id=f"client-{i}") for i in range(1, 4)
+                ]
+                new_inventory = [Mock(entity_type="clients", entity_id=f"client-{i}") for i in range(1, 6)]
+
+                mock_repo_instance.get_entity_inventory.side_effect = [
+                    original_inventory,  # First call: determine entity types
+                    original_inventory,  # Second call: original inventory
+                    new_inventory,  # Third call: new inventory
+                ]
+
+                # Mock extract queue to show some entities extracted
+                mock_repo_instance.get_extract_queue.return_value = [
+                    Mock(entity_type="clients", entity_id="client-4", status="done"),
+                    Mock(entity_type="clients", entity_id="client-5", status="pending"),
+                ]
+
+                # Track create_extract_queue calls
+                mock_repo_instance.create_extract_queue = Mock()
+
+                # Mock failed attachments
+                mock_repo_instance.get_attachment_queue.return_value = [
+                    Mock(id="att-1"),
+                    Mock(id="att-2"),
+                    Mock(id="att-3"),
+                ]
+                mock_repo_instance.update_attachment_queue_status = Mock()
+
+                mock_repo.return_value = mock_repo_instance
+
+                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
+                    with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
+                        with patch("src.config.ConfigManagerImpl"):
+                            with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
+                                with patch(
+                                    "src.coordinators.extract_mode_coordinator.ExtractModeCoordinator"
+                                ) as mock_extract:
+                                    with patch("src.mappers.EntityMapper"):
+                                                        # Mock supported entity types
+                                                        mock_map.supported_entity_types.return_value = [
+                                                            "clients",
+                                                            "invoices",
+                                                            "jobs",
+                                                        ]
+
+                                                        # Mock map coordinator
+                                                        mock_map_instance = Mock()
+                                                        mock_map_instance.run_map_pass.return_value = {
+                                                            "snapshot_id": "new-snapshot-456",
+                                                            "label": "test-migration-label-reconcile",
+                                                            "entity_results": {},
+                                                            "totals": {},
+                                                            "duration": 10.0,
+                                                        }
+                                                        mock_map.return_value = mock_map_instance
+
+                                                        # Mock extract coordinator
+                                                        mock_extract_instance = Mock()
+                                                        mock_extract_instance.run_extract_pass.return_value = {
+                                                            "entity_results": {},
+                                                            "attachment_result": {},
+                                                            "discrepancies": [],
+                                                            "totals": {},
+                                                            "duration": 5.0,
+                                                        }
+                                                        mock_extract.return_value = mock_extract_instance
+
+                                                        # Capture report content
+                                                        captured_report = {}
+
+                                                        def capture_write_text(content):
+                                                            captured_report["content"] = content
+
+                                                        # Mock Path operations
+                                                        with patch("pathlib.Path.mkdir"):
+                                                            with patch("pathlib.Path.write_text") as mock_write:
+                                                                mock_write.side_effect = capture_write_text
+
+                                                                result = runner.invoke(
+                                                                    app,
+                                                                    [
+                                                                        "migrate",
+                                                                        "reconcile",
+                                                                        "--snapshot-id",
+                                                                        "original-snapshot-123",
+                                                                    ],
+                                                                )
+
+                                                                # Should succeed
+                                                                assert result.exit_code == 0
+
+                                                                # Verify report was written
+                                                                assert mock_write.called
+                                                                assert "content" in captured_report
+
+                                                                report_content = captured_report["content"]
+
+                                                                # Verify report contains required sections
+                                                                assert "# Reconciliation Report" in report_content
+                                                                assert (
+                                                                    "**Original Snapshot:** original-snapshot-123"
+                                                                    in report_content
+                                                                )
+                                                                assert (
+                                                                    "**Label:** test-migration-label" in report_content
+                                                                )
+                                                                assert (
+                                                                    "**New Snapshot:** new-snapshot-456" in report_content
+                                                                )
+
+                                                                # Verify summary section
+                                                                assert "## Summary" in report_content
+                                                                assert "**Entity Types Reconciled:**" in report_content
+                                                                assert "**New Entities Found:** 2" in report_content  # 2 deltas
+                                                                assert (
+                                                                    "**Failed Attachments Retried:** 3" in report_content
+                                                                )  # 3 attachments
+
+                                                                # Verify delta counts section
+                                                                assert "## Delta Entities by Type" in report_content
+                                                                assert (
+                                                                    "**clients:** 2 new entities" in report_content
+                                                                )  # 2 deltas
+
+                                                                # Verify completeness status section
+                                                                assert "## Completeness Status" in report_content
+                                                                # Should show extracted count vs total (1/5 = 20%)
+                                                                assert "**clients:**" in report_content
+                                                                assert "/5 extracted" in report_content
