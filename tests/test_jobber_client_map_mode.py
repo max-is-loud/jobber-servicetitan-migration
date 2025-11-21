@@ -428,3 +428,58 @@ class TestJobberClientMapModeQueries:
         query = jobber_client._get_jobs_map_query()
 
         assert "visits" in query or "totalCount" in query
+
+    def test_properties_map_query_contains_minimal_fields(self, jobber_client):
+        """Test properties map query contains minimal fields."""
+        query = jobber_client._get_properties_map_query()
+        assert "id" in query
+        assert "totalCount" in query
+        assert "address" not in query  # Heavy field
+
+    def test_requests_map_query_contains_minimal_fields(self, jobber_client):
+        """Test requests map query contains minimal fields."""
+        query = jobber_client._get_requests_map_query()
+        assert "id" in query
+        assert "updatedAt" in query
+        assert "notes" in query
+        assert "description" not in query  # Heavy field
+
+    def test_users_map_query_contains_minimal_fields(self, jobber_client):
+        """Test users map query contains minimal fields."""
+        query = jobber_client._get_users_map_query()
+        assert "id" in query
+        assert "lastLoginAt" in query
+        assert "email" not in query  # Heavy field
+
+    def test_expenses_map_query_contains_minimal_fields(self, jobber_client):
+        """Test expenses map query contains minimal fields."""
+        query = jobber_client._get_expenses_map_query()
+        assert "id" in query
+        assert "updatedAt" in query
+        assert "description" not in query  # Heavy field
+
+    def test_visits_map_query_contains_minimal_fields(self, jobber_client):
+        """Test visits map query contains minimal fields."""
+        query = jobber_client._get_visits_map_query()
+        assert "id" in query
+        assert "createdAt" in query
+        assert "instructions" not in query  # Heavy field
+
+    def test_timesheet_entries_map_query_contains_minimal_fields(self, jobber_client):
+        """Test timesheet entries map query contains minimal fields."""
+        query = jobber_client._get_timesheet_entries_map_query()
+        assert "id" in query
+        assert "updatedAt" in query
+        assert "note" not in query  # Heavy field
+
+    def test_products_services_map_query_contains_minimal_fields(self, jobber_client):
+        """Test products/services map query contains minimal fields."""
+        query = jobber_client._get_products_services_map_query()
+        assert "id" in query
+        assert "description" not in query  # Heavy field
+
+    def test_tax_rates_map_query_contains_minimal_fields(self, jobber_client):
+        """Test tax rates map query contains minimal fields."""
+        query = jobber_client._get_tax_rates_map_query()
+        assert "id" in query
+        assert "description" not in query  # Heavy field
