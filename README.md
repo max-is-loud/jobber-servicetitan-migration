@@ -14,11 +14,14 @@ A powerful, user-friendly command-line tool for migrating data from Jobber to ot
 
 ### 🚀 Advanced Migration Capabilities
 
+- **Multi-pass migration** strategy (Map → Extract → Reconcile)
 - **Incremental migration** with resume support
 - **Adaptive optimization** for performance tuning
 - **OAuth2 authentication** with automatic token refresh
 - **Rate limiting** and throttling protection
 - **Comprehensive error handling** and recovery
+- **Predictable effort estimation** before extraction
+- **Targeted retries** for failed entities
 
 ### 🛠 Developer-Friendly Architecture
 
@@ -63,16 +66,30 @@ uv run tightbeam oauth init
 # Follow the displayed instructions to set up your environment variables
 ```
 
-2. **Run a migration:**
+2. **Run a migration (multi-pass approach - recommended):**
 
 ```bash
-uv run tightbeam migrate start
+# Step 1: Map entities to get counts and estimate effort
+uv run tightbeam migrate map
+
+# Step 2: Extract full data using the snapshot ID from map output
+uv run tightbeam migrate extract --snapshot-id <snapshot-id>
 ```
 
-3. **Resume a migration:**
+3. **Or use single-pass migration (traditional):**
 
 ```bash
-uv run tightbeam migrate start --resume
+uv run tightbeam migrate all
+```
+
+4. **Resume a migration:**
+
+```bash
+# For multi-pass extraction
+uv run tightbeam migrate extract --snapshot-id <id> --resume
+
+# For single-pass migration
+uv run tightbeam migrate all --resume
 ```
 
 ## Migration Coordinator Architecture
@@ -148,23 +165,72 @@ uv run tightbeam oauth init
 uv run tightbeam oauth status
 ```
 
-### Migration Operations
+### Multi-Pass Migration (Recommended)
+
+The multi-pass approach provides predictable effort estimation and better control:
 
 ```bash
-# Start a new migration
-uv run tightbeam migrate start
+# Step 1: Map mode - Discover entities and relation counts
+uv run tightbeam migrate map
+
+# Optional: Map specific entity types with a label
+uv run tightbeam migrate map \
+    --entity clients \
+    --entity invoices \
+    --snapshot-label "Q1-2025"
+
+# Step 2: Extract mode - Hydrate full data from snapshot
+uv run tightbeam migrate extract --snapshot-id <snapshot-id>
+
+# Resume extraction if interrupted
+uv run tightbeam migrate extract --snapshot-id <id> --resume
+
+# Extract specific entity types from snapshot
+uv run tightbeam migrate extract \
+    --snapshot-id <id> \
+    --entity clients \
+    --entity invoices
+```
+
+**Benefits:**
+- See entity counts before extraction
+- Choose which entities to extract
+- Resume from failures without restarting
+- Retry only failed entities
+
+See [MULTI_PASS_MIGRATION.md](MULTI_PASS_MIGRATION.md) for complete guide.
+
+### Single-Pass Migration (Traditional)
+
+For simpler migrations or backward compatibility:
+
+```bash
+# Migrate all entities in one pass
+uv run tightbeam migrate all
 
 # Resume an interrupted migration
-uv run tightbeam migrate start --resume
+uv run tightbeam migrate all --resume
 
 # Dry run mode (preview only)
-uv run tightbeam migrate start --dry-run
+uv run tightbeam migrate all --dry-run
+```
 
-# Advanced options
-uv run tightbeam migrate start \
-    --resume \
-    --adaptive-optimization \
-    --optimization-level 3
+### Advanced Options
+
+Available for all migration commands:
+
+```bash
+# Enable adaptive optimization (auto-tune performance)
+uv run tightbeam migrate --adaptive map
+
+# Set rate limiting level
+uv run tightbeam migrate --optimization-level conservative map
+
+# Enable cost monitoring
+uv run tightbeam migrate --enable-cost-monitoring map
+
+# Verbose logging
+uv run tightbeam migrate --verbose map
 ```
 
 ## Configuration
@@ -261,7 +327,9 @@ uv run black src/
 
 For detailed technical documentation:
 
-- **[Migration Coordinator Documentation](MIGRATION_COORDINATOR_DOCUMENTATION.md)**: Complete usage guide
+- **[Multi-Pass Migration Guide](MULTI_PASS_MIGRATION.md)**: Complete multi-pass workflow guide
+- **[Database Schema](DATABASE_SCHEMA.md)**: Complete database schema reference
+- **[Migration Coordinator Documentation](MIGRATION_COORDINATOR_DOCUMENTATION.md)**: Coordinator usage guide
 - **[Architecture Updates](ARCHITECTURE_UPDATES.md)**: Technical architecture changes
 - **[Rich Testing Results](RICH_TESTING_RESULTS.md)**: Environment compatibility testing
 
