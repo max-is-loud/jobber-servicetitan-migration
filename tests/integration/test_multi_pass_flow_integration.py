@@ -312,6 +312,215 @@ class TestMultiPassFlowIntegration:
         actual_count = len(mock_repository._clients)
         assert actual_count <= expected_count  # May be less if some fail
 
+    def test_discrepancy_detection(
+        self,
+        mock_jobber_client,
+        mock_repository,
+        mock_entity_mapper,
+        mock_logger,
+    ):
+        """Test that extract mode detects when entity count differs from inventory."""
+        # Setup: Create map snapshot with 10 entities in inventory
+        snapshot_id = str(uuid4())
+        timestamp = datetime.now().isoformat()
+        mock_repository._map_snapshots[snapshot_id] = MapSnapshot(
+            id=snapshot_id,
+            created_at=timestamp,
+            pass1_cutoff=timestamp,
+            label="discrepancy-test",
+            entities_included='["clients"]',
+        )
+
+        # Add 10 entities to inventory (what map pass discovered)
+        mock_repository._entity_inventories = [
+            EntityInventory(
+                map_snapshot_id=snapshot_id,
+                entity_type="clients",
+                entity_id=f"clients_{i}",
+                discovered_at=timestamp,
+                updated_at=timestamp,
+                estimated_relations_json="{}",
+            )
+            for i in range(10)
+        ]
+
+        # Mock create_extract_queue to only create 8 items instead of 10
+        # This simulates incomplete queue creation (e.g., database error partway through)
+        def create_incomplete_queue(snapshot_id_param, entity_type_param):
+            if snapshot_id_param not in mock_repository._extract_queues:
+                mock_repository._extract_queues[snapshot_id_param] = []
+            # Only create 8 items instead of all 10 from inventory!
+            for i in range(8):
+                queue_item = ExtractQueueItem(
+                    map_snapshot_id=snapshot_id_param,
+                    entity_type=entity_type_param,
+                    entity_id=f"clients_{i}",
+                    status="pending",
+                    updated_at=timestamp,
+                    attempt_count=0,
+                )
+                mock_repository._extract_queues[snapshot_id_param].append(queue_item)
+
+        mock_repository.create_extract_queue.side_effect = create_incomplete_queue
+
+        # Mock fetch_clients to return matching entities
+        def limited_clients_response(cursor=None):
+            return {
+                "data": {
+                    "clients": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": f"clients_{i}",
+                                    "name": f"Test Client {i}",
+                                    "email": f"client_{i}@example.com",
+                                    "createdAt": timestamp,
+                                    "updatedAt": timestamp,
+                                    "notes": {
+                                        "edges": [],
+                                        "pageInfo": {"hasNextPage": False}
+                                    },
+                                    "noteAttachments": {
+                                        "edges": [],
+                                        "pageInfo": {"hasNextPage": False}
+                                    }
+                                }
+                            }
+                            for i in range(8)  # Only 8 entities, not 10!
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None}
+                    }
+                }
+            }
+
+        mock_jobber_client.fetch_clients.side_effect = limited_clients_response
+
+        # Run extraction
+        extract_coordinator = ExtractModeCoordinator(
+            jobber_client=mock_jobber_client,
+            entity_mapper=mock_entity_mapper,
+            repository=mock_repository,
+            logger=mock_logger,
+        )
+
+        result = extract_coordinator.run_extract_pass(
+            snapshot_id=snapshot_id,
+            entity_types=["clients"],
+        )
+
+        # Verify discrepancies were detected
+        assert "discrepancies" in result
+        assert len(result["discrepancies"]) > 0
+
+        # Check for entity_count_mismatch discrepancy
+        entity_mismatches = [
+            d for d in result["discrepancies"]
+            if d["type"] == "entity_count_mismatch"
+        ]
+        assert len(entity_mismatches) > 0, "Should detect entity count mismatch"
+
+        # Verify the discrepancy details
+        mismatch = entity_mismatches[0]
+        assert mismatch["entity_type"] == "clients"
+        assert mismatch["expected"] == 10  # From inventory
+        assert mismatch["actual"] == 8  # From API (entities that could be attempted)
+        assert mismatch["severity"] == "error"
+
+        # Verify logger was called with warning
+        assert mock_logger.warning.called
+
+    def test_data_drift_handling(
+        self,
+        mock_jobber_client,
+        mock_repository,
+        mock_entity_mapper,
+        mock_logger,
+    ):
+        """Test that entities modified after map cutoff are still extracted."""
+        # Setup: Create map snapshot with a cutoff time
+        snapshot_id = str(uuid4())
+        cutoff_time = "2024-01-01T12:00:00+00:00"  # Map pass cutoff
+        current_time = "2024-01-01T14:00:00+00:00"  # 2 hours later
+
+        mock_repository._map_snapshots[snapshot_id] = MapSnapshot(
+            id=snapshot_id,
+            created_at=cutoff_time,
+            pass1_cutoff=cutoff_time,  # Cutoff at map time
+            label="drift-test",
+            entities_included='["clients"]',
+        )
+
+        # Add 5 entities to inventory (discovered during map pass)
+        mock_repository._entity_inventories = [
+            EntityInventory(
+                map_snapshot_id=snapshot_id,
+                entity_type="clients",
+                entity_id=f"clients_{i}",
+                discovered_at=cutoff_time,
+                updated_at=cutoff_time,  # All discovered at cutoff time
+                estimated_relations_json="{}",
+            )
+            for i in range(5)
+        ]
+
+        # Mock API to return some entities with updatedAt > cutoff (data drift!)
+        # Entities 0-2: no drift (updated before cutoff)
+        # Entities 3-4: drifted (updated after cutoff)
+        def clients_with_drift(cursor=None):
+            return {
+                "data": {
+                    "clients": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": f"clients_{i}",
+                                    "name": f"Test Client {i}",
+                                    "email": f"client_{i}@example.com",
+                                    "createdAt": "2024-01-01T10:00:00+00:00",
+                                    # Entities 3-4 have updatedAt > cutoff (drift)
+                                    "updatedAt": current_time if i >= 3 else cutoff_time,
+                                    "notes": {
+                                        "edges": [],
+                                        "pageInfo": {"hasNextPage": False}
+                                    },
+                                    "noteAttachments": {
+                                        "edges": [],
+                                        "pageInfo": {"hasNextPage": False}
+                                    }
+                                }
+                            }
+                            for i in range(5)
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None}
+                    }
+                }
+            }
+
+        mock_jobber_client.fetch_clients.side_effect = clients_with_drift
+
+        # Run extraction
+        extract_coordinator = ExtractModeCoordinator(
+            jobber_client=mock_jobber_client,
+            entity_mapper=mock_entity_mapper,
+            repository=mock_repository,
+            logger=mock_logger,
+        )
+
+        result = extract_coordinator.run_extract_pass(
+            snapshot_id=snapshot_id,
+            entity_types=["clients"],
+        )
+
+        # Verify all entities were extracted successfully despite drift
+        assert result["entity_results"]["clients"]["extracted"] == 5
+        assert result["entity_results"]["clients"]["failed"] == 0
+
+        # Verify all 5 entities were saved (including drifted ones)
+        assert len(mock_repository._clients) == 5
+
+        # Note: Drift warnings would be tested here if drift detection is implemented
+        # For now, we verify the system handles drift gracefully by extracting all entities
+
     # Helper methods for mock data generation
 
     def _create_map_response(self, entity_type: str) -> Dict:
