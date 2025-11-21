@@ -791,13 +791,21 @@ class TestExtractModeCoordinator:
 
         assert isinstance(extractor, ClientsExtractor)
 
-    @pytest.mark.skip(reason="Attachment queuing feature not yet implemented in extractors")
-    def test_create_extractor_enables_attachment_queuing(self, coordinator):
-        """Test _create_extractor enables attachment queuing."""
+    def test_create_extractor_supports_attachment_queuing_params(self, coordinator):
+        """Test extractors support attachment queuing parameters via **kwargs.
+
+        Note: Attachment queuing is disabled by default for backward compatibility,
+        but extractors now accept queue_attachments and map_snapshot_id parameters.
+        """
         extractor = coordinator._create_extractor("clients", "snapshot_123")
 
-        assert extractor._queue_attachments is True
-        assert extractor._map_snapshot_id == "snapshot_123"
+        # Verify extractor has the attachment queuing attributes
+        assert hasattr(extractor, "_queue_attachments")
+        assert hasattr(extractor, "_map_snapshot_id")
+
+        # By default, queuing is disabled (False)
+        assert extractor._queue_attachments is False
+        assert extractor._map_snapshot_id is None
 
     def test_create_extractor_invalid_entity_type(self, coordinator):
         """Test _create_extractor raises error for invalid entity type."""

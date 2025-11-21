@@ -539,6 +539,9 @@ class ExtractModeCoordinator:
             logger=self._logger,
             config_manager=self._config_manager,
             skip_existing_entities=False,  # Extract mode doesn't skip
+            # Note: Attachment queuing is available but disabled by default
+            # to maintain backward compatibility. Pass queue_attachments=True
+            # and map_snapshot_id to enable it when needed.
         )
 
     def get_queue_status(

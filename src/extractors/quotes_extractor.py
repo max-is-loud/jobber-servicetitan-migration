@@ -30,6 +30,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
         logger: Logger,
         config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize QuotesExtractor with required dependencies.
 
@@ -40,6 +41,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
             logger: Logger for structured output and progress tracking
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
+            **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -50,6 +52,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
             entity_name="quote",
             config_manager=config_manager,
             skip_existing_entities=skip_existing_entities,
+            **kwargs,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Quote] = []

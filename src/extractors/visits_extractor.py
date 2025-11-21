@@ -32,6 +32,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
         repository: Repository,
         logger: Logger,
         skip_existing_entities: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize VisitsExtractor with required dependencies.
 
@@ -41,6 +42,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
             skip_existing_entities: Whether to skip entities that already exist in database
+            **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -50,6 +52,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
             entity_type=Visit,
             entity_name="visit",
             skip_existing_entities=skip_existing_entities,
+            **kwargs,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Visit] = []
