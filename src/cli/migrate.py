@@ -766,9 +766,9 @@ def migrate_reconcile(
         report_dir.mkdir(parents=True, exist_ok=True)
 
         # Create reconciliation summary
-        from datetime import datetime
+        from datetime import datetime, UTC
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         report_filename = f"reconcile-{snapshot.label or snapshot_id}-{timestamp}.md"
         report_path = report_dir / report_filename
 
@@ -779,7 +779,7 @@ def migrate_reconcile(
             f"**Original Snapshot:** {snapshot_id}",
             f"**Label:** {snapshot.label or 'unlabeled'}",
             f"**New Snapshot:** {new_snapshot_id}",
-            f"**Reconciliation Date:** {datetime.utcnow().isoformat()}Z",
+            f"**Reconciliation Date:** {datetime.now(UTC).isoformat()}",
             f"",
             f"## Summary",
             f"",

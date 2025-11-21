@@ -211,7 +211,7 @@ class TestMultiPassFlowIntegration:
             EntityInventory(
                 map_snapshot_id=snapshot_id,
                 entity_type="clients",
-                entity_id=f"client_{i}",
+                entity_id=f"clients_{i}",
                 discovered_at=timestamp,
                 updated_at=timestamp,
                 estimated_relations_json='{"notes": 2, "attachments": 1}',
@@ -224,7 +224,7 @@ class TestMultiPassFlowIntegration:
             ExtractQueueItem(
                 map_snapshot_id=snapshot_id,
                 entity_type="clients",
-                entity_id=f"client_{i}",
+                entity_id=f"clients_{i}",
                 status="done" if i < 3 else "failed" if i == 3 else "pending",
                 updated_at=timestamp,
                 attempt_count=1 if i == 3 else 0,
@@ -343,7 +343,7 @@ class TestMultiPassFlowIntegration:
                     "edges": [
                         {
                             "node": {
-                                "id": f"client_{i}",
+                                "id": f"clients_{i}",
                                 "name": f"Test Client {i}",
                                 "email": f"client_{i}@example.com",
                                 "createdAt": "2024-01-01T00:00:00Z",
@@ -375,7 +375,7 @@ class TestMultiPassFlowIntegration:
                     "edges": [
                         {
                             "node": {
-                                "id": f"invoice_{i}",
+                                "id": f"invoices_{i}",
                                 "number": f"INV-{i:04d}",
                                 "total": 1000.00 + (i * 100),
                                 "createdAt": "2024-01-01T00:00:00Z",

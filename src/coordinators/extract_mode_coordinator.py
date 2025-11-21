@@ -1,6 +1,6 @@
 """Extract mode coordinator for queue-based entity hydration."""
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Dict, List, Optional
 
 from rich.console import Console
@@ -139,7 +139,7 @@ class ExtractModeCoordinator:
             self._logger.info("Resuming from existing extract queues...")
 
         # Process queues
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
         entity_results = {}
         total_extracted = 0
         total_failed = 0
@@ -157,7 +157,7 @@ class ExtractModeCoordinator:
         discrepancies = self._validate_completeness(snapshot_id, entity_types, entity_results, attachment_result)
 
         # Calculate duration
-        end_time = datetime.utcnow()
+        end_time = datetime.now(UTC)
         duration = (end_time - start_time).total_seconds()
 
         if discrepancies:
@@ -588,4 +588,4 @@ class ExtractModeCoordinator:
         Returns:
             ISO8601 formatted timestamp string
         """
-        return datetime.utcnow().isoformat() + "Z"
+        return datetime.now(UTC).isoformat()

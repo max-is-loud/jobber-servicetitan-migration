@@ -1,7 +1,7 @@
 """Map mode coordinator for orchestrating lightweight entity discovery."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, List, Optional
 
 from rich.console import Console
@@ -130,7 +130,7 @@ class MapModeCoordinator:
         snapshot = self._create_snapshot(entity_types, label)
         self._logger.success(f"Created map snapshot: {snapshot.id} (label: {snapshot.label})")
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
         entity_results = {}
         total_entities = 0
         mapped_counts: dict[TaskID, int] = {}
@@ -182,7 +182,7 @@ class MapModeCoordinator:
                 )
 
         # Calculate duration
-        end_time = datetime.utcnow()
+        end_time = datetime.now(UTC)
         duration = (end_time - start_time).total_seconds()
 
         self._logger.success(
@@ -221,11 +221,11 @@ class MapModeCoordinator:
         import json
 
         snapshot_id = str(uuid.uuid4())
-        current_time = datetime.utcnow().isoformat() + "Z"
+        current_time = datetime.now(UTC).isoformat()
 
         # Generate label if not provided
         if not label:
-            label = f"map-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+            label = f"map-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
 
         snapshot = MapSnapshot(
             id=snapshot_id,

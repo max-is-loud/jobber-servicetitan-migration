@@ -1,7 +1,7 @@
 """Base class for map mode extractors with lightweight entity discovery."""
 
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, UTC
 import time
 from typing import Any, Callable, List, Optional
 
@@ -195,4 +195,4 @@ class BaseMapExtractor(ABC):
         Returns:
             ISO8601 formatted timestamp string
         """
-        return datetime.utcnow().isoformat() + "Z"
+        return datetime.now(UTC).isoformat()

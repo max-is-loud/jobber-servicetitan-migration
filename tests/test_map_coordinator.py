@@ -61,7 +61,7 @@ class TestMapModeCoordinator:
         with patch("src.coordinators.map_mode_coordinator.uuid.uuid4", return_value="test-uuid-123"):
             with patch("src.coordinators.map_mode_coordinator.datetime") as mock_datetime:
                 mock_now = datetime(2023, 11, 15, 10, 0, 0)
-                mock_datetime.utcnow.return_value = mock_now
+                mock_datetime.now.return_value = mock_now
                 mock_datetime.strftime = datetime.strftime
 
                 snapshot = coordinator._create_snapshot(entity_types, label="test-label")
@@ -80,7 +80,7 @@ class TestMapModeCoordinator:
         with patch("src.coordinators.map_mode_coordinator.uuid.uuid4", return_value="test-uuid"):
             with patch("src.coordinators.map_mode_coordinator.datetime") as mock_datetime:
                 mock_now = datetime(2023, 11, 15, 10, 30, 45)
-                mock_datetime.utcnow.return_value = mock_now
+                mock_datetime.now.return_value = mock_now
                 mock_datetime.strftime = datetime.strftime
 
                 snapshot = coordinator._create_snapshot(entity_types, label=None)
