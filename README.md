@@ -74,6 +74,9 @@ uv run tightbeam migrate map
 
 # Step 2: Extract full data using the snapshot ID from map output
 uv run tightbeam migrate extract --snapshot-id <snapshot-id>
+
+# Step 3 (Optional): Reconcile to close gaps and handle drift
+uv run tightbeam migrate reconcile --snapshot-id <snapshot-id>
 ```
 
 3. **Or use single-pass migration (traditional):**
@@ -190,6 +193,15 @@ uv run tightbeam migrate extract \
     --snapshot-id <id> \
     --entity clients \
     --entity invoices
+
+# Step 3: Reconcile to handle data drift and retry failures
+uv run tightbeam migrate reconcile --snapshot-id <id>
+
+# Reconcile specific entity types
+uv run tightbeam migrate reconcile \
+    --snapshot-id <id> \
+    --entity clients \
+    --entity invoices
 ```
 
 **Benefits:**
@@ -197,6 +209,8 @@ uv run tightbeam migrate extract \
 - Choose which entities to extract
 - Resume from failures without restarting
 - Retry only failed entities
+- Handle data drift with reconciliation
+- Verify final completeness
 
 See [MULTI_PASS_MIGRATION.md](MULTI_PASS_MIGRATION.md) for complete guide.
 

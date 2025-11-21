@@ -53,14 +53,30 @@ Hydrates complete records using queues seeded from a map snapshot.
 - `AttachmentQueueItem` for binary downloads
 - Extract report with completeness validation
 
-### Pass 3: Reconcile Mode (Optional - Not Yet Implemented)
-Planned for closing gaps and handling data drift between passes.
+### Pass 3: Reconcile Mode (Optional)
+Closes gaps and handles data drift between passes.
 
-**Planned capabilities:**
-- Re-run discovery for types with discrepancies
-- Verify attachment download success
-- Produce delta queues for missing entities
-- Final completeness report
+**What it does:**
+- Re-runs discovery for specified entity types
+- Compares new map with original snapshot
+- Identifies delta entities (added during migration)
+- Extracts only the missing entities
+- Retries failed attachment downloads
+- Produces final completeness report
+
+**Execution model:**
+- Creates new map snapshot for comparison
+- Identifies delta entities not in original snapshot
+- Adds deltas to original snapshot's extract queue
+- Processes pending queue items
+- Resets failed attachments to pending and retries
+- Generates reconciliation report with completeness metrics
+
+**Output:**
+- New map snapshot for comparison
+- Delta entities added to original extract queue
+- Updated attachment queue status
+- Reconciliation report (Markdown) with completeness validation
 
 ## CLI Commands
 
@@ -101,7 +117,7 @@ uv run tightbeam migrate map --report-dir ./my-reports
 - `users`
 - `visits`
 
-**Global migrate options** (available for both map and extract):
+**Global migrate options** (available for map, extract, and reconcile):
 - `--db PATH`: SQLite database path
 - `--verbose`: Enable verbose logging
 - `--adaptive`: Enable adaptive performance optimization (auto-tune page size and delays)
@@ -132,6 +148,33 @@ uv run tightbeam migrate extract --snapshot-id <id> --report-dir ./my-reports
 - `--resume`: Resume from existing extract queues instead of recreating them
 - `--report-dir PATH`: Directory for reports (default: `reports/`)
 
+### Reconcile Command
+
+Run reconciliation pass to close gaps and handle data drift:
+
+```bash
+# Reconcile all entity types from a snapshot
+uv run tightbeam migrate reconcile --snapshot-id <snapshot-uuid>
+
+# Reconcile specific entity types
+uv run tightbeam migrate reconcile --snapshot-id <id> --entity clients --entity invoices
+
+# Specify report directory
+uv run tightbeam migrate reconcile --snapshot-id <id> --report-dir ./my-reports
+```
+
+**Options:**
+- `--snapshot-id TEXT`: **Required** - Map snapshot ID to reconcile
+- `--entity, --entities TEXT`: Entity types to reconcile (defaults to all types in snapshot)
+- `--report-dir PATH`: Directory for reports (default: `reports/`)
+
+**What reconcile does:**
+1. **Re-runs map pass** for specified entity types (creates new snapshot)
+2. **Compares maps** to identify delta entities (new since original map)
+3. **Extracts deltas** by adding them to original snapshot's queue
+4. **Retries failed attachments** from the original extraction
+5. **Generates report** with completeness validation
+
 ## Workflow Examples
 
 ### Basic Multi-Pass Migration
@@ -148,6 +191,12 @@ uv run tightbeam migrate extract --snapshot-id <snapshot-id-from-map>
 
 # Step 3: Review extract report for completeness
 # Check reports/extract-<timestamp>.md for any discrepancies
+
+# Step 4 (Optional): Run reconcile to close gaps and handle drift
+uv run tightbeam migrate reconcile --snapshot-id <snapshot-id-from-map>
+
+# Step 5: Review reconcile report for final completeness
+# Check reports/reconcile-<label>-<timestamp>.md
 ```
 
 ### Selective Entity Migration
@@ -167,6 +216,18 @@ uv run tightbeam migrate extract --snapshot-id <id> --entity clients
 uv run tightbeam migrate extract --snapshot-id <id> --resume
 
 # The --resume flag skips entities marked as 'done' and retries 'failed' ones
+```
+
+### Reconciling After Extraction
+
+```bash
+# After extract completes, run reconcile to close gaps
+uv run tightbeam migrate reconcile --snapshot-id <id>
+
+# Reconcile identifies:
+# - New entities added during migration (data drift)
+# - Failed attachment downloads to retry
+# - Completeness gaps in extraction
 ```
 
 ### Using Adaptive Optimization
@@ -476,8 +537,11 @@ If extracted counts don't match map totals:
 
 1. Check extract report completeness section
 2. Look for failed entities in the report
-3. Verify no entities were updated/deleted between map and extract passes
-4. Consider running reconcile pass (when implemented)
+3. Run reconcile to identify and extract deltas:
+   ```bash
+   uv run tightbeam migrate reconcile --snapshot-id <id>
+   ```
+4. Check reconcile report for final completeness status
 
 ### Database Locked Errors
 
@@ -546,19 +610,6 @@ GROUP BY entity_type, map_snapshot_id;
 ```
 
 ## Future Enhancements
-
-### Reconcile Pass (Planned)
-
-The optional third pass will:
-- Re-run discovery for types with discrepancies
-- Generate delta queues for missing entities
-- Verify attachment download completeness
-- Produce final completeness report
-
-**Planned CLI:**
-```bash
-uv run tightbeam migrate reconcile --snapshot-id <id>
-```
 
 ### Incremental Sync (Planned)
 
