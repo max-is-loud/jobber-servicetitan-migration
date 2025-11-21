@@ -521,6 +521,316 @@ class TestMultiPassFlowIntegration:
         # Note: Drift warnings would be tested here if drift detection is implemented
         # For now, we verify the system handles drift gracefully by extracting all entities
 
+    def test_attachment_retry(
+        self,
+        mock_jobber_client,
+        mock_repository,
+        mock_entity_mapper,
+        mock_logger,
+    ):
+        """Test that failed attachments are retried on subsequent extract pass."""
+        # Setup: Create map snapshot
+        snapshot_id = str(uuid4())
+        timestamp = datetime.now().isoformat()
+        mock_repository._map_snapshots[snapshot_id] = MapSnapshot(
+            id=snapshot_id,
+            created_at=timestamp,
+            pass1_cutoff=timestamp,
+            label="attachment-retry-test",
+            entities_included='["clients"]',
+        )
+
+        # Add 2 clients to inventory (with no new attachments expected)
+        mock_repository._entity_inventories = [
+            EntityInventory(
+                map_snapshot_id=snapshot_id,
+                entity_type="clients",
+                entity_id=f"clients_{i}",
+                discovered_at=timestamp,
+                updated_at=timestamp,
+                estimated_relations_json='{"noteAttachments": 0}',  # No new attachments
+            )
+            for i in range(2)
+        ]
+
+        # Setup: Create attachments in repository (use different IDs to avoid conflicts with API mock)
+        from src.models import Attachment, AttachmentQueueItem
+
+        mock_attachments = [
+            Attachment(
+                id=f"failed_attach_{i}",  # Different ID to avoid conflicts
+                note_id=f"note_{i}",
+                file_name=f"failed_file_{i}.pdf",
+                content_type="application/pdf",
+                original_url=f"https://jobber.com/failed-attachments/{i}",
+                local_file_path="",  # Empty initially
+                file_size=1024,
+                created_at=timestamp,
+            )
+            for i in range(2)
+        ]
+
+        # Add failed attachments to repository's attachment storage (preserve as dict for get_attachment_by_id)
+        if not isinstance(mock_repository._attachments, dict):
+            # Convert list to dict for attachment lookups
+            mock_repository._attachment_list = mock_repository._attachments
+            mock_repository._attachments_dict = {att.id: att for att in mock_attachments}
+        else:
+            mock_repository._attachment_list = []
+            mock_repository._attachments_dict = {att.id: att for att in mock_attachments}
+
+        # Mock get_attachment_by_id to return the failed attachments
+        def get_attachment_by_id(attachment_id):
+            return mock_repository._attachments_dict.get(attachment_id)
+
+        mock_repository.get_attachment_by_id = get_attachment_by_id
+
+        # Mock save_attachments to append to list (as expected by fixture)
+        def save_attachments(attachments):
+            mock_repository._attachment_list.extend(attachments)
+
+        mock_repository.save_attachments.side_effect = save_attachments
+
+        # Setup: Create attachment queue with 2 failed attachments
+        mock_repository._attachment_queues[snapshot_id] = [
+            AttachmentQueueItem(
+                map_snapshot_id=snapshot_id,
+                parent_type="clients",  # Correct field name
+                parent_id=f"clients_{i}",  # Correct field name
+                attachment_id=f"failed_attach_{i}",  # Match the failed attachment IDs
+                status="failed",  # Initially failed
+                updated_at=timestamp,
+                last_error="Network timeout",
+                attempt_count=1,
+            )
+            for i in range(2)
+        ]
+
+        # Mock attachment downloader to succeed on retry
+        from src.extractors.attachment_downloader import AttachmentDownloader
+
+        # Track download attempts
+        download_attempts = []
+
+        def mock_download(attachment: Attachment):
+            download_attempts.append(attachment.id)
+            # Succeed on all attempts (simulating successful retry)
+            return {
+                "success": True,
+                "local_file_path": f"/tmp/downloads/{attachment.id}.pdf",
+            }
+
+        # Run first extraction pass (which will retry the failed attachments)
+        extract_coordinator = ExtractModeCoordinator(
+            jobber_client=mock_jobber_client,
+            entity_mapper=mock_entity_mapper,
+            repository=mock_repository,
+            logger=mock_logger,
+        )
+
+        # Mock the attachment downloader
+        with patch.object(AttachmentDownloader, 'download_attachment', side_effect=mock_download):
+            result = extract_coordinator.run_extract_pass(
+                snapshot_id=snapshot_id,
+                entity_types=["clients"],
+            )
+
+        # Verify failed attachments were retried
+        assert len(download_attempts) >= 2, f"Should retry at least 2 failed attachments, got {len(download_attempts)}: {download_attempts}"
+        assert "failed_attach_0" in download_attempts, "Should retry failed_attach_0"
+        assert "failed_attach_1" in download_attempts, "Should retry failed_attach_1"
+
+        # Verify attachment statuses were updated to done
+        attachment_queue = mock_repository._attachment_queues[snapshot_id]
+        done_attachments = [a for a in attachment_queue if a.status == "done"]
+        assert len(done_attachments) >= 2, f"At least 2 attachments should be marked as done, got {len(done_attachments)}"
+
+        # Verify failed attachments are now done
+        failed_attach_statuses = {a.attachment_id: a.status for a in attachment_queue if "failed_attach" in a.attachment_id}
+        assert failed_attach_statuses.get("failed_attach_0") == "done", "failed_attach_0 should be done"
+        assert failed_attach_statuses.get("failed_attach_1") == "done", "failed_attach_1 should be done"
+
+    def test_end_to_end_reconcile(
+        self,
+        mock_jobber_client,
+        mock_repository,
+        mock_entity_mapper,
+        mock_logger,
+    ):
+        """Test complete reconcile workflow: re-map -> compare -> extract deltas."""
+        # Phase 1: Initial map with 5 clients
+        snapshot_id_1 = str(uuid4())
+        timestamp_1 = datetime.now().isoformat()
+
+        # Mock API to return 5 clients initially
+        initial_client_count = 5
+
+        def create_map_response_initial(cursor=None):
+            return {
+                "data": {
+                    "clients": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": f"clients_{i}",
+                                    "updatedAt": timestamp_1,
+                                    "noteAttachments": {"totalCount": 0},
+                                }
+                            }
+                            for i in range(initial_client_count)
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+            }
+
+        mock_jobber_client.fetch_clients_map.side_effect = create_map_response_initial
+
+        # Run initial map pass
+        map_coordinator = MapModeCoordinator(
+            jobber_client=mock_jobber_client,
+            repository=mock_repository,
+            logger=mock_logger,
+        )
+
+        # Run map extraction (this creates the snapshot automatically)
+        map_result = map_coordinator.run_map_pass(["clients"], label="initial-map")
+        snapshot_id_1 = map_result["snapshot_id"]  # Get the snapshot ID from result
+
+        # Verify 5 entities discovered
+        assert map_result["totals"]["total_entities"] == 5, "Should discover 5 clients in initial map"
+
+        # Phase 2: Run extract pass for initial 5 clients
+        extract_coordinator = ExtractModeCoordinator(
+            jobber_client=mock_jobber_client,
+            entity_mapper=mock_entity_mapper,
+            repository=mock_repository,
+            logger=mock_logger,
+        )
+
+        extract_result_1 = extract_coordinator.run_extract_pass(
+            snapshot_id=snapshot_id_1,
+            entity_types=["clients"],
+        )
+
+        # Verify 5 clients extracted
+        assert extract_result_1["totals"]["total_extracted"] == 5, "Should extract 5 clients"
+
+        # Phase 3: Simulate changes - API now returns 8 clients (3 new ones)
+        timestamp_2 = datetime.now().isoformat()
+        new_client_count = 8
+
+        def create_map_response_reconcile(cursor=None):
+            return {
+                "data": {
+                    "clients": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": f"clients_{i}",
+                                    "updatedAt": timestamp_2 if i >= 5 else timestamp_1,  # New clients have new timestamp
+                                    "noteAttachments": {"totalCount": 0},
+                                }
+                            }
+                            for i in range(new_client_count)
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+            }
+
+        mock_jobber_client.fetch_clients_map.side_effect = create_map_response_reconcile
+
+        # Also update fetch_clients for extract mode to return all 8 clients
+        def create_full_clients_response_8(cursor=None):
+            return {
+                "data": {
+                    "clients": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": f"clients_{i}",
+                                    "name": f"Test Client {i}",
+                                    "email": f"client_{i}@example.com",
+                                    "createdAt": timestamp_2 if i >= 5 else timestamp_1,
+                                    "updatedAt": timestamp_2 if i >= 5 else timestamp_1,
+                                    "notes": {"edges": [], "pageInfo": {"hasNextPage": False}},
+                                    "noteAttachments": {"edges": [], "pageInfo": {"hasNextPage": False}},
+                                }
+                            }
+                            for i in range(8)
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+            }
+
+        mock_jobber_client.fetch_clients.side_effect = create_full_clients_response_8
+
+        # Run reconcile map pass (this creates a new snapshot)
+        reconcile_map_result = map_coordinator.run_map_pass(["clients"], label="reconcile-map")
+        snapshot_id_2 = reconcile_map_result["snapshot_id"]  # Get the new snapshot ID
+
+        # Verify 8 entities discovered (5 existing + 3 new)
+        assert reconcile_map_result["totals"]["total_entities"] == 8, "Should discover 8 clients in reconcile map"
+
+        # Phase 4: Identify deltas
+        # Get inventories from both snapshots
+        inventory_1 = set(item.entity_id for item in mock_repository._entity_inventories if item.map_snapshot_id == snapshot_id_1)
+        inventory_2 = set(item.entity_id for item in mock_repository._entity_inventories if item.map_snapshot_id == snapshot_id_2)
+
+        deltas = inventory_2 - inventory_1
+
+        # Verify 3 deltas detected
+        assert len(deltas) == 3, f"Should detect 3 deltas, found {len(deltas)}: {deltas}"
+        assert "clients_5" in deltas, "clients_5 should be a delta"
+        assert "clients_6" in deltas, "clients_6 should be a delta"
+        assert "clients_7" in deltas, "clients_7 should be a delta"
+
+        # Phase 5: Extract only deltas
+        # Override create_extract_queue to only create queue items for delta entities
+        def create_delta_queue(repo, snapshot_id, entity_type):
+            if snapshot_id != snapshot_id_2:
+                # Use default behavior for first snapshot
+                return self._create_extract_queue(repo, snapshot_id, entity_type)
+
+            # For reconcile, only create queue items for deltas
+            inventory = [item for item in repo._entity_inventories if item.map_snapshot_id == snapshot_id and item.entity_id in deltas]
+
+            from src.models import ExtractQueueItem
+            queue_items = [
+                ExtractQueueItem(
+                    map_snapshot_id=snapshot_id,
+                    entity_type=entity_type,
+                    entity_id=item.entity_id,
+                    status="pending",
+                    updated_at=datetime.now().isoformat(),
+                    attempt_count=0,
+                )
+                for item in inventory
+            ]
+
+            # Create flat list structure (not nested by entity_type)
+            if snapshot_id not in repo._extract_queues:
+                repo._extract_queues[snapshot_id] = []
+
+            repo._extract_queues[snapshot_id].extend(queue_items)
+
+        mock_repository.create_extract_queue.side_effect = lambda sid, et: create_delta_queue(mock_repository, sid, et)
+
+        # Run extract pass for deltas
+        extract_result_2 = extract_coordinator.run_extract_pass(
+            snapshot_id=snapshot_id_2,
+            entity_types=["clients"],
+        )
+
+        # Verify only 3 delta clients extracted
+        assert extract_result_2["totals"]["total_extracted"] == 3, f"Should extract 3 delta clients, got {extract_result_2['totals']['total_extracted']}"
+
+        # Verify total clients saved is 8 (5 from initial + 3 from reconcile)
+        total_clients_saved = len(mock_repository._clients)
+        assert total_clients_saved == 8, f"Should have 8 total clients saved, got {total_clients_saved}"
+
     # Helper methods for mock data generation
 
     def _create_map_response(self, entity_type: str) -> Dict:
