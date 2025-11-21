@@ -200,7 +200,7 @@ class TestEnhancedTokenManagement:
         # Arrange - empty cache, valid database token
         future_time = datetime.now(timezone.utc) + timedelta(hours=1)
         expires_at_iso = future_time.isoformat()
-        
+
         self.mock_repository.get_oauth_tokens.return_value = {
             "access_token": "db_token",
             "refresh_token": "refresh_token",
@@ -222,7 +222,7 @@ class TestEnhancedTokenManagement:
         # Arrange - empty cache, expired database token
         past_time = datetime.now(timezone.utc) - timedelta(hours=1)
         expires_at_iso = past_time.isoformat()
-        
+
         self.mock_repository.get_oauth_tokens.return_value = {
             "access_token": "expired_db_token",
             "refresh_token": "refresh_token",
@@ -266,7 +266,7 @@ class TestEnhancedTokenManagement:
         # Arrange - expired database token
         past_time = datetime.now(timezone.utc) - timedelta(hours=1)
         expires_at_iso = past_time.isoformat()
-        
+
         self.mock_repository.get_oauth_tokens.return_value = {
             "access_token": "expired_db_token",
             "refresh_token": "refresh_token",
@@ -295,7 +295,7 @@ class TestEnhancedTokenManagement:
         # Arrange - expired database token
         past_time = datetime.now(timezone.utc) - timedelta(hours=1)
         expires_at_iso = past_time.isoformat()
-        
+
         self.mock_repository.get_oauth_tokens.return_value = {
             "access_token": "expired_db_token",
             "refresh_token": "refresh_token",
@@ -404,7 +404,7 @@ class TestEnhancedTokenManagement:
         # Step 1: Cache miss, query database with valid token
         future_time = datetime.now(timezone.utc) + timedelta(hours=1)
         expires_at_iso = future_time.isoformat()
-        
+
         self.mock_repository.get_oauth_tokens.return_value = {
             "access_token": "valid_db_token",
             "refresh_token": "refresh_token",
@@ -448,4 +448,4 @@ class TestEnhancedTokenManagement:
         is_expired = self.auth_provider._is_token_expired_from_db(expires_at_iso)
 
         # Assert
-        assert is_expired 
+        assert is_expired

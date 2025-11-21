@@ -283,9 +283,7 @@ def _execute_entity_extraction(
         elif entity_type == "users":
             logger.info(f"✅ User extraction completed: {result['entities_processed']} users processed")
         elif entity_type == "expenses":
-            logger.info(
-                f"✅ Expense extraction completed: {result['entities_processed']} expenses processed"
-            )
+            logger.info(f"✅ Expense extraction completed: {result['entities_processed']} expenses processed")
         elif entity_type == "visits":
             logger.info(f"✅ Visit extraction completed: {result['entities_processed']} visits processed")
         elif entity_type == "timesheet-entries":
@@ -297,9 +295,7 @@ def _execute_entity_extraction(
                 f"✅ Product/service extraction completed: {result['entities_processed']} products/services processed"
             )
         elif entity_type == "tax-rates":
-            logger.info(
-                f"✅ Tax rate extraction completed: {result['entities_processed']} tax rates processed"
-            )
+            logger.info(f"✅ Tax rate extraction completed: {result['entities_processed']} tax rates processed")
 
         # Handle continuation if more pages available
         if result["has_next_page"] and page_limit is None:

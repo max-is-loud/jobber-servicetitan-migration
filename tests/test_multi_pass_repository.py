@@ -24,9 +24,7 @@ class TestMultiPassSchemaInitialization:
         cursor = conn.cursor()
 
         # Verify all multi-pass tables exist
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = {row[0] for row in cursor.fetchall()}
 
         expected_tables = {
@@ -141,9 +139,7 @@ class TestMultiPassSchemaInitialization:
         cursor = conn.cursor()
 
         # Get all indexes
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' ORDER BY name"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name")
         indexes = {row[0] for row in cursor.fetchall()}
 
         expected_indexes = {

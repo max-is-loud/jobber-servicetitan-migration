@@ -103,42 +103,46 @@ class ExtractReportGenerator:
         ]
 
         # Summary Statistics
-        lines.extend([
-            "## Summary Statistics",
-            "",
-            f"- **Total Entities Extracted:** {totals.get('total_extracted', 0):,}",
-            f"- **Total Entities Failed:** {totals.get('total_failed', 0):,}",
-            f"- **Entity Types Processed:** {totals.get('entity_types_count', 0)}",
-            f"- **Attachments Downloaded:** {attachment_result.get('downloaded', 0):,}",
-            f"- **Attachments Failed:** {attachment_result.get('failed', 0):,}",
-            f"- **Extraction Rate:** {totals.get('total_extracted', 0) / duration if duration > 0 else 0:.1f} entities/second",
-            "",
-        ])
+        lines.extend(
+            [
+                "## Summary Statistics",
+                "",
+                f"- **Total Entities Extracted:** {totals.get('total_extracted', 0):,}",
+                f"- **Total Entities Failed:** {totals.get('total_failed', 0):,}",
+                f"- **Entity Types Processed:** {totals.get('entity_types_count', 0)}",
+                f"- **Attachments Downloaded:** {attachment_result.get('downloaded', 0):,}",
+                f"- **Attachments Failed:** {attachment_result.get('failed', 0):,}",
+                f"- **Extraction Rate:** {totals.get('total_extracted', 0) / duration if duration > 0 else 0:.1f} entities/second",
+                "",
+            ]
+        )
 
         # Entity Type Breakdown
-        lines.extend([
-            "## Entity Type Breakdown",
-            "",
-            "| Entity Type | Extracted | Failed | Success Rate |",
-            "|-------------|-----------|--------|--------------|",
-        ])
+        lines.extend(
+            [
+                "## Entity Type Breakdown",
+                "",
+                "| Entity Type | Extracted | Failed | Success Rate |",
+                "|-------------|-----------|--------|--------------|",
+            ]
+        )
 
         for entity_type, result in sorted(entity_results.items()):
             extracted = result.get("extracted", 0)
             failed = result.get("failed", 0)
             total = extracted + failed
             success_rate = (extracted / total * 100) if total > 0 else 0
-            lines.append(
-                f"| {entity_type} | {extracted:,} | {failed:,} | {success_rate:.1f}% |"
-            )
+            lines.append(f"| {entity_type} | {extracted:,} | {failed:,} | {success_rate:.1f}% |")
 
         lines.extend(["", ""])
 
         # Completeness Validation
-        lines.extend([
-            "## Completeness Validation",
-            "",
-        ])
+        lines.extend(
+            [
+                "## Completeness Validation",
+                "",
+            ]
+        )
 
         if discrepancies:
             lines.append(f"**Status:** :warning: {len(discrepancies)} discrepancy(ies) found")
@@ -151,19 +155,23 @@ class ExtractReportGenerator:
             warnings = [d for d in discrepancies if d.get("severity") == "warning"]
 
             if errors:
-                lines.extend([
-                    "#### Errors",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        "#### Errors",
+                        "",
+                    ]
+                )
                 for disc in errors:
                     lines.append(f"- **{disc.get('type')}**: {disc.get('message')}")
                 lines.append("")
 
             if warnings:
-                lines.extend([
-                    "#### Warnings",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        "#### Warnings",
+                        "",
+                    ]
+                )
                 for disc in warnings:
                     lines.append(f"- **{disc.get('type')}**: {disc.get('message')}")
                 lines.append("")
@@ -172,14 +180,14 @@ class ExtractReportGenerator:
             lines.append("")
 
         # Retry Recommendations
-        lines.extend([
-            "## Retry Recommendations",
-            "",
-        ])
-
-        recommendations = self._generate_recommendations(
-            entity_results, attachment_result, discrepancies
+        lines.extend(
+            [
+                "## Retry Recommendations",
+                "",
+            ]
         )
+
+        recommendations = self._generate_recommendations(entity_results, attachment_result, discrepancies)
 
         if recommendations:
             for rec in recommendations:
@@ -190,24 +198,30 @@ class ExtractReportGenerator:
         lines.append("")
 
         # Next Steps
-        lines.extend([
-            "## Next Steps",
-            "",
-        ])
+        lines.extend(
+            [
+                "## Next Steps",
+                "",
+            ]
+        )
 
         if discrepancies:
-            lines.extend([
-                "1. Review discrepancies above",
-                "2. Retry failed extractions using `--resume` flag",
-                "3. Investigate entity-specific failures in logs",
-                "4. Run reconciliation pass to detect data drift",
-            ])
+            lines.extend(
+                [
+                    "1. Review discrepancies above",
+                    "2. Retry failed extractions using `--resume` flag",
+                    "3. Investigate entity-specific failures in logs",
+                    "4. Run reconciliation pass to detect data drift",
+                ]
+            )
         else:
-            lines.extend([
-                "1. Verify extracted data in database",
-                "2. Run data quality checks",
-                "3. Archive or delete map snapshot if no longer needed",
-            ])
+            lines.extend(
+                [
+                    "1. Verify extracted data in database",
+                    "2. Run data quality checks",
+                    "3. Archive or delete map snapshot if no longer needed",
+                ]
+            )
 
         lines.append("")
 
@@ -243,9 +257,7 @@ class ExtractReportGenerator:
                 "error_count": len([d for d in discrepancies if d.get("severity") == "error"]),
                 "warning_count": len([d for d in discrepancies if d.get("severity") == "warning"]),
             },
-            "recommendations": self._generate_recommendations(
-                entity_results, attachment_result, discrepancies
-            ),
+            "recommendations": self._generate_recommendations(entity_results, attachment_result, discrepancies),
         }
 
         return json.dumps(report, indent=2)
@@ -282,9 +294,7 @@ class ExtractReportGenerator:
             )
 
         # Check for entity count mismatches (queue incomplete)
-        entity_mismatches = [
-            d for d in discrepancies if d.get("type") == "entity_count_mismatch"
-        ]
+        entity_mismatches = [d for d in discrepancies if d.get("type") == "entity_count_mismatch"]
         if entity_mismatches:
             recommendations.append(
                 "Queue appears incomplete - re-run extract pass without --resume to rebuild queue from map snapshot"

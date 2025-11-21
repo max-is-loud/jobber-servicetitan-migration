@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """PropertiesExtractor for extracting Property entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
@@ -61,9 +62,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         """
         return self._jobber_client.fetch_properties(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -98,9 +97,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: Property
-    ) -> dict[str, List[Note]]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Property) -> dict[str, List[Note]]:
         """Extract related entities from property node.
 
         Properties don't have related notes or other complex relationships,
@@ -170,7 +167,5 @@ class PropertiesExtractor(BaseExtractor[Property]):
             return page_size
 
         # Can't determine exact count without pagination
-        self._logger.info(
-            "Cannot determine exact property count without full pagination"
-        )
+        self._logger.info("Cannot determine exact property count without full pagination")
         return -1  # Indicate unknown count

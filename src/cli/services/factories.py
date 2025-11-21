@@ -157,11 +157,7 @@ class ServiceFactory:
         initial_tokens = rate_config["initial_tokens"]
 
         # Create token bucket rate limiter with configured parameters
-        rate_limiter = TokenBucketRateLimiter(
-            capacity=capacity,
-            refill_rate=refill_rate,
-            initial_tokens=initial_tokens
-        )
+        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
 
         # Get exponential backoff configuration for retry logic
         backoff_config = config_manager.get_backoff_config()

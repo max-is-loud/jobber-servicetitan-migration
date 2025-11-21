@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """QuotesExtractor for extracting Quote entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
@@ -64,9 +65,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
         """
         return self._jobber_client.fetch_quotes(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -101,9 +100,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: Quote
-    ) -> dict[str, Any]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Quote) -> dict[str, Any]:
         """Extract notes and attachments related to the quote.
 
         Delegates to base implementation for common extraction logic.
@@ -134,7 +131,6 @@ class QuotesExtractor(BaseExtractor[Quote]):
             List of quotes from last batch
         """
         return self._last_batch_entities
-
 
     def get_entity_count(self) -> int:
         """Get total count of quotes available for extraction.

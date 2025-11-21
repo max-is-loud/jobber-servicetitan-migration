@@ -376,7 +376,9 @@ class TestAttachmentQueuing:
         assert queue_items[0]["parent_id"] == "123"
         assert queue_items[0]["attachment_id"] == "attach_1"
 
-    def test_queue_attachments_without_map_snapshot_id_raises_error(self, mock_jobber_client, mock_entity_mapper, mock_repository, mock_logger):
+    def test_queue_attachments_without_map_snapshot_id_raises_error(
+        self, mock_jobber_client, mock_entity_mapper, mock_repository, mock_logger
+    ):
         """Test _queue_attachments_for_download raises ConfigurationError if map_snapshot_id not set."""
         extractor = ClientsExtractor(
             jobber_client=mock_jobber_client,

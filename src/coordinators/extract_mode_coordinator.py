@@ -125,8 +125,7 @@ class ExtractModeCoordinator:
             invalid_types = set(entity_types) - set(snapshot_entity_types)
             if invalid_types:
                 raise ValueError(
-                    f"Entity types not in snapshot: {invalid_types}. "
-                    f"Available types: {snapshot_entity_types}"
+                    f"Entity types not in snapshot: {invalid_types}. " f"Available types: {snapshot_entity_types}"
                 )
 
         self._logger.info(f"Extracting entity types: {entity_types}")
@@ -209,12 +208,8 @@ class ExtractModeCoordinator:
         self._logger.info(f"Processing extract queue for {entity_type}...")
 
         # Get queue items (pending + failed for retry)
-        pending_items = self._repository.get_extract_queue(
-            snapshot_id, entity_type, status="pending"
-        )
-        failed_items = self._repository.get_extract_queue(
-            snapshot_id, entity_type, status="failed"
-        )
+        pending_items = self._repository.get_extract_queue(snapshot_id, entity_type, status="pending")
+        failed_items = self._repository.get_extract_queue(snapshot_id, entity_type, status="failed")
         all_items = pending_items + failed_items
 
         if not all_items:
@@ -242,9 +237,7 @@ class ExtractModeCoordinator:
             TimeRemainingColumn(),
             console=self._console,
         ) as progress:
-            task_id = progress.add_task(
-                f"Extracting {entity_type}...", total=len(all_items)
-            )
+            task_id = progress.add_task(f"Extracting {entity_type}...", total=len(all_items))
 
             for item in all_items:
                 try:
@@ -273,9 +266,7 @@ class ExtractModeCoordinator:
 
                 except Exception as e:
                     # Mark failed with exception info
-                    self._logger.error(
-                        f"Failed to extract {entity_type} {item.entity_id}: {e}"
-                    )
+                    self._logger.error(f"Failed to extract {entity_type} {item.entity_id}: {e}")
                     item.status = "failed"
                     item.last_error = str(e)
                     item.attempt_count += 1
@@ -286,8 +277,7 @@ class ExtractModeCoordinator:
                 progress.update(task_id, advance=1)
 
         self._logger.success(
-            f"Completed {entity_type}: {extracted_count} extracted, "
-            f"{failed_count} failed, {skipped_count} skipped"
+            f"Completed {entity_type}: {extracted_count} extracted, " f"{failed_count} failed, {skipped_count} skipped"
         )
 
         return {
@@ -319,12 +309,8 @@ class ExtractModeCoordinator:
         from ..extractors.attachment_downloader import AttachmentDownloader
 
         # Get pending and failed attachments for retry
-        pending_attachments = self._repository.get_attachment_queue(
-            snapshot_id, status="pending"
-        )
-        failed_attachments = self._repository.get_attachment_queue(
-            snapshot_id, status="failed"
-        )
+        pending_attachments = self._repository.get_attachment_queue(snapshot_id, status="pending")
+        failed_attachments = self._repository.get_attachment_queue(snapshot_id, status="failed")
         all_attachments = pending_attachments + failed_attachments
 
         if not all_attachments:
@@ -347,9 +333,7 @@ class ExtractModeCoordinator:
             TimeRemainingColumn(),
             console=self._console,
         ) as progress:
-            task_id = progress.add_task(
-                "Downloading attachments...", total=len(all_attachments)
-            )
+            task_id = progress.add_task("Downloading attachments...", total=len(all_attachments))
 
             for queue_item in all_attachments:
                 try:
@@ -407,9 +391,7 @@ class ExtractModeCoordinator:
 
                 except Exception as e:
                     # Mark failed with exception info
-                    self._logger.error(
-                        f"Failed to download attachment {queue_item.attachment_id}: {e}"
-                    )
+                    self._logger.error(f"Failed to download attachment {queue_item.attachment_id}: {e}")
                     queue_item.status = "failed"
                     queue_item.last_error = str(e)
                     queue_item.attempt_count += 1
@@ -419,9 +401,7 @@ class ExtractModeCoordinator:
 
                 progress.update(task_id, advance=1)
 
-        self._logger.success(
-            f"Attachment processing completed: {downloaded_count} downloaded, {failed_count} failed"
-        )
+        self._logger.success(f"Attachment processing completed: {downloaded_count} downloaded, {failed_count} failed")
 
         return {
             "downloaded": downloaded_count,
@@ -478,48 +458,54 @@ class ExtractModeCoordinator:
 
             if total_attempted < expected_count:
                 # Some entities weren't even attempted (queue incomplete)
-                discrepancies.append({
-                    "type": "entity_count_mismatch",
-                    "entity_type": entity_type,
-                    "expected": expected_count,
-                    "actual": total_attempted,
-                    "difference": expected_count - total_attempted,
-                    "severity": "error",
-                    "message": f"{entity_type}: {expected_count - total_attempted} entities not attempted "
-                              f"(expected {expected_count}, attempted {total_attempted})",
-                })
+                discrepancies.append(
+                    {
+                        "type": "entity_count_mismatch",
+                        "entity_type": entity_type,
+                        "expected": expected_count,
+                        "actual": total_attempted,
+                        "difference": expected_count - total_attempted,
+                        "severity": "error",
+                        "message": f"{entity_type}: {expected_count - total_attempted} entities not attempted "
+                        f"(expected {expected_count}, attempted {total_attempted})",
+                    }
+                )
 
             # Check for failed extractions
             if failed_count > 0:
-                discrepancies.append({
-                    "type": "failed_entities",
-                    "entity_type": entity_type,
-                    "expected": expected_count,
-                    "actual": extracted_count,
-                    "difference": failed_count,
-                    "severity": "warning" if failed_count < expected_count * 0.1 else "error",  # <10% = warning
-                    "message": f"{entity_type}: {failed_count} entities failed extraction "
-                              f"({extracted_count}/{expected_count} successful)",
-                })
+                discrepancies.append(
+                    {
+                        "type": "failed_entities",
+                        "entity_type": entity_type,
+                        "expected": expected_count,
+                        "actual": extracted_count,
+                        "difference": failed_count,
+                        "severity": "warning" if failed_count < expected_count * 0.1 else "error",  # <10% = warning
+                        "message": f"{entity_type}: {failed_count} entities failed extraction "
+                        f"({extracted_count}/{expected_count} successful)",
+                    }
+                )
 
         # Validate attachment downloads
         attachment_failed = attachment_result.get("failed", 0)
         if attachment_failed > 0:
             attachment_total = (
-                attachment_result.get("downloaded", 0) +
-                attachment_result.get("failed", 0) +
-                attachment_result.get("skipped", 0)
+                attachment_result.get("downloaded", 0)
+                + attachment_result.get("failed", 0)
+                + attachment_result.get("skipped", 0)
             )
-            discrepancies.append({
-                "type": "failed_attachments",
-                "entity_type": None,
-                "expected": attachment_total,
-                "actual": attachment_result.get("downloaded", 0),
-                "difference": attachment_failed,
-                "severity": "warning" if attachment_failed < attachment_total * 0.1 else "error",
-                "message": f"Attachments: {attachment_failed} failed download "
-                          f"({attachment_result.get('downloaded', 0)}/{attachment_total} successful)",
-            })
+            discrepancies.append(
+                {
+                    "type": "failed_attachments",
+                    "entity_type": None,
+                    "expected": attachment_total,
+                    "actual": attachment_result.get("downloaded", 0),
+                    "difference": attachment_failed,
+                    "severity": "warning" if attachment_failed < attachment_total * 0.1 else "error",
+                    "message": f"Attachments: {attachment_failed} failed download "
+                    f"({attachment_result.get('downloaded', 0)}/{attachment_total} successful)",
+                }
+            )
 
         # Log summary
         if discrepancies:
@@ -576,25 +562,15 @@ class ExtractModeCoordinator:
 
         import json
 
-        entity_types = (
-            [entity_type]
-            if entity_type
-            else json.loads(snapshot.entities_included)
-        )
+        entity_types = [entity_type] if entity_type else json.loads(snapshot.entities_included)
 
         status_by_type = {}
 
         for et in entity_types:
-            pending = len(
-                self._repository.get_extract_queue(snapshot_id, et, status="pending")
-            )
-            in_progress = len(
-                self._repository.get_extract_queue(snapshot_id, et, status="in_progress")
-            )
+            pending = len(self._repository.get_extract_queue(snapshot_id, et, status="pending"))
+            in_progress = len(self._repository.get_extract_queue(snapshot_id, et, status="in_progress"))
             done = len(self._repository.get_extract_queue(snapshot_id, et, status="done"))
-            failed = len(
-                self._repository.get_extract_queue(snapshot_id, et, status="failed")
-            )
+            failed = len(self._repository.get_extract_queue(snapshot_id, et, status="failed"))
 
             status_by_type[et] = {
                 "pending": pending,

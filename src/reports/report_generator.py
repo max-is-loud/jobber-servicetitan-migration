@@ -36,9 +36,7 @@ class MigrationReportGenerator:
         self.end_time: Optional[datetime] = None
         self.extractor_summaries: dict[str, dict[str, Any]] = {}
 
-    def add_extractor_summary(
-        self, entity_type: str, summary: dict[str, Any]
-    ) -> None:
+    def add_extractor_summary(self, entity_type: str, summary: dict[str, Any]) -> None:
         """Add an extractor summary to the report.
 
         Args:
@@ -78,17 +76,9 @@ class MigrationReportGenerator:
             lines.append("")
 
         # Overall statistics
-        total_entities = sum(
-            summary.get("total_entities", 0)
-            for summary in self.extractor_summaries.values()
-        )
-        total_pages = sum(
-            summary.get("total_pages", 0)
-            for summary in self.extractor_summaries.values()
-        )
-        total_errors = sum(
-            summary.get("error_count", 0) for summary in self.extractor_summaries.values()
-        )
+        total_entities = sum(summary.get("total_entities", 0) for summary in self.extractor_summaries.values())
+        total_pages = sum(summary.get("total_pages", 0) for summary in self.extractor_summaries.values())
+        total_errors = sum(summary.get("error_count", 0) for summary in self.extractor_summaries.values())
 
         lines.append("OVERALL STATISTICS")
         lines.append("-" * 80)
@@ -157,9 +147,7 @@ class MigrationReportGenerator:
 
         # Calculate summary statistics
         for summary in self.extractor_summaries.values():
-            report_data["summary"]["total_entities"] += summary.get(
-                "total_entities", 0
-            )
+            report_data["summary"]["total_entities"] += summary.get("total_entities", 0)
             report_data["summary"]["total_pages"] += summary.get("total_pages", 0)
             report_data["summary"]["total_errors"] += summary.get("error_count", 0)
 

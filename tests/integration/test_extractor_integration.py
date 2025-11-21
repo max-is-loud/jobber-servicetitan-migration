@@ -70,7 +70,7 @@ def mock_jobber_client():
                                         }
                                     }
                                 ],
-                                "pageInfo": {"hasNextPage": False}
+                                "pageInfo": {"hasNextPage": False},
                             },
                             "noteAttachments": {
                                 "edges": [
@@ -86,12 +86,12 @@ def mock_jobber_client():
                                         }
                                     }
                                 ],
-                                "pageInfo": {"hasNextPage": False}
-                            }
-                        }
+                                "pageInfo": {"hasNextPage": False},
+                            },
+                        },
                     }
                 ],
-                "pageInfo": {"hasNextPage": False, "endCursor": "cursor_1"}
+                "pageInfo": {"hasNextPage": False, "endCursor": "cursor_1"},
             }
         }
     }
@@ -121,7 +121,7 @@ def mock_jobber_client():
                                         }
                                     }
                                 ],
-                                "pageInfo": {"hasNextPage": False}
+                                "pageInfo": {"hasNextPage": False},
                             },
                             "noteAttachments": {
                                 "edges": [
@@ -137,12 +137,12 @@ def mock_jobber_client():
                                         }
                                     }
                                 ],
-                                "pageInfo": {"hasNextPage": False}
-                            }
-                        }
+                                "pageInfo": {"hasNextPage": False},
+                            },
+                        },
                     }
                 ],
-                "pageInfo": {"hasNextPage": False, "endCursor": "cursor_inv_1"}
+                "pageInfo": {"hasNextPage": False, "endCursor": "cursor_inv_1"},
             }
         }
     }
@@ -249,7 +249,7 @@ def mock_logger():
 @pytest.fixture
 def mock_attachment_downloader():
     """Mock AttachmentDownloader to prevent real HTTP requests."""
-    with patch('src.extractors.base_extractor.AttachmentDownloader') as mock_class:
+    with patch("src.extractors.base_extractor.AttachmentDownloader") as mock_class:
         mock_instance = Mock()
         mock_instance.download_attachment.return_value = {
             "success": True,
@@ -272,7 +272,7 @@ class TestExtractorIntegration:
         mock_repository,
         mock_logger,
         mock_config_manager,
-        mock_attachment_downloader
+        mock_attachment_downloader,
     ):
         """Test complete client extraction workflow with nested notes optimization.
 
@@ -288,7 +288,7 @@ class TestExtractorIntegration:
             repository=mock_repository,
             logger=mock_logger,
             config_manager=mock_config_manager,
-            skip_existing_entities=False
+            skip_existing_entities=False,
         )
 
         # Execute extraction
@@ -328,7 +328,7 @@ class TestExtractorIntegration:
         mock_repository,
         mock_logger,
         mock_config_manager,
-        mock_attachment_downloader
+        mock_attachment_downloader,
     ):
         """Test complete invoice extraction workflow with nested notes optimization.
 
@@ -344,7 +344,7 @@ class TestExtractorIntegration:
             repository=mock_repository,
             logger=mock_logger,
             config_manager=mock_config_manager,
-            skip_existing_entities=False
+            skip_existing_entities=False,
         )
 
         # Execute extraction
@@ -385,7 +385,7 @@ class TestExtractorIntegration:
         mock_config_manager,
         temp_database,
         tmp_path,
-        mock_attachment_downloader
+        mock_attachment_downloader,
     ):
         """Test full migration flow with report generation.
 
@@ -461,7 +461,7 @@ class TestExtractorIntegration:
         mock_repository,
         mock_logger,
         mock_config_manager,
-        mock_attachment_downloader
+        mock_attachment_downloader,
     ):
         """Test error handling when notes pagination has issues.
 
@@ -489,12 +489,12 @@ class TestExtractorIntegration:
                                         {"node": {"id": "note_1", "body": "Note 1"}},
                                         {"node": {"id": "note_2", "body": "Note 2"}},
                                     ],
-                                    "pageInfo": {"hasNextPage": True}  # More notes exist!
-                                }
-                            }
+                                    "pageInfo": {"hasNextPage": True},  # More notes exist!
+                                },
+                            },
                         }
                     ],
-                    "pageInfo": {"hasNextPage": False, "endCursor": "cursor_1"}
+                    "pageInfo": {"hasNextPage": False, "endCursor": "cursor_1"},
                 }
             }
         }
@@ -527,7 +527,7 @@ class TestExtractorIntegration:
         mock_repository,
         mock_logger,
         mock_config_manager,
-        mock_attachment_downloader
+        mock_attachment_downloader,
     ):
         """Test error handling when note mapping fails.
 
@@ -572,7 +572,7 @@ class TestExtractorIntegration:
         mock_repository,
         mock_logger,
         mock_config_manager,
-        mock_attachment_downloader
+        mock_attachment_downloader,
     ):
         """Test that extraction summary includes nested notes metrics.
 
@@ -624,7 +624,7 @@ class TestReportGenerationIntegration:
         mock_logger,
         mock_config_manager,
         tmp_path,
-        mock_attachment_downloader
+        mock_attachment_downloader,
     ):
         """Test that report generation errors don't fail the migration.
 
@@ -646,7 +646,7 @@ class TestReportGenerationIntegration:
         invalid_report_dir = tmp_path / "nonexistent" / "deeply" / "nested" / "invalid"
 
         # Mock the mkdir to fail
-        with patch('pathlib.Path.mkdir', side_effect=PermissionError("No permission")):
+        with patch("pathlib.Path.mkdir", side_effect=PermissionError("No permission")):
             coordinator = BaseMigrationCoordinator(
                 jobber_client=mock_jobber_client,
                 entity_mapper=mock_entity_mapper,
@@ -667,10 +667,7 @@ class TestReportGenerationIntegration:
             assert summary is not None
 
             # Verify warning was logged about report failure
-            warning_calls = [
-                call for call in mock_logger.warning.call_args_list
-                if "report" in str(call).lower()
-            ]
+            warning_calls = [call for call in mock_logger.warning.call_args_list if "report" in str(call).lower()]
             # May or may not have warnings depending on when the error occurs
             # The key is that the migration didn't raise an exception
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """VisitsExtractor for extracting Visit entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional

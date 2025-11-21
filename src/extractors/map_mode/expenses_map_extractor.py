@@ -45,9 +45,7 @@ class ExpensesMapExtractor(BaseMapExtractor):
         """Fetch a page of expenses using map mode query."""
         return self._jobber_client.fetch_expenses_map(cursor, page_size)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from expenses API response."""
         expenses_data = response.get("data", {}).get("expenses", {})
         edges = expenses_data.get("edges", [])

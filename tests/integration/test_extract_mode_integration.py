@@ -354,10 +354,7 @@ class TestExtractModeIntegration:
 
         # Mock extractor's _fetch_single
         with patch.object(ClientsExtractor, "_fetch_single") as mock_fetch:
-            mock_fetch.side_effect = [
-                {"id": f"client_{i}", "firstName": "John"}
-                for i in range(1, 3)
-            ]
+            mock_fetch.side_effect = [{"id": f"client_{i}", "firstName": "John"} for i in range(1, 3)]
 
             # Run extract pass
             result = coordinator.run_extract_pass("snapshot_integration_123")
@@ -508,9 +505,7 @@ class TestExtractModeIntegration:
 
     # ==================== Attachment Queue Processing Tests ====================
 
-    def test_attachment_queue_processing_retries_failed_downloads(
-        self, coordinator, mock_repository, sample_snapshot
-    ):
+    def test_attachment_queue_processing_retries_failed_downloads(self, coordinator, mock_repository, sample_snapshot):
         """Test attachment queue processing retries failed downloads."""
         # Setup map snapshot
         mock_repository.get_map_snapshot.return_value = sample_snapshot

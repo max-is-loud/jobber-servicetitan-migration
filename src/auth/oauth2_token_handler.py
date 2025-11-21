@@ -35,15 +35,11 @@ class OAuth2TokenHandler:
         # THIS IS THE PROBLEMATIC CODE that the issue refers to:
         expires_in = token_data["expires_in"]  # Can raise KeyError!
 
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        ).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
         return expires_at
 
-    def handle_token_data_better_but_still_problematic(
-        self, token_data: Dict[str, Any]
-    ) -> str:
+    def handle_token_data_better_but_still_problematic(self, token_data: Dict[str, Any]) -> str:
         """
         STILL PROBLEMATIC: This method uses .get() but then validates strictly,
         which can still cause issues.
@@ -62,9 +58,7 @@ class OAuth2TokenHandler:
         if not isinstance(expires_in, int) or expires_in <= 0:
             raise OAuth2Error("Invalid or missing 'expires_in' field in token data.")
 
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        ).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
         return expires_at
 
@@ -80,12 +74,8 @@ class OAuth2TokenHandler:
             ISO formatted expiration timestamp
         """
         # THIS IS THE FIXED VERSION using .get() with default value:
-        expires_in = token_data.get(
-            "expires_in", 3600
-        )  # Default to 1 hour if not provided
+        expires_in = token_data.get("expires_in", 3600)  # Default to 1 hour if not provided
 
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-        ).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
         return expires_at

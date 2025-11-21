@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """JobsExtractor for extracting Job entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
@@ -57,9 +58,7 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
         """
         return self._jobber_client.fetch_jobs(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -94,9 +93,7 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: Job
-    ) -> dict[str, Any]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Job) -> dict[str, Any]:
         """Extract notes and attachments related to the job.
 
         Extracts nested note and attachment data from the job query response.
@@ -130,7 +127,6 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
             List of jobs from last batch
         """
         return self._last_batch_entities
-
 
     def get_entity_count(self) -> int:
         """Get total count of jobs available for extraction.

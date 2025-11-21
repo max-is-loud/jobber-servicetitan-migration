@@ -696,9 +696,7 @@ class TestExtractModeCoordinator:
         entity_results = {}
         attachment_result = {"downloaded": 90, "failed": 10, "skipped": 0}
 
-        discrepancies = coordinator._validate_completeness(
-            "snapshot_123", [], entity_results, attachment_result
-        )
+        discrepancies = coordinator._validate_completeness("snapshot_123", [], entity_results, attachment_result)
 
         assert len(discrepancies) == 1
         assert discrepancies[0]["type"] == "failed_attachments"

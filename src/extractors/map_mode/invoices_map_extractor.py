@@ -45,9 +45,7 @@ class InvoicesMapExtractor(BaseMapExtractor):
         """Fetch a page of invoices using map mode query."""
         return self._jobber_client.fetch_invoices_map(cursor, page_size)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from invoices API response."""
         invoices_data = response.get("data", {}).get("invoices", {})
         edges = invoices_data.get("edges", [])
@@ -66,7 +64,5 @@ class InvoicesMapExtractor(BaseMapExtractor):
             discovered_at=self._get_current_timestamp(),
             map_snapshot_id=self._map_snapshot_id,
             updated_at=node.get("updatedAt"),
-            estimated_relations_json=json.dumps(
-                {"notes": notes_count, "attachments": attachments_count}
-            ),
+            estimated_relations_json=json.dumps({"notes": notes_count, "attachments": attachments_count}),
         )

@@ -1582,7 +1582,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_invoices_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for invoices map mode."""
@@ -1609,7 +1611,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_quotes_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for quotes map mode."""
@@ -1639,7 +1643,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_jobs_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for jobs map mode."""
@@ -1666,7 +1672,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_properties_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for properties map mode."""
@@ -1686,7 +1694,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_requests_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for requests map mode."""
@@ -1713,7 +1723,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_users_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for users map mode."""
@@ -1734,7 +1746,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_expenses_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for expenses map mode."""
@@ -1755,7 +1769,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_visits_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for visits map mode."""
@@ -1776,7 +1792,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_timesheet_entries_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for timesheet entries map mode."""
@@ -1797,7 +1815,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_products_services_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for products/services map mode."""
@@ -1817,7 +1837,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def _get_tax_rates_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for tax rates map mode."""
@@ -1837,7 +1859,9 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """.format(
+            size=size
+        )
 
     def fetch_clients_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
         """Fetch clients with minimal fields for map mode (discovery pass)."""
@@ -1887,9 +1911,7 @@ class JobberClient:
         except Exception as e:
             raise JobberApiError(f"Unexpected error while fetching jobs map: {e}") from e
 
-    def fetch_properties_map(
-        self, cursor: Optional[str] = None, page_size: Optional[int] = None
-    ) -> dict[str, Any]:
+    def fetch_properties_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
         """Fetch properties with minimal fields for map mode (discovery pass)."""
         try:
             response_data = self._execute_graphql_request(self._get_properties_map_query(page_size), cursor)

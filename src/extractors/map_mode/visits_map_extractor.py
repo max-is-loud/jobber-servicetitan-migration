@@ -45,9 +45,7 @@ class VisitsMapExtractor(BaseMapExtractor):
         """Fetch a page of visits using map mode query."""
         return self._jobber_client.fetch_visits_map(cursor, page_size)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from visits API response."""
         visits_data = response.get("data", {}).get("visits", {})
         edges = visits_data.get("edges", [])

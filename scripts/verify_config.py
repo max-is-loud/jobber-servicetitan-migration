@@ -73,10 +73,7 @@ class ConfigVerifier:
                     line_content = lines[line_num - 1].strip()
 
                     # Check if this is an acceptable pattern
-                    is_acceptable = any(
-                        re.search(acceptable, line_content)
-                        for acceptable in self.acceptable_patterns
-                    )
+                    is_acceptable = any(re.search(acceptable, line_content) for acceptable in self.acceptable_patterns)
 
                     if not is_acceptable:
                         issues.append(
@@ -97,10 +94,7 @@ class ConfigVerifier:
                     line_content = lines[line_num - 1].strip()
 
                     # Check if this is an acceptable pattern
-                    is_acceptable = any(
-                        re.search(acceptable, line_content)
-                        for acceptable in self.acceptable_patterns
-                    )
+                    is_acceptable = any(re.search(acceptable, line_content) for acceptable in self.acceptable_patterns)
 
                     if not is_acceptable:
                         issues.append(
@@ -147,9 +141,7 @@ class ConfigVerifier:
             quotes_pagination = config_manager.get_pagination_config("quotes")
 
             if quotes_pagination >= 30:
-                print(
-                    f"✅ Quotes pagination: {quotes_pagination} (improved from hardcoded 5)"
-                )
+                print(f"✅ Quotes pagination: {quotes_pagination} (improved from hardcoded 5)")
                 return True
             else:
                 print(f"❌ Quotes pagination: {quotes_pagination} (should be ≥30)")
@@ -233,9 +225,7 @@ class ConfigVerifier:
         rate_limiting_ok = self.verify_rate_limiting()
 
         # Overall assessment
-        all_good = (
-            len(self.issues) == 0 and quotes_ok and delays_ok and rate_limiting_ok
-        )
+        all_good = len(self.issues) == 0 and quotes_ok and delays_ok and rate_limiting_ok
 
         print("\n" + "=" * 50)
         if all_good:

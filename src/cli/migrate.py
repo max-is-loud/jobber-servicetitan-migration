@@ -268,12 +268,7 @@ def migrate_map(
     # Normalize entity selections and validate against supported types
     available_entity_types = MapModeCoordinator.supported_entity_types()
     if entities:
-        selected_entity_types = [
-            entity.strip()
-            for raw in entities
-            for entity in raw.split(",")
-            if entity.strip()
-        ]
+        selected_entity_types = [entity.strip() for raw in entities for entity in raw.split(",") if entity.strip()]
     else:
         selected_entity_types = available_entity_types
 
@@ -342,9 +337,7 @@ def migrate_map(
             density_stats_by_type=density_stats_by_type,
         )
 
-        console.print(
-            f"[green]{MIGRATION_EMOJI} Map pass completed for snapshot {map_result['snapshot_id']}[/green]"
-        )
+        console.print(f"[green]{MIGRATION_EMOJI} Map pass completed for snapshot {map_result['snapshot_id']}[/green]")
         console.print(f"{INFO_EMOJI} Label: {result_label}")
         console.print(f"{INFO_EMOJI} Markdown report: {markdown_path}")
         console.print(f"{INFO_EMOJI} JSON report: {json_path}")
@@ -411,12 +404,7 @@ def migrate_extract(
     available_entity_types = ExtractModeCoordinator.supported_entity_types()
     selected_entity_types: Optional[List[str]]
     if entities:
-        selected_entity_types = [
-            entity.strip()
-            for raw in entities
-            for entity in raw.split(",")
-            if entity.strip()
-        ]
+        selected_entity_types = [entity.strip() for raw in entities for entity in raw.split(",") if entity.strip()]
     else:
         selected_entity_types = None
 
@@ -452,8 +440,7 @@ def migrate_extract(
         )
 
         logger.info(
-            f"Starting extract pass for snapshot {snapshot_id} "
-            f"with {optimization_level.upper()} optimization"
+            f"Starting extract pass for snapshot {snapshot_id} " f"with {optimization_level.upper()} optimization"
         )
 
         entity_mapper = EntityMapper()
@@ -486,9 +473,7 @@ def migrate_extract(
             duration=extract_result["duration"],
         )
 
-        console.print(
-            f"[green]{MIGRATION_EMOJI} Extract pass completed for snapshot {snapshot_id}[/green]"
-        )
+        console.print(f"[green]{MIGRATION_EMOJI} Extract pass completed for snapshot {snapshot_id}[/green]")
         console.print(f"{INFO_EMOJI} Label: {result_label}")
         console.print(f"{INFO_EMOJI} Markdown report: {markdown_path}")
         console.print(f"{INFO_EMOJI} JSON report: {json_path}")
@@ -577,12 +562,7 @@ def migrate_reconcile(
 
         # Determine which entity types to reconcile
         if entities:
-            selected_entity_types = [
-                entity.strip()
-                for raw in entities
-                for entity in raw.split(",")
-                if entity.strip()
-            ]
+            selected_entity_types = [entity.strip() for raw in entities for entity in raw.split(",") if entity.strip()]
             # Validate entity types
             available_types = MapModeCoordinator.supported_entity_types()
             invalid_types = [et for et in selected_entity_types if et not in available_types]
@@ -600,7 +580,9 @@ def migrate_reconcile(
                 console.print(f"{INFO_EMOJI} Nothing to reconcile.")
                 return
 
-        console.print(f"{INFO_EMOJI} Reconciling {len(selected_entity_types)} entity types: {', '.join(selected_entity_types)}\n")
+        console.print(
+            f"{INFO_EMOJI} Reconciling {len(selected_entity_types)} entity types: {', '.join(selected_entity_types)}\n"
+        )
 
         oauth_manager = ServiceFactory.create_oauth2_manager()
         auth_provider = AuthProvider(oauth_manager, repository)
@@ -640,9 +622,7 @@ def migrate_reconcile(
         )
 
         new_snapshot_id = new_map_result["snapshot_id"]
-        console.print(
-            f"[green]{MIGRATION_EMOJI} New map snapshot created: {new_snapshot_id}[/green]\n"
-        )
+        console.print(f"[green]{MIGRATION_EMOJI} New map snapshot created: {new_snapshot_id}[/green]\n")
 
         # === PHASE 2: Compare Maps and Identify Deltas ===
         console.print(f"[bold yellow]{MIGRATION_EMOJI} Phase 2: Comparing Maps[/bold yellow]")
@@ -705,8 +685,7 @@ def migrate_reconcile(
             )
 
             logger.info(
-                f"Extracting {total_deltas} delta entities "
-                f"with {extract_optimization.upper()} optimization"
+                f"Extracting {total_deltas} delta entities " f"with {extract_optimization.upper()} optimization"
             )
 
             entity_mapper = EntityMapper()
@@ -725,9 +704,7 @@ def migrate_reconcile(
                 resume=True,  # Process pending items only
             )
 
-            console.print(
-                f"[green]{MIGRATION_EMOJI} Delta extraction completed[/green]\n"
-            )
+            console.print(f"[green]{MIGRATION_EMOJI} Delta extraction completed[/green]\n")
         else:
             console.print(f"[green]{INFO_EMOJI} No new entities found - extraction up to date[/green]\n")
             extract_result = {
@@ -779,9 +756,7 @@ def migrate_reconcile(
                 resume=True,
             )
 
-            console.print(
-                f"[green]{MIGRATION_EMOJI} Attachment retry completed[/green]\n"
-            )
+            console.print(f"[green]{MIGRATION_EMOJI} Attachment retry completed[/green]\n")
         else:
             console.print(f"[green]{INFO_EMOJI} No failed attachments to retry[/green]\n")
 
@@ -792,6 +767,7 @@ def migrate_reconcile(
 
         # Create reconciliation summary
         from datetime import datetime
+
         timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
         report_filename = f"reconcile-{snapshot.label or snapshot_id}-{timestamp}.md"
         report_path = report_dir / report_filename
@@ -819,11 +795,13 @@ def migrate_reconcile(
             count = delta_counts.get(entity_type, 0)
             report_lines.append(f"- **{entity_type}:** {count} new entities")
 
-        report_lines.extend([
-            f"",
-            f"## Completeness Status",
-            f"",
-        ])
+        report_lines.extend(
+            [
+                f"",
+                f"## Completeness Status",
+                f"",
+            ]
+        )
 
         # Check final completeness
         for entity_type in selected_entity_types:
@@ -836,16 +814,16 @@ def migrate_reconcile(
 
             completeness = (extracted_count / new_count * 100) if new_count > 0 else 0
 
-            report_lines.append(
-                f"- **{entity_type}:** {extracted_count}/{new_count} extracted ({completeness:.1f}%)"
-            )
+            report_lines.append(f"- **{entity_type}:** {extracted_count}/{new_count} extracted ({completeness:.1f}%)")
 
-        report_lines.extend([
-            f"",
-            f"---",
-            f"",
-            f"Generated with [TightBeam](https://github.com/yourusername/tightbeam)",
-        ])
+        report_lines.extend(
+            [
+                f"",
+                f"---",
+                f"",
+                f"Generated with [TightBeam](https://github.com/yourusername/tightbeam)",
+            ]
+        )
 
         report_content = "\n".join(report_lines)
         report_path.write_text(report_content)
@@ -954,12 +932,7 @@ def migrate_start(
         # Normalize entity selections
         available_entity_types = MapModeCoordinator.supported_entity_types()
         if entities:
-            selected_entity_types = [
-                entity.strip()
-                for raw in entities
-                for entity in raw.split(",")
-                if entity.strip()
-            ]
+            selected_entity_types = [entity.strip() for raw in entities for entity in raw.split(",") if entity.strip()]
         else:
             selected_entity_types = available_entity_types
 
@@ -1032,9 +1005,7 @@ def migrate_start(
             )
 
             snapshot_id = map_result["snapshot_id"]
-            console.print(
-                f"[green]{MIGRATION_EMOJI} Map pass completed for snapshot {snapshot_id}[/green]"
-            )
+            console.print(f"[green]{MIGRATION_EMOJI} Map pass completed for snapshot {snapshot_id}[/green]")
             console.print(f"{INFO_EMOJI} Label: {result_label}")
             console.print(f"{INFO_EMOJI} Markdown report: {map_markdown}")
             console.print(f"{INFO_EMOJI} JSON report: {map_json}\n")
@@ -1053,8 +1024,7 @@ def migrate_start(
             )
 
             logger.info(
-                f"Starting extract pass for snapshot {snapshot_id} "
-                f"with {extract_optimization.upper()} optimization"
+                f"Starting extract pass for snapshot {snapshot_id} " f"with {extract_optimization.upper()} optimization"
             )
 
             entity_mapper = EntityMapper()
@@ -1086,9 +1056,7 @@ def migrate_start(
                 duration=extract_result["duration"],
             )
 
-            console.print(
-                f"[green]{MIGRATION_EMOJI} Extract pass completed for snapshot {snapshot_id}[/green]"
-            )
+            console.print(f"[green]{MIGRATION_EMOJI} Extract pass completed for snapshot {snapshot_id}[/green]")
             console.print(f"{INFO_EMOJI} Label: {extract_label}")
             console.print(f"{INFO_EMOJI} Markdown report: {extract_markdown}")
             console.print(f"{INFO_EMOJI} JSON report: {extract_json}")

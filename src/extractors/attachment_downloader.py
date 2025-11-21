@@ -132,7 +132,10 @@ class AttachmentDownloader:
                     break
 
             if not is_allowed:
-                return False, f"Domain '{parsed.hostname}' is not in the allowed domains list. Allowed: {', '.join(sorted(self._allowed_domains))}"
+                return (
+                    False,
+                    f"Domain '{parsed.hostname}' is not in the allowed domains list. Allowed: {', '.join(sorted(self._allowed_domains))}",
+                )
 
             return True, ""
 
@@ -177,9 +180,7 @@ class AttachmentDownloader:
                 base_path.mkdir(parents=True, exist_ok=True)
 
             if not os.access(base_path, os.W_OK):
-                raise ConfigurationError(
-                    f"Download directory not writable: {base_path}"
-                )
+                raise ConfigurationError(f"Download directory not writable: {base_path}")
 
             return True
 
@@ -227,9 +228,7 @@ class AttachmentDownloader:
                 local_file_path = self._resolve_file_conflict(local_file_path)
 
             # Download file with streaming for large files
-            self._logger.debug(
-                f"Downloading {attachment.original_url} -> {local_file_path}"
-            )
+            self._logger.debug(f"Downloading {attachment.original_url} -> {local_file_path}")
 
             response = self._session.get(
                 attachment.original_url,

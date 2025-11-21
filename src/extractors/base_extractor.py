@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Abstract base class for entity extractors with common extraction logic."""
 
 import time
@@ -131,9 +132,7 @@ class BaseExtractor(ABC, Generic[T]):
         # Get table name for entity existence checking
         self._table_name = self._ENTITY_TABLE_MAP.get(entity_type)
         if not self._table_name:
-            raise ConfigurationError(
-                f"No table mapping found for entity type: {entity_type}"
-            )
+            raise ConfigurationError(f"No table mapping found for entity type: {entity_type}")
 
         # Extraction state tracking
         self._last_extraction_summary = {
@@ -220,9 +219,7 @@ class BaseExtractor(ABC, Generic[T]):
         ...
 
     @abstractmethod
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -370,9 +367,7 @@ class BaseExtractor(ABC, Generic[T]):
                 "error": error_msg,
             }
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: T
-    ) -> RelatedEntities:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: T) -> RelatedEntities:
         """Extract related entities (like notes) from a node.
 
         Override in subclasses that have related entities.
@@ -408,20 +403,14 @@ class BaseExtractor(ABC, Generic[T]):
         try:
             migration_state = self._repository.get_migration_state(entity_type_name)
             if migration_state:
-                self._logger.debug(
-                    f"Found saved cursor for {entity_type_name}: {migration_state.last_cursor}"
-                )
+                self._logger.debug(f"Found saved cursor for {entity_type_name}: {migration_state.last_cursor}")
                 return migration_state.last_cursor
             return None
         except RepositoryError as e:
-            self._logger.debug(
-                f"Failed to get resume cursor for {entity_type_name}: {e}"
-            )
+            self._logger.debug(f"Failed to get resume cursor for {entity_type_name}: {e}")
             return None
 
-    def _save_cursor_progress(
-        self, entity_type_name: str, cursor: Optional[str]
-    ) -> None:
+    def _save_cursor_progress(self, entity_type_name: str, cursor: Optional[str]) -> None:
         """Save cursor position for resumption.
 
         Args:
@@ -430,13 +419,9 @@ class BaseExtractor(ABC, Generic[T]):
         """
         try:
             self._repository.save_migration_state(entity_type_name, cursor)
-            self._logger.debug(
-                f"Saved cursor progress for {entity_type_name}: {cursor}"
-            )
+            self._logger.debug(f"Saved cursor progress for {entity_type_name}: {cursor}")
         except RepositoryError as e:
-            self._logger.debug(
-                f"Failed to save cursor progress for {entity_type_name}: {e}"
-            )
+            self._logger.debug(f"Failed to save cursor progress for {entity_type_name}: {e}")
 
     def _cleanup_cursor_state(self, entity_type_name: str) -> None:
         """Clean up cursor state after successful completion.
@@ -448,9 +433,7 @@ class BaseExtractor(ABC, Generic[T]):
             self._repository.save_migration_state(entity_type_name, None)
             self._logger.debug(f"Cleaned up cursor state for {entity_type_name}")
         except RepositoryError as e:
-            self._logger.debug(
-                f"Failed to cleanup cursor state for {entity_type_name}: {e}"
-            )
+            self._logger.debug(f"Failed to cleanup cursor state for {entity_type_name}: {e}")
 
     def extract(
         self,
@@ -492,23 +475,17 @@ class BaseExtractor(ABC, Generic[T]):
         current_cursor = cursor
         error_count = 0
         page_info = {}
-        entity_type_name = (
-            self._entity_name + "s"
-        )  # Convert to plural for state tracking
+        entity_type_name = self._entity_name + "s"  # Convert to plural for state tracking
 
         # Check for resume cursor if no cursor provided and skip mode is enabled
         if cursor is None and self._skip_existing_entities:
             resume_cursor = self.get_resume_cursor(entity_type_name)
             if resume_cursor:
                 current_cursor = resume_cursor
-                self._logger.info(
-                    f"🔄 Resuming {self._entity_name} extraction from saved cursor: {resume_cursor}"
-                )
+                self._logger.info(f"🔄 Resuming {self._entity_name} extraction from saved cursor: {resume_cursor}")
 
         skip_status = " (skip mode enabled)" if self._skip_existing_entities else ""
-        self._logger.info(
-            f"Starting {self._entity_name} extraction from cursor: {current_cursor}{skip_status}"
-        )
+        self._logger.info(f"Starting {self._entity_name} extraction from cursor: {current_cursor}{skip_status}")
 
         try:
             while True:
@@ -518,9 +495,7 @@ class BaseExtractor(ABC, Generic[T]):
                     break
 
                 # Fetch page from API
-                self._logger.debug(
-                    f"Fetching {self._entity_name} page {pages_processed + 1}"
-                )
+                self._logger.debug(f"Fetching {self._entity_name} page {pages_processed + 1}")
                 response = self._fetch_page(current_cursor)
 
                 # Extract edges and page info
@@ -548,10 +523,7 @@ class BaseExtractor(ABC, Generic[T]):
                             all_related_entities[entity_type].extend(related_list)
 
                     except MappingError as e:
-                        error_msg = (
-                            f"Failed to map {self._entity_name} "
-                            f"{node.get('id', 'unknown')}: {e}"
-                        )
+                        error_msg = f"Failed to map {self._entity_name} " f"{node.get('id', 'unknown')}: {e}"
                         self._logger.error(error_msg)
                         error_count += 1
 
@@ -574,18 +546,14 @@ class BaseExtractor(ABC, Generic[T]):
                         )
                     else:
                         self._logger.info(
-                            f"Processed {len(entities_to_save)} {self._entity_name}s "
-                            f"(total: {entities_processed})"
+                            f"Processed {len(entities_to_save)} {self._entity_name}s " f"(total: {entities_processed})"
                         )
 
                 # Save related entities if any
                 if all_related_entities:
                     self._save_related_entities(all_related_entities)
                     for entity_type, related_list in all_related_entities.items():
-                        self._logger.info(
-                            f"Saved {len(related_list)} {entity_type} "
-                            f"for {self._entity_name}s"
-                        )
+                        self._logger.info(f"Saved {len(related_list)} {entity_type} " f"for {self._entity_name}s")
 
                 pages_processed += 1
 
@@ -607,18 +575,14 @@ class BaseExtractor(ABC, Generic[T]):
                 # Add configurable delay between pages to prevent API overload
                 page_delay = self._config_manager.get_delay_config("page_delay")
                 time.sleep(page_delay)
-                self._logger.debug(
-                    f"Added {page_delay}s delay before page {pages_processed + 1}"
-                )
+                self._logger.debug(f"Added {page_delay}s delay before page {pages_processed + 1}")
 
             extraction_time = time.time() - start_time
 
             # Clean up cursor state after successful completion
             if self._skip_existing_entities:
                 self._cleanup_cursor_state(entity_type_name)
-                self._logger.debug(
-                    f"✅ Completed {self._entity_name} extraction - cursor state cleaned up"
-                )
+                self._logger.debug(f"✅ Completed {self._entity_name} extraction - cursor state cleaned up")
 
             # Update extraction summary
             self._update_extraction_summary(
@@ -697,14 +661,10 @@ class BaseExtractor(ABC, Generic[T]):
                 break
 
             cursor = result["end_cursor"]
-            self._logger.info(
-                f"Continuing extraction from cursor: {cursor} "
-                f"(total pages: {total_pages})"
-            )
+            self._logger.info(f"Continuing extraction from cursor: {cursor} " f"(total pages: {total_pages})")
 
         self._logger.info(
-            f"Completed full extraction: {len(all_entities)} {self._entity_name}s "
-            f"from {total_pages} pages"
+            f"Completed full extraction: {len(all_entities)} {self._entity_name}s " f"from {total_pages} pages"
         )
 
         return all_entities
@@ -805,12 +765,8 @@ class BaseExtractor(ABC, Generic[T]):
             status: Extraction status ('completed', 'partial', 'failed')
             error_count: Number of errors encountered
         """
-        avg_page_size = (
-            entities_processed / pages_processed if pages_processed > 0 else 0
-        )
-        entities_per_second = (
-            entities_processed / extraction_time if extraction_time > 0 else 0
-        )
+        avg_page_size = entities_processed / pages_processed if pages_processed > 0 else 0
+        entities_per_second = entities_processed / extraction_time if extraction_time > 0 else 0
 
         self._last_extraction_summary = {
             "total_entities": entities_processed,
@@ -824,9 +780,7 @@ class BaseExtractor(ABC, Generic[T]):
             "error_count": error_count,
         }
 
-    def _extract_notes_and_attachments(
-        self, node: dict[str, Any], primary_entity: T
-    ) -> dict[str, Any]:
+    def _extract_notes_and_attachments(self, node: dict[str, Any], primary_entity: T) -> dict[str, Any]:
         """Extract nested notes and attachments from entity query response.
 
         Common implementation for extracting notes and attachments that are
@@ -853,9 +807,7 @@ class BaseExtractor(ABC, Generic[T]):
                 note_node = note_edge.get("node", {})
                 # Skip empty nodes or nodes missing ID (can happen with union fragments)
                 if not note_node or not note_node.get("id"):
-                    self._logger.debug(
-                        f"Skipping note with missing data for {self._entity_name} {primary_entity.id}"
-                    )
+                    self._logger.debug(f"Skipping note with missing data for {self._entity_name} {primary_entity.id}")
                     continue
 
                 try:
@@ -868,9 +820,7 @@ class BaseExtractor(ABC, Generic[T]):
                     note = self._entity_mapper.map_note(note_data)
                     notes.append(note)
                 except MappingError as e:
-                    self._logger.debug(
-                        f"Failed to map note for {self._entity_name} {primary_entity.id}: {e}"
-                    )
+                    self._logger.debug(f"Failed to map note for {self._entity_name} {primary_entity.id}: {e}")
             if notes:
                 related["notes"] = notes
 
@@ -945,9 +895,7 @@ class BaseExtractor(ABC, Generic[T]):
 
             if not auto_download:
                 # Metadata-only mode: save attachments without downloading files
-                self._logger.debug(
-                    f"Skipping download of {len(attachments)} attachment(s) (auto_download=false)"
-                )
+                self._logger.debug(f"Skipping download of {len(attachments)} attachment(s) (auto_download=false)")
                 self._repository.save_attachments(attachments)
                 return
 
@@ -976,8 +924,7 @@ class BaseExtractor(ABC, Generic[T]):
                 else:
                     # Download failed, save metadata only with original local_file_path
                     self._logger.warning(
-                        f"Failed to download attachment {attachment.id}: "
-                        f"{download_result['error_message']}"
+                        f"Failed to download attachment {attachment.id}: " f"{download_result['error_message']}"
                     )
                     attachments_with_files.append(attachment)
                     self._download_failures += 1
@@ -1001,9 +948,7 @@ class BaseExtractor(ABC, Generic[T]):
             ConfigurationError: If map_snapshot_id is not set (required for queuing)
         """
         if not self._map_snapshot_id:
-            raise ConfigurationError(
-                "map_snapshot_id is required when queue_attachments=True"
-            )
+            raise ConfigurationError("map_snapshot_id is required when queue_attachments=True")
 
         # Prepare attachment queue items
         attachment_queue_items = []
@@ -1020,11 +965,13 @@ class BaseExtractor(ABC, Generic[T]):
                 parent_type = self._entity_name
                 parent_id = attachment.note_id.split("_")[0] if "_" in attachment.note_id else attachment.note_id
 
-            attachment_queue_items.append({
-                "attachment_id": attachment.id,
-                "parent_type": parent_type,
-                "parent_id": parent_id,
-            })
+            attachment_queue_items.append(
+                {
+                    "attachment_id": attachment.id,
+                    "parent_type": parent_type,
+                    "parent_id": parent_id,
+                }
+            )
 
         # Save attachments metadata first
         self._repository.save_attachments(attachments)
@@ -1036,6 +983,4 @@ class BaseExtractor(ABC, Generic[T]):
                 attachments=attachment_queue_items,
             )
             self._attachments_queued += len(attachment_queue_items)
-            self._logger.debug(
-                f"Queued {len(attachment_queue_items)} attachment(s) for download"
-            )
+            self._logger.debug(f"Queued {len(attachment_queue_items)} attachment(s) for download")

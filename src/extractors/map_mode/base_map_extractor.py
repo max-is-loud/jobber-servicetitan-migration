@@ -70,9 +70,7 @@ class BaseMapExtractor(ABC):
         pass
 
     @abstractmethod
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -159,8 +157,7 @@ class BaseMapExtractor(ABC):
             cursor = page_info.get("endCursor")
 
             self._logger.debug(
-                f"Processed page {self._total_pages} "
-                f"({len(entities)} entities, total: {self._total_entities})"
+                f"Processed page {self._total_pages} " f"({len(entities)} entities, total: {self._total_entities})"
             )
 
             # Record adaptive metrics and refresh current settings

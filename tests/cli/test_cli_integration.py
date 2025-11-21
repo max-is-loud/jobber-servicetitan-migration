@@ -700,7 +700,9 @@ class TestMigrateStartCommand(TestCLIRunner):
                 with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
                     with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
                         with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
-                            with patch("src.coordinators.extract_mode_coordinator.ExtractModeCoordinator") as mock_extract:
+                            with patch(
+                                "src.coordinators.extract_mode_coordinator.ExtractModeCoordinator"
+                            ) as mock_extract:
                                 # Mock repository instance
                                 mock_repo_instance = Mock()
                                 mock_repo_instance.get_map_snapshot.return_value = Mock(label="test-label")
@@ -733,8 +735,14 @@ class TestMigrateStartCommand(TestCLIRunner):
                                 # Mock report generators
                                 with patch("src.reports.MapReportGenerator") as mock_map_report:
                                     with patch("src.reports.ExtractReportGenerator") as mock_extract_report:
-                                        mock_map_report.return_value.generate_report.return_value = ("map.md", "map.json")
-                                        mock_extract_report.return_value.generate_report.return_value = ("extract.md", "extract.json")
+                                        mock_map_report.return_value.generate_report.return_value = (
+                                            "map.md",
+                                            "map.json",
+                                        )
+                                        mock_extract_report.return_value.generate_report.return_value = (
+                                            "extract.md",
+                                            "extract.json",
+                                        )
 
                                         result = runner.invoke(app, ["migrate", "start", "--use-multi-pass"])
 
@@ -927,9 +935,7 @@ class TestMigrateReconcileCommand(TestCLIRunner):
                                 mock_repo_instance.get_extract_queue.return_value = []
                                 mock_repo_instance.get_attachment_queue.return_value = []
 
-                                result = runner.invoke(
-                                    app, ["migrate", "reconcile", "--snapshot-id", "test-snapshot"]
-                                )
+                                result = runner.invoke(app, ["migrate", "reconcile", "--snapshot-id", "test-snapshot"])
 
                                 # Verify snapshot was retrieved
                                 assert mock_repo_instance.get_map_snapshot.called
@@ -945,9 +951,7 @@ class TestMigrateReconcileCommand(TestCLIRunner):
                 mock_repo_instance.get_map_snapshot.return_value = None
                 mock_repo.return_value = mock_repo_instance
 
-                result = runner.invoke(
-                    app, ["migrate", "reconcile", "--snapshot-id", "invalid-snapshot"]
-                )
+                result = runner.invoke(app, ["migrate", "reconcile", "--snapshot-id", "invalid-snapshot"])
 
                 # Should fail with snapshot not found error
                 assert result.exit_code != 0
@@ -1040,9 +1044,7 @@ class TestMigrateReconcileCommand(TestCLIRunner):
                 mock_repo_instance.get_entity_inventory.return_value = []  # Empty inventory
                 mock_repo.return_value = mock_repo_instance
 
-                result = runner.invoke(
-                    app, ["migrate", "reconcile", "--snapshot-id", "test-snapshot"]
-                )
+                result = runner.invoke(app, ["migrate", "reconcile", "--snapshot-id", "test-snapshot"])
 
                 # Should exit gracefully with nothing to reconcile
                 assert result.exit_code == 0

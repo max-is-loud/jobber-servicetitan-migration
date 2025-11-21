@@ -120,15 +120,17 @@ class MapReportGenerator:
 
         # Add density analysis if available
         if density_stats_by_type:
-            lines.extend([
-                "",
-                "## Density Analysis",
-                "",
-                "Relation counts per entity type (notes, attachments, etc.):",
-                "",
-                "| Entity Type | Total Entities | Avg Relations | Max Relations | With Relations |",
-                "|-------------|----------------|---------------|---------------|----------------|",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "## Density Analysis",
+                    "",
+                    "Relation counts per entity type (notes, attachments, etc.):",
+                    "",
+                    "| Entity Type | Total Entities | Avg Relations | Max Relations | With Relations |",
+                    "|-------------|----------------|---------------|---------------|----------------|",
+                ]
+            )
 
             for entity_type, stats in sorted(density_stats_by_type.items()):
                 lines.append(
@@ -139,13 +141,15 @@ class MapReportGenerator:
 
         # Add hotspots if available
         if hotspots_by_type:
-            lines.extend([
-                "",
-                "## Hotspot Entities (High Relation Counts)",
-                "",
-                "Top entities with the most related items (notes, attachments, etc.):",
-                "",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "## Hotspot Entities (High Relation Counts)",
+                    "",
+                    "Top entities with the most related items (notes, attachments, etc.):",
+                    "",
+                ]
+            )
 
             for entity_type, hotspots in sorted(hotspots_by_type.items()):
                 if hotspots:
@@ -155,26 +159,24 @@ class MapReportGenerator:
                     lines.append("|-----------|-----------------|---------|")
 
                     for hotspot in hotspots[:10]:  # Top 10
-                        relations_str = ", ".join(
-                            f"{k}: {v}" for k, v in hotspot["relations"].items() if v > 0
-                        )
-                        lines.append(
-                            f"| `{hotspot['entity_id']}` | {hotspot['total_relations']} | {relations_str} |"
-                        )
+                        relations_str = ", ".join(f"{k}: {v}" for k, v in hotspot["relations"].items() if v > 0)
+                        lines.append(f"| `{hotspot['entity_id']}` | {hotspot['total_relations']} | {relations_str} |")
 
                     lines.append("")
 
         # Add recommendations
-        lines.extend([
-            "",
-            "## Extraction Recommendations",
-            "",
-            self._generate_recommendations(
-                entity_results=entity_results,
-                density_stats_by_type=density_stats_by_type,
-                hotspots_by_type=hotspots_by_type,
-            ),
-        ])
+        lines.extend(
+            [
+                "",
+                "## Extraction Recommendations",
+                "",
+                self._generate_recommendations(
+                    entity_results=entity_results,
+                    density_stats_by_type=density_stats_by_type,
+                    hotspots_by_type=hotspots_by_type,
+                ),
+            ]
+        )
 
         return "\n".join(lines)
 

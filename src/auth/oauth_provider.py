@@ -19,9 +19,7 @@ class OAuthProvider:
     of token-based authentication.
     """
 
-    def __init__(
-        self, oauth_manager: Optional[Any] = None, repository: Optional[Any] = None
-    ) -> None:
+    def __init__(self, oauth_manager: Optional[Any] = None, repository: Optional[Any] = None) -> None:
         """
         Initialize OAuthProvider with required dependencies and validation.
 
@@ -39,14 +37,12 @@ class OAuthProvider:
         # Validate required dependencies
         if oauth_manager is None:
             raise ConfigurationError(
-                "oauth_manager is required but not provided. "
-                "Please provide a valid oauth_manager instance."
+                "oauth_manager is required but not provided. " "Please provide a valid oauth_manager instance."
             )
 
         if repository is None:
             raise ConfigurationError(
-                "repository is required but not provided. "
-                "Please provide a valid repository instance."
+                "repository is required but not provided. " "Please provide a valid repository instance."
             )
 
         # Validate required environment variables
@@ -84,14 +80,10 @@ class OAuthProvider:
             error_parts = []
 
             if missing_vars:
-                error_parts.append(
-                    f"Missing environment variables: {', '.join(missing_vars)}"
-                )
+                error_parts.append(f"Missing environment variables: {', '.join(missing_vars)}")
 
             if empty_vars:
-                error_parts.append(
-                    f"Empty environment variables: {', '.join(empty_vars)}"
-                )
+                error_parts.append(f"Empty environment variables: {', '.join(empty_vars)}")
 
             error_message = ". ".join(error_parts)
             error_message += (
@@ -124,9 +116,7 @@ class OAuthProvider:
         """
         client_id = os.environ.get("JOBBER_CLIENT_ID")
         if not client_id or not client_id.strip():
-            raise ConfigurationError(
-                "JOBBER_CLIENT_ID environment variable is required but not set."
-            )
+            raise ConfigurationError("JOBBER_CLIENT_ID environment variable is required but not set.")
         return client_id.strip()
 
     def get_client_secret(self) -> str:
@@ -141,9 +131,7 @@ class OAuthProvider:
         """
         client_secret = os.environ.get("JOBBER_CLIENT_SECRET")
         if not client_secret or not client_secret.strip():
-            raise ConfigurationError(
-                "JOBBER_CLIENT_SECRET environment variable is required but not set."
-            )
+            raise ConfigurationError("JOBBER_CLIENT_SECRET environment variable is required but not set.")
         return client_secret.strip()
 
     def get_redirect_uri(self) -> str:
@@ -158,7 +146,5 @@ class OAuthProvider:
         """
         redirect_uri = os.environ.get("JOBBER_REDIRECT_URI")
         if not redirect_uri or not redirect_uri.strip():
-            raise ConfigurationError(
-                "JOBBER_REDIRECT_URI environment variable is required but not set."
-            )
+            raise ConfigurationError("JOBBER_REDIRECT_URI environment variable is required but not set.")
         return redirect_uri.strip()

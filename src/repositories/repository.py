@@ -2569,9 +2569,7 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to save entity inventory batch: {e}") from e
 
-    def get_entity_inventory(
-        self, snapshot_id: str, entity_type: Optional[str] = None
-    ) -> List[EntityInventory]:
+    def get_entity_inventory(self, snapshot_id: str, entity_type: Optional[str] = None) -> List[EntityInventory]:
         """Retrieve entity inventory for a snapshot, optionally filtered by entity type.
 
         Args:
@@ -2904,4 +2902,6 @@ class Repository:
             cursor.close()
 
         except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to update attachment queue status for {queue_item.attachment_id}: {e}") from e
+            raise RepositoryError(
+                f"Failed to update attachment queue status for {queue_item.attachment_id}: {e}"
+            ) from e

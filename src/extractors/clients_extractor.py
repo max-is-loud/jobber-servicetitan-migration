@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """ClientsExtractor for extracting Client entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
@@ -76,9 +77,7 @@ class ClientsExtractor(BaseExtractor[Client]):
         """
         return self._jobber_client.fetch_clients(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -113,9 +112,7 @@ class ClientsExtractor(BaseExtractor[Client]):
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: Client
-    ) -> dict[str, Any]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Client) -> dict[str, Any]:
         """Extract notes and attachments related to the client.
 
         Delegates to base implementation for common extraction logic.
@@ -146,7 +143,6 @@ class ClientsExtractor(BaseExtractor[Client]):
             List of clients from last batch
         """
         return self._last_batch_entities
-
 
     def get_entity_count(self) -> int:
         """Get total count of clients available for extraction.

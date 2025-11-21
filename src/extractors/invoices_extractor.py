@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """InvoicesExtractor for extracting Invoice entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
@@ -73,9 +74,7 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
         """
         return self._jobber_client.fetch_invoices(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -110,9 +109,7 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: Invoice
-    ) -> dict[str, Any]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Invoice) -> dict[str, Any]:
         """Extract notes and attachments related to the invoice.
 
         Delegates to base implementation for common extraction logic.
@@ -143,7 +140,6 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
             List of invoices from last batch
         """
         return self._last_batch_entities
-
 
     def get_entity_count(self) -> int:
         """Get total count of invoices available for extraction.

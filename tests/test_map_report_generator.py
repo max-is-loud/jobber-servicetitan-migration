@@ -222,9 +222,7 @@ class TestMapReportGenerator:
 
         assert "Extraction Recommendations" in content
 
-    def test_json_report_structure(
-        self, report_generator, temp_output_dir, sample_entity_results, sample_totals
-    ):
+    def test_json_report_structure(self, report_generator, temp_output_dir, sample_entity_results, sample_totals):
         """Test JSON report has correct structure."""
         _, json_path = report_generator.generate_report(
             snapshot_id="snap_123",
@@ -250,9 +248,7 @@ class TestMapReportGenerator:
         assert report_data["label"] == "json-test"
         assert report_data["duration_seconds"] == 45.5
 
-    def test_recommendations_for_large_entity_count(
-        self, report_generator, temp_output_dir, sample_totals
-    ):
+    def test_recommendations_for_large_entity_count(self, report_generator, temp_output_dir, sample_totals):
         """Test recommendations identify large entity counts."""
         large_entity_results = {
             "clients": {"total_entities": 15000, "total_pages": 300, "entity_type": "clients"},
@@ -325,9 +321,7 @@ class TestMapReportGenerator:
 
         assert ">100 related items" in content or "150 relations" in content
 
-    def test_recommendations_default_message(
-        self, report_generator, temp_output_dir, sample_totals
-    ):
+    def test_recommendations_default_message(self, report_generator, temp_output_dir, sample_totals):
         """Test default recommendation when no special conditions detected."""
         normal_results = {
             "clients": {"total_entities": 50, "total_pages": 1, "entity_type": "clients"},

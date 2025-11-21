@@ -63,9 +63,7 @@ class ExpensesExtractor(BaseExtractor[Expense]):
         """
         return self._jobber_client.fetch_expenses(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -145,7 +143,5 @@ class ExpensesExtractor(BaseExtractor[Expense]):
             return page_size
 
         # Can't determine exact count without pagination
-        self._logger.info(
-            "Cannot determine exact expense count without full pagination"
-        )
+        self._logger.info("Cannot determine exact expense count without full pagination")
         return -1  # Indicate unknown count

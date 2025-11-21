@@ -45,9 +45,7 @@ class TimesheetEntriesMapExtractor(BaseMapExtractor):
         """Fetch a page of timesheet entries using map mode query."""
         return self._jobber_client.fetch_timesheet_entries_map(cursor, page_size)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from timesheet entries API response."""
         entries_data = response.get("data", {}).get("timeSheetEntries", {})
         edges = entries_data.get("edges", [])

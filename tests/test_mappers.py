@@ -95,9 +95,7 @@ class TestMapperUtils:
         field_list = [
             {"phone_number": "555-0100", "is_primary": True},
         ]
-        result = MapperUtils.extract_primary_field(
-            field_list, field_name="phone_number", primary_key="is_primary"
-        )
+        result = MapperUtils.extract_primary_field(field_list, field_name="phone_number", primary_key="is_primary")
         assert result == "555-0100"
 
     def test_extract_primary_field_converts_to_string(self):

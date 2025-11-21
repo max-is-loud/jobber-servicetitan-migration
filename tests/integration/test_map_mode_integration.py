@@ -182,6 +182,7 @@ class TestMapModeIntegration:
         mock_invoices_response,
     ):
         """Test complete map pass workflow from extraction to database storage."""
+
         # Mock API responses
         def mock_execute_request(query, cursor=None):
             if "clients" in query:
@@ -244,6 +245,7 @@ class TestMapModeIntegration:
         mock_clients_response_page2,
     ):
         """Test hotspot identification after map pass extraction."""
+
         # Mock API responses
         def mock_execute_request(query, cursor=None):
             if cursor == "cursor_page2":
@@ -279,6 +281,7 @@ class TestMapModeIntegration:
         mock_clients_response_page2,
     ):
         """Test density statistics calculation after map pass extraction."""
+
         # Mock API responses
         def mock_execute_request(query, cursor=None):
             if cursor == "cursor_page2":
@@ -316,6 +319,7 @@ class TestMapModeIntegration:
         tmp_path,
     ):
         """Test report generation from map pass results."""
+
         # Mock API responses
         def mock_execute_request(query, cursor=None):
             if "clients" in query:
@@ -388,6 +392,7 @@ class TestMapModeIntegration:
         mock_invoices_response,
     ):
         """Test extraction of multiple entity types in single map pass."""
+
         # Mock API responses
         def mock_execute_request(query, cursor=None):
             if "clients" in query:

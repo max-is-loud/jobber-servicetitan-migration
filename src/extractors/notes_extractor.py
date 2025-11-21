@@ -58,8 +58,7 @@ class NotesExtractor(BaseExtractor[Note]):
         deferred loading pattern via extract_deferred_notes() instead.
         """
         raise NotImplementedError(
-            "Bulk note fetching is not supported by Jobber's API. "
-            "Use extract_deferred_notes() for note extraction."
+            "Bulk note fetching is not supported by Jobber's API. " "Use extract_deferred_notes() for note extraction."
         )
 
     def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:

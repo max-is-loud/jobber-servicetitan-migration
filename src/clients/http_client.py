@@ -58,9 +58,7 @@ class HttpClient:
 
         try:
             # Make HTTP POST request with timeout
-            response = requests.post(
-                url, headers=headers, json=json, data=data, timeout=self.TIMEOUT
-            )
+            response = requests.post(url, headers=headers, json=json, data=data, timeout=self.TIMEOUT)
 
             # Handle HTTP status code errors
             if response.status_code == 401:
@@ -72,9 +70,7 @@ class HttpClient:
                     "Access forbidden. Your authentication token may not have sufficient permissions."  # noqa: E501
                 )
             elif response.status_code >= 400:
-                raise JobberApiError(
-                    f"API returned HTTP {response.status_code}: {response.text}"
-                )
+                raise JobberApiError(f"API returned HTTP {response.status_code}: {response.text}")
 
             # Check for successful status (will raise HTTPError for 4xx/5xx if we missed any)  # noqa: E501
             response.raise_for_status()
@@ -86,21 +82,16 @@ class HttpClient:
             ) from e
         except requests.exceptions.ConnectionError as e:
             raise JobberApiError(
-                f"Failed to connect to {url}. "
-                "Please check your network connection and API endpoint."
+                f"Failed to connect to {url}. " "Please check your network connection and API endpoint."
             ) from e
         except requests.exceptions.RequestException as e:
-            raise JobberApiError(
-                f"Network error occurred while contacting API: {e}"
-            ) from e
+            raise JobberApiError(f"Network error occurred while contacting API: {e}") from e
 
         # Parse JSON response
         try:
             response_data = response.json()
         except requests.exceptions.JSONDecodeError as e:
-            raise JobberApiError(
-                f"Invalid JSON response from API. Response: {response.text[:200]}..."
-            ) from e
+            raise JobberApiError(f"Invalid JSON response from API. Response: {response.text[:200]}...") from e
 
         # Return response data with optional headers
         if return_headers:

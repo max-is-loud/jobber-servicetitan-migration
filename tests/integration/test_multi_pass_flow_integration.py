@@ -94,12 +94,18 @@ class TestMultiPassFlowIntegration:
 
         # Extract mode methods
         repo.create_extract_queue.side_effect = lambda sid, et: self._create_extract_queue(repo, sid, et)
-        repo.get_extract_queue.side_effect = lambda sid, et, status=None, **kwargs: self._get_extract_queue(repo, sid, et, status)
+        repo.get_extract_queue.side_effect = lambda sid, et, status=None, **kwargs: self._get_extract_queue(
+            repo, sid, et, status
+        )
         repo.update_queue_status.side_effect = lambda item: self._update_queue_status(repo, item)
 
         # Attachment queue methods
-        repo.create_attachment_queue.side_effect = lambda sid, attachments: self._create_attachment_queue(repo, sid, attachments)
-        repo.get_attachment_queue.side_effect = lambda sid, status=None, **kwargs: self._get_attachment_queue(repo, sid, status)
+        repo.create_attachment_queue.side_effect = lambda sid, attachments: self._create_attachment_queue(
+            repo, sid, attachments
+        )
+        repo.get_attachment_queue.side_effect = lambda sid, status=None, **kwargs: self._get_attachment_queue(
+            repo, sid, status
+        )
         repo.update_attachment_queue_status.side_effect = lambda item: self._update_attachment_status(repo, item)
 
         # Entity storage
@@ -153,14 +159,8 @@ class TestMultiPassFlowIntegration:
         assert len(mock_repository._entity_inventories) > 0
 
         # Get inventory counts for validation
-        client_count = sum(
-            1 for inv in mock_repository._entity_inventories
-            if inv.entity_type == "clients"
-        )
-        invoice_count = sum(
-            1 for inv in mock_repository._entity_inventories
-            if inv.entity_type == "invoices"
-        )
+        client_count = sum(1 for inv in mock_repository._entity_inventories if inv.entity_type == "clients")
+        invoice_count = sum(1 for inv in mock_repository._entity_inventories if inv.entity_type == "invoices")
 
         # Phase 2: Extract Mode
         extract_coordinator = ExtractModeCoordinator(
@@ -283,7 +283,7 @@ class TestMultiPassFlowIntegration:
                 entity_id=f"client_{i}",
                 discovered_at=timestamp,
                 updated_at=timestamp,
-                estimated_relations_json='{}',
+                estimated_relations_json="{}",
             )
             for i in range(10)
         ]
@@ -325,12 +325,12 @@ class TestMultiPassFlowIntegration:
                             "node": {
                                 "id": f"{entity_type}_{i}",
                                 "createdAt": "2024-01-01T00:00:00Z",
-                                "updatedAt": "2024-01-01T00:00:00Z"
+                                "updatedAt": "2024-01-01T00:00:00Z",
                             }
                         }
                         for i in range(count)
                     ],
-                    "pageInfo": {"hasNextPage": False, "endCursor": None}
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
                 }
             }
         }
@@ -349,23 +349,20 @@ class TestMultiPassFlowIntegration:
                                 "createdAt": "2024-01-01T00:00:00Z",
                                 "updatedAt": "2024-01-01T00:00:00Z",
                                 "notes": {
-                                    "edges": [
-                                        {"node": {"id": f"note_{j}", "content": f"Note {j}"}}
-                                        for j in range(2)
-                                    ],
-                                    "pageInfo": {"hasNextPage": False}
+                                    "edges": [{"node": {"id": f"note_{j}", "content": f"Note {j}"}} for j in range(2)],
+                                    "pageInfo": {"hasNextPage": False},
                                 },
                                 "noteAttachments": {
                                     "edges": [
                                         {"node": {"id": f"attach_{i}", "url": f"https://example.com/client_{i}.pdf"}}
                                     ],
-                                    "pageInfo": {"hasNextPage": False}
-                                }
+                                    "pageInfo": {"hasNextPage": False},
+                                },
                             }
                         }
                         for i in range(5)
                     ],
-                    "pageInfo": {"hasNextPage": False, "endCursor": None}
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
                 }
             }
         }
@@ -388,21 +385,15 @@ class TestMultiPassFlowIntegration:
                                         {"node": {"id": f"line_{j}", "description": f"Item {j}", "amount": 100.00}}
                                         for j in range(3)
                                     ],
-                                    "pageInfo": {"hasNextPage": False}
+                                    "pageInfo": {"hasNextPage": False},
                                 },
-                                "notes": {
-                                    "edges": [],
-                                    "pageInfo": {"hasNextPage": False}
-                                },
-                                "noteAttachments": {
-                                    "edges": [],
-                                    "pageInfo": {"hasNextPage": False}
-                                }
+                                "notes": {"edges": [], "pageInfo": {"hasNextPage": False}},
+                                "noteAttachments": {"edges": [], "pageInfo": {"hasNextPage": False}},
                             }
                         }
                         for i in range(3)
                     ],
-                    "pageInfo": {"hasNextPage": False, "endCursor": None}
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
                 }
             }
         }
@@ -418,11 +409,11 @@ class TestMultiPassFlowIntegration:
                             "title": f"Job {i}",
                             "status": "active",
                             "createdAt": "2024-01-01T00:00:00Z",
-                            "updatedAt": "2024-01-01T00:00:00Z"
+                            "updatedAt": "2024-01-01T00:00:00Z",
                         }
                         for i in range(4)
                     ],
-                    "pageInfo": {"hasNextPage": False, "endCursor": None}
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
                 }
             }
         }
@@ -472,7 +463,11 @@ class TestMultiPassFlowIntegration:
         if snapshot_id not in repo._extract_queues:
             repo._extract_queues[snapshot_id] = []
         # Simulate creating queue items from inventory
-        inventory = [inv for inv in repo._entity_inventories if inv.map_snapshot_id == snapshot_id and inv.entity_type == entity_type]
+        inventory = [
+            inv
+            for inv in repo._entity_inventories
+            if inv.map_snapshot_id == snapshot_id and inv.entity_type == entity_type
+        ]
         for inv in inventory:
             queue_item = ExtractQueueItem(
                 map_snapshot_id=snapshot_id,
@@ -480,7 +475,7 @@ class TestMultiPassFlowIntegration:
                 entity_id=inv.entity_id,
                 status="pending",
                 updated_at=datetime.now().isoformat(),
-                attempt_count=0
+                attempt_count=0,
             )
             repo._extract_queues[snapshot_id].append(queue_item)
 
@@ -518,13 +513,11 @@ class TestMultiPassFlowIntegration:
                 status="pending",
                 map_snapshot_id=snapshot_id,
                 updated_at=datetime.now().isoformat(),
-                attempt_count=0
+                attempt_count=0,
             )
             repo._attachment_queues[snapshot_id].append(queue_item)
 
-    def _get_attachment_queue(
-        self, repo, snapshot_id: str, status: Optional[str] = None
-    ) -> List[AttachmentQueueItem]:
+    def _get_attachment_queue(self, repo, snapshot_id: str, status: Optional[str] = None) -> List[AttachmentQueueItem]:
         """Get attachment queue from mock repository."""
         if snapshot_id not in repo._attachment_queues:
             return []

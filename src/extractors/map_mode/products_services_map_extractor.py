@@ -45,9 +45,7 @@ class ProductsServicesMapExtractor(BaseMapExtractor):
         """Fetch a page of products/services using map mode query."""
         return self._jobber_client.fetch_products_services_map(cursor, page_size)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from products/services API response."""
         products_data = response.get("data", {}).get("productOrServices", {})
         edges = products_data.get("edges", [])

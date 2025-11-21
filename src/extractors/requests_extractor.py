@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """RequestsExtractor for extracting Request entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
@@ -61,9 +62,7 @@ class RequestsExtractor(BaseExtractor[Request]):
         """
         return self._jobber_client.fetch_requests(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -98,9 +97,7 @@ class RequestsExtractor(BaseExtractor[Request]):
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: Request
-    ) -> dict[str, Any]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Request) -> dict[str, Any]:
         """Extract notes and attachments related to the request.
 
         Extracts nested note and attachment data from the request query response.
@@ -134,7 +131,6 @@ class RequestsExtractor(BaseExtractor[Request]):
             List of requests from last batch
         """
         return self._last_batch_entities
-
 
     def get_entity_count(self) -> int:
         """Get total count of requests available for extraction.
@@ -173,7 +169,5 @@ class RequestsExtractor(BaseExtractor[Request]):
             return page_size
 
         # Can't determine exact count without pagination
-        self._logger.info(
-            "Cannot determine exact request count without full pagination"
-        )
+        self._logger.info("Cannot determine exact request count without full pagination")
         return -1  # Indicate unknown count

@@ -410,8 +410,7 @@ class BaseMigrationCoordinator:
 
             # Generate migration reports
             self._generate_migration_reports(
-                start_time=datetime.fromtimestamp(start_time),
-                end_time=datetime.fromtimestamp(end_time)
+                start_time=datetime.fromtimestamp(start_time), end_time=datetime.fromtimestamp(end_time)
             )
 
         return summary
@@ -736,9 +735,7 @@ class BaseMigrationCoordinator:
             summary.add_error(error_msg)
             raise
 
-    def _generate_migration_reports(
-        self, start_time: datetime, end_time: datetime
-    ) -> None:
+    def _generate_migration_reports(self, start_time: datetime, end_time: datetime) -> None:
         """Generate and save migration summary reports.
 
         Creates both text and JSON format reports summarizing extraction
@@ -755,29 +752,19 @@ class BaseMigrationCoordinator:
 
             # Collect extractor summaries
             if self._clients_extractor:
-                report.add_extractor_summary(
-                    "clients", self._clients_extractor.get_extraction_summary()
-                )
+                report.add_extractor_summary("clients", self._clients_extractor.get_extraction_summary())
 
             if self._invoices_extractor:
-                report.add_extractor_summary(
-                    "invoices", self._invoices_extractor.get_extraction_summary()
-                )
+                report.add_extractor_summary("invoices", self._invoices_extractor.get_extraction_summary())
 
             if self._quotes_extractor:
-                report.add_extractor_summary(
-                    "quotes", self._quotes_extractor.get_extraction_summary()
-                )
+                report.add_extractor_summary("quotes", self._quotes_extractor.get_extraction_summary())
 
             if self._notes_extractor:
-                report.add_extractor_summary(
-                    "notes", self._notes_extractor.get_extraction_summary()
-                )
+                report.add_extractor_summary("notes", self._notes_extractor.get_extraction_summary())
 
             # Save reports
-            text_path, json_path = report.save_reports(
-                self._report_output_dir, include_timestamp=True
-            )
+            text_path, json_path = report.save_reports(self._report_output_dir, include_timestamp=True)
 
             self._logger.info(f"📊 Migration reports saved:")
             self._logger.info(f"   • Text: {text_path}")
@@ -789,6 +776,4 @@ class BaseMigrationCoordinator:
                 "Check directory permissions or disk space."
             )
         except Exception as e:
-            self._logger.warning(
-                f"Failed to generate migration reports due to unexpected error: {e}"
-            )
+            self._logger.warning(f"Failed to generate migration reports due to unexpected error: {e}")

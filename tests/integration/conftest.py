@@ -67,8 +67,6 @@ def temp_download_dir():
 def pytest_configure(config):
     """Configure pytest with custom markers."""
     config.addinivalue_line("markers", "integration: mark test as integration test")
-    config.addinivalue_line(
-        "markers", "prd_validation: mark test as PRD validation test"
-    )
+    config.addinivalue_line("markers", "prd_validation: mark test as PRD validation test")
     config.addinivalue_line("markers", "cli_test: mark test as CLI integration test")
     config.addinivalue_line("markers", "performance: mark test as performance test")

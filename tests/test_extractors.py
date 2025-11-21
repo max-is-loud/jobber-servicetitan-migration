@@ -306,7 +306,9 @@ class TestClientsExtractor:
             },
         }
 
-        expected_note = create_test_note(id="note_1", message="Valid note", entity_type="client", entity_id="client_123")
+        expected_note = create_test_note(
+            id="note_1", message="Valid note", entity_type="client", entity_id="client_123"
+        )
         self.mock_mapper.map_note.side_effect = [expected_note, MappingError("Invalid data")]
 
         related = self.extractor._extract_related_entities(node, client)

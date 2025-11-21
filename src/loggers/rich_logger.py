@@ -73,9 +73,7 @@ class RichLogger(Logger):
             summary: Dictionary containing summary information
         """
         # Create a beautiful table for the migration summary
-        table = Table(
-            title="Migration Summary", show_header=True, header_style="bold magenta"
-        )
+        table = Table(title="Migration Summary", show_header=True, header_style="bold magenta")
         table.add_column("Metric", style="dim", width=25)
         table.add_column("Value", justify="left")
 
