@@ -1,6 +1,6 @@
 [project]
 name = "tightbeam-v2"
-version = "0.1.3"
+version = "0.2.0"
 description = "Jobber Data Migration Tool"
 authors = [{name = "Maxime Langlois-Morin", email = "max@maxmorin.ca"}]
 readme = "README.md"
@@ -29,7 +29,7 @@ dependencies = [
 [tool.poetry]
 name = "tightbeam-v2"
 # Version is managed in src/constants.py - update there to change version
-version = "0.1.3"
+version = "0.2.0"
 description = "Jobber Data Migration Tool"
 authors = ["Maxime Langlois-Morin <max@maxmorin.ca>"]
 readme = "README.md"

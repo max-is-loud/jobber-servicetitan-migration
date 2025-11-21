@@ -9,7 +9,7 @@ consistency across the entire application.
 from importlib.metadata import version, PackageNotFoundError
 
 # Application Metadata
-APP_NAME = "TightBeam"
+APP_NAME = "Project Tightbeam"
 
 # Read version from package metadata (pyproject.toml is the single source of truth)
 try:

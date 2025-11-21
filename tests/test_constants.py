@@ -14,15 +14,15 @@ class TestConstants:
         # When not installed (e.g., tests without editable install), fallback to "0.0.0-dev"
         assert isinstance(APP_VERSION, str)
         assert len(APP_VERSION) > 0
-        # Version should be either from package metadata (e.g., "0.1.3") or fallback
-        assert APP_VERSION == "0.1.3" or APP_VERSION == "0.0.0-dev"
+        # Version should be either from package metadata (e.g., "0.2.0") or fallback
+        assert APP_VERSION == "0.2.0" or APP_VERSION == "0.0.0-dev"
 
     def test_version_display_includes_version(self):
         """Test that VERSION_DISPLAY includes the version."""
         from src.constants import VERSION_DISPLAY, APP_VERSION
 
         assert APP_VERSION in VERSION_DISPLAY
-        assert "TightBeam" in VERSION_DISPLAY
+        assert "Project Tightbeam" in VERSION_DISPLAY
 
     def test_all_required_constants_defined(self):
         """Test that all required constants are defined."""
