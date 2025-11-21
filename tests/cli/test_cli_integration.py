@@ -1293,3 +1293,123 @@ class TestMigrateReconcileCommand(TestCLIRunner):
                                                                     "Attachment retry completed" in result.stdout
                                                                     or "Phase 4" in result.stdout
                                                                 )
+
+    def test_migrate_reconcile_delta_detection(self, runner, monkeypatch):
+        """Test migrate reconcile Phase 2: identifies delta entities correctly."""
+        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
+
+        with patch("src.cli.migrate._check_authentication"):
+            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
+                # Mock repository to return a valid snapshot
+                mock_repo_instance = Mock()
+                mock_repo_instance.get_map_snapshot.return_value = Mock(
+                    snapshot_id="test-snapshot",
+                    label="test-label",
+                    created_at="2025-01-01T00:00:00Z",
+                )
+
+                # Mock inventories with deltas
+                # Original: 5 clients (client-1 through client-5)
+                # New: 7 clients (client-1 through client-7)
+                # Expected deltas: client-6, client-7
+                original_inventory = [
+                    Mock(entity_type="clients", entity_id=f"client-{i}") for i in range(1, 6)
+                ]
+                new_inventory = [Mock(entity_type="clients", entity_id=f"client-{i}") for i in range(1, 8)]
+
+                mock_repo_instance.get_entity_inventory.side_effect = [
+                    # First call: determine entity types from snapshot
+                    original_inventory,
+                    # Second call: original inventory for comparison
+                    original_inventory,
+                    # Third call: new inventory for comparison
+                    new_inventory,
+                ]
+
+                # Track create_extract_queue calls to verify delta entities are queued
+                mock_repo_instance.create_extract_queue = Mock()
+
+                # Mock empty attachment queue (no failed attachments)
+                mock_repo_instance.get_attachment_queue.return_value = []
+
+                # Mock empty extract queue
+                mock_repo_instance.get_extract_queue.return_value = []
+
+                mock_repo.return_value = mock_repo_instance
+
+                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
+                    with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
+                        with patch("src.config.ConfigManagerImpl"):
+                            with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
+                                with patch(
+                                    "src.coordinators.extract_mode_coordinator.ExtractModeCoordinator"
+                                ) as mock_extract:
+                                    with patch("src.mappers.EntityMapper"):
+                                                        # Mock supported entity types
+                                                        mock_map.supported_entity_types.return_value = [
+                                                            "clients",
+                                                            "invoices",
+                                                            "jobs",
+                                                        ]
+
+                                                        # Mock map coordinator
+                                                        mock_map_instance = Mock()
+                                                        mock_map_instance.run_map_pass.return_value = {
+                                                            "snapshot_id": "new-snapshot",
+                                                            "label": "test-label-reconcile",
+                                                            "entity_results": {},
+                                                            "totals": {},
+                                                            "duration": 10.0,
+                                                        }
+                                                        mock_map.return_value = mock_map_instance
+
+                                                        # Mock extract coordinator
+                                                        mock_extract_instance = Mock()
+                                                        mock_extract_instance.run_extract_pass.return_value = {
+                                                            "entity_results": {},
+                                                            "attachment_result": {},
+                                                            "discrepancies": [],
+                                                            "totals": {},
+                                                            "duration": 5.0,
+                                                        }
+                                                        mock_extract.return_value = mock_extract_instance
+
+                                                        # Mock Path operations for report generation
+                                                        with patch("pathlib.Path.mkdir"):
+                                                            with patch("pathlib.Path.write_text"):
+                                                                result = runner.invoke(
+                                                                    app,
+                                                                    [
+                                                                        "migrate",
+                                                                        "reconcile",
+                                                                        "--snapshot-id",
+                                                                        "test-snapshot",
+                                                                    ],
+                                                                )
+
+                                                                # Should succeed
+                                                                assert result.exit_code == 0
+
+                                                                # Verify 2 delta entities were queued (client-6, client-7)
+                                                                assert (
+                                                                    mock_repo_instance.create_extract_queue.call_count == 2
+                                                                )
+
+                                                                # Verify both deltas were queued with correct parameters
+                                                                calls = mock_repo_instance.create_extract_queue.call_args_list
+                                                                delta_ids = {call.kwargs["entity_id"] for call in calls}
+                                                                assert delta_ids == {"client-6", "client-7"}
+
+                                                                # All calls should be for clients entity type
+                                                                for call in calls:
+                                                                    assert call.kwargs["entity_type"] == "clients"
+                                                                    assert (
+                                                                        call.kwargs["snapshot_id"] == "test-snapshot"
+                                                                    )  # Original snapshot
+                                                                    assert call.kwargs["status"] == "pending"
+
+                                                                # Verify delta count message in output
+                                                                assert (
+                                                                    "Found 2 new entities" in result.stdout
+                                                                    or "2 new" in result.stdout
+                                                                )
