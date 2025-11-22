@@ -1341,7 +1341,8 @@ class JobberClient:
         refresh when needed. For OAuth2 users, expired tokens are automatically
         refreshed transparently. Environment token users see no changes in behavior.
 
-        Includes automatic retry logic for GraphQL throttling errors with exponential backoff.
+        Includes automatic retry logic for GraphQL throttling errors and network
+        connection errors with exponential backoff.
 
         Args:
             query: GraphQL query string to execute
@@ -1457,23 +1458,33 @@ class JobberClient:
                 return response_data
 
             except JobberApiError as e:
-                # Check if this is a throttling error and we have retries left
-                if self._is_throttling_error(e) and attempt < max_retries:
-                    # Track throttling event
-                    self._throttling_events += 1
-                    self._last_request_was_throttled = True
+                # Check if this is a retryable error and we have retries left
+                is_throttling = self._is_throttling_error(e)
+                is_connection_error = self._is_connection_error(e)
+
+                if (is_throttling or is_connection_error) and attempt < max_retries:
+                    # Track throttling event if applicable
+                    if is_throttling:
+                        self._throttling_events += 1
+                        self._last_request_was_throttled = True
 
                     delay = base_delay * (2**attempt)  # Exponential backoff
+
+                    # Customize message based on error type
+                    error_type = "GraphQL throttling" if is_throttling else "Network connection error"
+
                     debug_print(
-                        f"[DEBUG] GraphQL throttling detected, attempt {attempt + 1}/{max_retries + 1}. Retrying in {delay}s..."
+                        f"[DEBUG] {error_type} detected, attempt {attempt + 1}/{max_retries + 1}. "
+                        f"Retrying in {delay}s..."
                     )
                     print(
-                        f"⏳ GraphQL throttling detected, retrying in {delay:.1f}s... (attempt {attempt + 1}/{max_retries + 1})"
+                        f"⏳ {error_type} detected, retrying in {delay:.1f}s... "
+                        f"(attempt {attempt + 1}/{max_retries + 1})"
                     )
                     time.sleep(delay)
                     continue
                 else:
-                    # Not a throttling error or out of retries
+                    # Not a retryable error or out of retries
                     raise
 
         # This should never be reached due to the raise in the except block
@@ -1543,6 +1554,28 @@ class JobberClient:
         error_message = str(error).lower()
         throttling_patterns = ["throttled", "throttle", "rate limit", "too many requests"]
         return any(pattern in error_message for pattern in throttling_patterns)
+
+    def _is_connection_error(self, error: JobberApiError) -> bool:
+        """
+        Check if a JobberApiError is caused by a network connection issue.
+
+        Args:
+            error: JobberApiError to check
+
+        Returns:
+            bool: True if the error is caused by a connection issue
+        """
+        error_message = str(error).lower()
+        connection_patterns = [
+            "failed to connect",
+            "connection error",
+            "connection refused",
+            "network error",
+            "request timed out",
+            "timed out",
+            "timeout",
+        ]
+        return any(pattern in error_message for pattern in connection_patterns)
 
     def fetch_clients(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
