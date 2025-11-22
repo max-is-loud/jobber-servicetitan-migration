@@ -29,6 +29,8 @@ class TaxRatesExtractor(BaseExtractor[TaxRate]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        skip_existing_entities: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize TaxRatesExtractor with required dependencies.
 
@@ -37,6 +39,8 @@ class TaxRatesExtractor(BaseExtractor[TaxRate]):
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            skip_existing_entities: Whether to skip entities that already exist in database
+            **kwargs: Additional optional parameters
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -45,6 +49,8 @@ class TaxRatesExtractor(BaseExtractor[TaxRate]):
             logger=logger,
             entity_type=TaxRate,
             entity_name="tax rate",
+            skip_existing_entities=skip_existing_entities,
+            **kwargs,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[TaxRate] = []

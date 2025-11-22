@@ -32,7 +32,7 @@ pagination:
   default: 30
 delays:
   page_delay: 1.0
-  request_timeout: 30.0
+  request_timeout: 60.0
   retry_base_delay: 2.0
 backoff:
   initial_delay: 5.0
