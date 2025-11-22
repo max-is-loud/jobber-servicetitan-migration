@@ -1,7 +1,7 @@
 """Repository class for SQLite database operations."""
 
 import sqlite3
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
 
 from ..exceptions import RepositoryError
 from ..models import (
@@ -2245,6 +2245,104 @@ class Repository:
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to clear OAuth tokens: {e}") from e
+
+    def refresh_oauth_token_transactionally(
+        self,
+        old_refresh_token: str,
+        refresh_callback: Callable[[str], dict[str, str]],
+    ) -> dict[str, str]:
+        """
+        Refresh OAuth token transactionally to prevent race conditions.
+
+        This method executes the refresh operation within an exclusive transaction
+        to ensure that only one process refreshes the token at a time.
+
+        Args:
+            old_refresh_token: The refresh token currently held by the caller
+            refresh_callback: Function to call to perform the actual refresh if needed.
+                            Should accept (refresh_token) and return new token dict.
+
+        Returns:
+            dict: The valid token data (either newly refreshed or existing if already refreshed)
+        """
+        cursor = self._connection.cursor()
+        try:
+            # 1. Begin EXCLUSIVE transaction to lock the database
+            cursor.execute("BEGIN EXCLUSIVE")
+
+            # 2. Read current token state
+            cursor.execute("SELECT access_token, refresh_token, expires_at FROM oauth_tokens LIMIT 1")
+            row = cursor.fetchone()
+
+            if not row:
+                # No tokens found - cannot refresh
+                self._connection.rollback()
+                raise RepositoryError("No OAuth tokens found in database")
+
+            current_access_token = row[0]
+            current_refresh_token = row[1]
+            current_expires_at = row[2]
+
+            # 3. Check if token has already been refreshed by another process
+            if current_refresh_token != old_refresh_token:
+                # Token has changed! Return the new token immediately
+                self._connection.commit()
+                return {
+                    "access_token": current_access_token,
+                    "refresh_token": current_refresh_token,
+                    "expires_at": current_expires_at,
+                }
+
+            # 4. Token matches old one, so we need to refresh it
+            try:
+                # Call the callback to perform the API request
+                # Note: This is done inside the transaction lock, which is necessary
+                # to prevent other processes from starting a refresh, but keeps the lock
+                # held during the network request. This is a trade-off for correctness.
+                new_tokens = refresh_callback(old_refresh_token)
+
+                # Calculate new expiration
+                expires_in = new_tokens.get("expires_in")
+                if expires_in is None:
+                    raise RepositoryError("Missing 'expires_in' in token response")
+
+                from datetime import datetime, timezone, timedelta
+
+                expires_at_datetime = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                new_expires_at = expires_at_datetime.isoformat()
+
+                # 5. Save new tokens
+                cursor.execute("DELETE FROM oauth_tokens")
+                cursor.execute(
+                    """INSERT INTO oauth_tokens
+                       (access_token, refresh_token, expires_at, created_at)
+                       VALUES (?, ?, ?, datetime('now'))""",
+                    (
+                        new_tokens["access_token"],
+                        new_tokens["refresh_token"],
+                        new_expires_at,
+                    ),
+                )
+
+                self._connection.commit()
+
+                return {
+                    "access_token": new_tokens["access_token"],
+                    "refresh_token": new_tokens["refresh_token"],
+                    "expires_at": new_expires_at,
+                }
+
+            except Exception as e:
+                # If refresh fails, rollback and re-raise
+                self._connection.rollback()
+                raise e
+
+        except Exception as e:
+            if self._connection.in_transaction:
+                self._connection.rollback()
+            raise RepositoryError(f"Transactional token refresh failed: {e}") from e
+        finally:
+            cursor.close()
 
     def save_graphql_costs(self, costs: List[dict]) -> None:
         """Batch save GraphQL cost data to the database.
