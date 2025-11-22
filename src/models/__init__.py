@@ -3,6 +3,7 @@
 from .attachment import Attachment
 from .attachment_queue_item import AttachmentQueueItem
 from .client import Client
+from .download_filters import DownloadFilters
 from .entity_inventory import EntityInventory
 from .expense import Expense
 from .extract_queue_item import ExtractQueueItem
@@ -26,6 +27,7 @@ __all__ = [
     "Attachment",
     "AttachmentQueueItem",
     "Client",
+    "DownloadFilters",
     "EntityInventory",
     "Expense",
     "ExtractQueueItem",

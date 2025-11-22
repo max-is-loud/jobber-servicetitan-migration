@@ -87,6 +87,7 @@ class ExtractModeCoordinator:
         snapshot_id: str,
         entity_types: Optional[List[str]] = None,
         resume: bool = False,
+        queue_attachments: bool = True,
     ) -> Dict[str, Any]:
         """
         Execute extract mode hydration pass using map snapshot data.
@@ -95,6 +96,8 @@ class ExtractModeCoordinator:
             snapshot_id: Map snapshot UUID to extract from
             entity_types: Optional list of entity types to extract (default: all from snapshot)
             resume: Whether to resume from existing queue state (default: False)
+            queue_attachments: If True (default), queue attachments for later download.
+                              If False, download attachments immediately (legacy mode).
 
         Returns:
             Dictionary with extraction results:
@@ -108,6 +111,10 @@ class ExtractModeCoordinator:
             ValueError: If snapshot not found or invalid entity types provided
         """
         self._logger.info(f"Starting extract mode pass for snapshot: {snapshot_id}")
+        if queue_attachments:
+            self._logger.info("Attachment mode: QUEUE (metadata only, no downloads)")
+        else:
+            self._logger.info("Attachment mode: DOWNLOAD (legacy - download binaries during extraction)")
 
         # Load map snapshot
         snapshot = self._repository.get_map_snapshot(snapshot_id)
@@ -145,13 +152,29 @@ class ExtractModeCoordinator:
         total_failed = 0
 
         for entity_type in entity_types:
-            result = self._process_queue(snapshot_id, entity_type)
+            result = self._process_queue(snapshot_id, entity_type, queue_attachments)
             entity_results[entity_type] = result
             total_extracted += result["extracted"]
             total_failed += result["failed"]
 
-        # Process attachment queue after all entities extracted
-        attachment_result = self._process_attachment_queue(snapshot_id)
+        # Process attachment queue only if in legacy download mode
+        if queue_attachments:
+            # Queue mode: Count queued attachments
+            queued_items = self._repository.get_attachment_queue(snapshot_id, status="pending")
+            attachment_result = {
+                "downloaded": 0,
+                "failed": 0,
+                "skipped": 0,
+                "queued": len(queued_items),
+            }
+            if queued_items:
+                self._logger.info(
+                    f"Queued {len(queued_items)} attachments for download. "
+                    f"Run 'tightbeam migrate download --snapshot-id {snapshot_id}' to download binaries."
+                )
+        else:
+            # Legacy mode: Download attachments immediately
+            attachment_result = self._process_attachment_queue(snapshot_id)
 
         # Validate completeness (compare map totals vs extracted counts)
         discrepancies = self._validate_completeness(snapshot_id, entity_types, entity_results, attachment_result)
@@ -160,17 +183,22 @@ class ExtractModeCoordinator:
         end_time = datetime.now(UTC)
         duration = (end_time - start_time).total_seconds()
 
+        # Generate completion message based on mode
+        if queue_attachments:
+            attachment_msg = f"{attachment_result.get('queued', 0)} attachments queued"
+        else:
+            attachment_msg = f"{attachment_result['downloaded']} attachments downloaded"
+
         if discrepancies:
             self._logger.warning(
                 f"Extract pass completed with {len(discrepancies)} discrepancy(ies): "
                 f"{total_extracted} extracted, {total_failed} failed, "
-                f"{attachment_result['downloaded']} attachments downloaded in {duration:.1f}s"
+                f"{attachment_msg} in {duration:.1f}s"
             )
         else:
             self._logger.success(
                 f"Extract pass completed: {total_extracted} extracted, "
-                f"{total_failed} failed, {attachment_result['downloaded']} attachments downloaded "
-                f"in {duration:.1f}s"
+                f"{total_failed} failed, {attachment_msg} in {duration:.1f}s"
             )
 
         return {
@@ -190,6 +218,7 @@ class ExtractModeCoordinator:
         self,
         snapshot_id: str,
         entity_type: str,
+        queue_attachments: bool = True,
     ) -> Dict[str, Any]:
         """
         Process extraction queue for a single entity type.
@@ -197,6 +226,7 @@ class ExtractModeCoordinator:
         Args:
             snapshot_id: Map snapshot UUID
             entity_type: Entity type to process (e.g., "clients")
+            queue_attachments: Whether to queue attachments or download immediately
 
         Returns:
             Dictionary with processing results:
@@ -221,8 +251,8 @@ class ExtractModeCoordinator:
                 "skipped": 0,
             }
 
-        # Create extractor with attachment queuing enabled
-        extractor = self._create_extractor(entity_type, snapshot_id)
+        # Create extractor with appropriate attachment handling
+        extractor = self._create_extractor(entity_type, snapshot_id, queue_attachments)
 
         # Process queue with Rich progress bar
         extracted_count = 0
@@ -518,31 +548,45 @@ class ExtractModeCoordinator:
 
         return discrepancies
 
-    def _create_extractor(self, entity_type: str, snapshot_id: str):
+    def _create_extractor(self, entity_type: str, snapshot_id: str, queue_attachments: bool = True):
         """Create extractor instance for the specified entity type.
 
         Args:
             entity_type: Name of entity type (e.g., "clients")
             snapshot_id: Map snapshot UUID for attachment queuing
+            queue_attachments: Whether to queue attachments (True) or download immediately (False)
 
         Returns:
-            Initialized extractor instance with attachment queuing enabled
+            Initialized extractor instance with appropriate attachment handling
         """
         extractor_class = self._EXTRACTOR_MAP.get(entity_type)
         if not extractor_class:
             raise ValueError(f"No extractor found for entity type: {entity_type}")
 
-        return extractor_class(
-            jobber_client=self._jobber_client,
-            entity_mapper=self._entity_mapper,
-            repository=self._repository,
-            logger=self._logger,
-            config_manager=self._config_manager,
-            skip_existing_entities=False,  # Extract mode doesn't skip
-            # Note: Attachment queuing is available but disabled by default
-            # to maintain backward compatibility. Pass queue_attachments=True
-            # and map_snapshot_id to enable it when needed.
-        )
+        # Configure attachment handling based on mode
+        if queue_attachments:
+            # Queue mode: Extract metadata and queue for later download
+            return extractor_class(
+                jobber_client=self._jobber_client,
+                entity_mapper=self._entity_mapper,
+                repository=self._repository,
+                logger=self._logger,
+                config_manager=self._config_manager,
+                skip_existing_entities=False,
+                queue_attachments=True,
+                map_snapshot_id=snapshot_id,
+            )
+        else:
+            # Legacy mode: Extract and download attachments immediately
+            return extractor_class(
+                jobber_client=self._jobber_client,
+                entity_mapper=self._entity_mapper,
+                repository=self._repository,
+                logger=self._logger,
+                config_manager=self._config_manager,
+                skip_existing_entities=False,
+                queue_attachments=False,
+            )
 
     def get_queue_status(
         self,

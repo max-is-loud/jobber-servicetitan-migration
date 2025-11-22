@@ -381,9 +381,21 @@ def migrate_extract(
             help="Resume from existing extract queues instead of recreating them.",
         ),
     ] = False,
+    download_attachments: Annotated[
+        bool,
+        typer.Option(
+            "--download-attachments",
+            help="Download attachment binaries during extraction (legacy mode). By default, attachments are queued for separate download pass.",
+        ),
+    ] = False,
 ) -> None:
     """
     Run extract mode to hydrate full data from a map snapshot.
+
+    By default, extracts entity metadata and queues attachments for later download.
+    Use 'tightbeam migrate download' after extraction to download attachment binaries.
+
+    Use --download-attachments flag for legacy behavior (extract + download in one pass).
     """
     from src.auth import AuthProvider
     from src.config import ConfigManagerImpl
@@ -455,6 +467,7 @@ def migrate_extract(
             snapshot_id=snapshot_id,
             entity_types=selected_entity_types,
             resume=resume,
+            queue_attachments=not download_attachments,  # Inverse: queue unless legacy mode
         )
 
         # Generate reports
@@ -480,6 +493,227 @@ def migrate_extract(
         raise typer.Exit(1) from e
     except Exception as e:  # pragma: no cover - CLI catch-all
         console.print(f"[red]{ERROR_EMOJI} Extract pass failed:[/red] {e}")
+        raise typer.Exit(1) from e
+    finally:
+        if repository:
+            repository.close()
+
+
+@migrate_app.command("download")
+def migrate_download(
+    ctx: typer.Context,
+    snapshot_id: Annotated[
+        str,
+        typer.Option("--snapshot-id", help="Map snapshot ID to download attachments from"),
+    ],
+    entities: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--entity",
+            "--entities",
+            help="Entity types to download attachments from (repeat option)",
+        ),
+    ] = None,
+    file_type: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--file-type",
+            help="File types to download (e.g., pdf, jpeg, png). Repeat option for multiple types.",
+        ),
+    ] = None,
+    min_size: Annotated[
+        Optional[str],
+        typer.Option(
+            "--min-size",
+            help="Minimum file size (e.g., '100KB', '1MB')",
+        ),
+    ] = None,
+    max_size: Annotated[
+        Optional[str],
+        typer.Option(
+            "--max-size",
+            help="Maximum file size (e.g., '10MB', '1GB')",
+        ),
+    ] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Resume interrupted downloads (skip completed, retry failed)",
+        ),
+    ] = False,
+    output_dir: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--output-dir",
+            help="Custom download directory (default: ./attachments)",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Preview download queue without downloading",
+        ),
+    ] = False,
+    report_dir: Annotated[
+        Path,
+        typer.Option(
+            "--report-dir",
+            help="Directory to write download reports (Markdown and JSON).",
+        ),
+    ] = Path("reports"),
+) -> None:
+    """
+    Download queued attachment binaries from a map snapshot.
+
+    Downloads all attachments that were queued during the extract pass.
+    Supports filtering by entity type, file type, and size, as well as
+    pause/resume functionality for interrupted downloads.
+
+    Examples:
+        # Download all queued attachments
+        tightbeam migrate download --snapshot-id abc123
+
+        # Resume interrupted downloads
+        tightbeam migrate download --snapshot-id abc123 --resume
+
+        # Download only client attachments
+        tightbeam migrate download --snapshot-id abc123 --entity clients
+
+        # Download only PDFs and images under 10MB
+        tightbeam migrate download --snapshot-id abc123 --file-type pdf --file-type jpeg --max-size 10MB
+
+        # Preview download queue without downloading
+        tightbeam migrate download --snapshot-id abc123 --dry-run
+    """
+    from src.config import ConfigManagerImpl
+    from src.coordinators.download_mode_coordinator import DownloadModeCoordinator
+    from src.exceptions import ConfigurationError
+    from src.loggers import RichLogger
+    from src.models import DownloadFilters
+
+    config = ctx.obj or {}
+    db_path = config.get("db", Path("tightbeam.sqlite"))
+    verbose = config.get("verbose", False)
+
+    logger = RichLogger(verbose=verbose, console=ServiceFactory.get_console())
+
+    # Parse size strings to bytes
+    def parse_size(size_str: str) -> int:
+        """Parse size string like '10MB' to bytes."""
+        import re
+
+        match = re.match(r"^(\d+(?:\.\d+)?)\s*([KMGT]?B)$", size_str.upper())
+        if not match:
+            raise ValueError(f"Invalid size format: {size_str}. Use format like '10MB', '500KB', '1GB'")
+
+        value, unit = match.groups()
+        value = float(value)
+
+        multipliers = {
+            "B": 1,
+            "KB": 1024,
+            "MB": 1024 * 1024,
+            "GB": 1024 * 1024 * 1024,
+            "TB": 1024 * 1024 * 1024 * 1024,
+        }
+
+        return int(value * multipliers[unit])
+
+    # Normalize entity selections
+    selected_entity_types: Optional[List[str]] = None
+    if entities:
+        selected_entity_types = [entity.strip() for raw in entities for entity in raw.split(",") if entity.strip()]
+
+    # Normalize file types
+    selected_file_types: Optional[List[str]] = None
+    if file_type:
+        selected_file_types = [ft.strip().lower() for raw in file_type for ft in raw.split(",") if ft.strip()]
+
+    # Parse size filters
+    min_size_bytes: Optional[int] = None
+    max_size_bytes: Optional[int] = None
+    try:
+        if min_size:
+            min_size_bytes = parse_size(min_size)
+        if max_size:
+            max_size_bytes = parse_size(max_size)
+    except ValueError as e:
+        console.print(f"[red]{ERROR_EMOJI} {e}[/red]")
+        raise typer.Exit(1) from e
+
+    # Create download filters if any filters specified
+    download_filters: Optional[DownloadFilters] = None
+    if selected_file_types or min_size_bytes is not None or max_size_bytes is not None:
+        try:
+            download_filters = DownloadFilters(
+                file_types=selected_file_types,
+                min_size=min_size_bytes,
+                max_size=max_size_bytes,
+            )
+        except ValueError as e:
+            console.print(f"[red]{ERROR_EMOJI} Invalid filter parameters:[/red] {e}")
+            raise typer.Exit(1) from e
+
+    repository = None
+    try:
+        repository = ServiceFactory.create_repository(db_path)
+
+        # Validate snapshot exists
+        snapshot = repository.get_map_snapshot(snapshot_id)
+        if not snapshot:
+            console.print(f"[red]{ERROR_EMOJI} Map snapshot not found:[/red] {snapshot_id}")
+            raise typer.Exit(1)
+
+        config_manager = ConfigManagerImpl()
+
+        if dry_run:
+            logger.info(f"{DRY_RUN_EMOJI} Dry run mode - previewing download queue for snapshot {snapshot_id}")
+        else:
+            logger.info(f"Starting download pass for snapshot {snapshot_id}")
+
+        coordinator = DownloadModeCoordinator(
+            repository=repository,
+            logger=logger,
+            config_manager=config_manager,
+        )
+
+        download_result = coordinator.run_download_pass(
+            snapshot_id=snapshot_id,
+            entity_types=selected_entity_types,
+            resume=resume,
+            filters=download_filters,
+            output_dir=output_dir,
+            dry_run=dry_run,
+        )
+
+        # Display results
+        if dry_run:
+            console.print(f"[green]{INFO_EMOJI} Dry run completed[/green]")
+            console.print(f"{INFO_EMOJI} Total attachments in queue: {download_result['total_attachments']}")
+        else:
+            console.print(f"[green]{MIGRATION_EMOJI} Download pass completed for snapshot {snapshot_id}[/green]")
+            console.print(f"{INFO_EMOJI} Downloaded: {download_result['downloaded']}")
+            console.print(f"{INFO_EMOJI} Failed: {download_result['failed']}")
+            console.print(f"{INFO_EMOJI} Skipped: {download_result.get('skipped', 0)}")
+            console.print(f"{INFO_EMOJI} Total bytes: {download_result['total_bytes']:,}")
+
+            if "report_markdown" in download_result:
+                console.print(f"{INFO_EMOJI} Markdown report: {download_result['report_markdown']}")
+                console.print(f"{INFO_EMOJI} JSON report: {download_result['report_json']}")
+
+            # Suggest next steps
+            if download_result['failed'] > 0:
+                console.print(f"\n[yellow]{INFO_EMOJI} {download_result['failed']} downloads failed.[/yellow]")
+                console.print(f"[yellow]   Run with --resume to retry failed downloads:[/yellow]")
+                console.print(f"[yellow]   tightbeam migrate download --snapshot-id {snapshot_id} --resume[/yellow]")
+
+    except ConfigurationError as e:
+        console.print(f"[red]{ERROR_EMOJI} Configuration Error:[/red] {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:  # pragma: no cover - CLI catch-all
+        console.print(f"[red]{ERROR_EMOJI} Download pass failed:[/red] {e}")
         raise typer.Exit(1) from e
     finally:
         if repository:
