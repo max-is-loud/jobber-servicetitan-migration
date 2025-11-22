@@ -70,6 +70,7 @@ class JobberClient:
               number
             }}
             notes(first: {nested_notes_size}) {{
+              totalCount
               edges {{
                 node {{
                   ... on ClientNote {{
@@ -85,6 +86,7 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_size}) {{
+              totalCount
               edges {{
                 node {{
                   id
@@ -135,6 +137,7 @@ class JobberClient:
             invoiceStatus
             issuedDate
             notes(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   ... on InvoiceNote {{
@@ -150,6 +153,7 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   id
@@ -204,6 +208,7 @@ class JobberClient:
               totalCount
             }}
             notes(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   ... on QuoteNote {{
@@ -219,6 +224,7 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   id
@@ -288,15 +294,14 @@ class JobberClient:
             }}
             jobNumber
             title
-            description
-            status
-            scheduledStartAt
-            scheduledEndAt
+            instructions
+            jobStatus
+            startAt
+            endAt
             completedAt
-            amounts {{
-              total
-            }}
+            total
             notes(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   ... on JobNote {{
@@ -312,6 +317,7 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   id
@@ -408,6 +414,7 @@ class JobberClient:
               id
             }}
             notes(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   ... on RequestNote {{
@@ -423,6 +430,7 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   id
@@ -2020,6 +2028,7 @@ class JobberClient:
           number
         }}
         notes(first: {nested_notes_limit}) {{
+          totalCount
           edges {{
             node {{
               ... on ClientNote {{
@@ -2035,6 +2044,7 @@ class JobberClient:
           }}
         }}
         noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
           edges {{
             node {{
               id
@@ -2073,6 +2083,7 @@ class JobberClient:
         invoiceStatus
         issuedDate
         notes(first: {nested_notes_limit}) {{
+          totalCount
           edges {{
             node {{
               ... on InvoiceNote {{
@@ -2088,6 +2099,7 @@ class JobberClient:
           }}
         }}
         noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
           edges {{
             node {{
               id
@@ -2130,6 +2142,7 @@ class JobberClient:
           totalCount
         }}
         notes(first: {nested_notes_limit}) {{
+          totalCount
           edges {{
             node {{
               ... on QuoteNote {{
@@ -2145,6 +2158,7 @@ class JobberClient:
           }}
         }}
         noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
           edges {{
             node {{
               id
@@ -2187,15 +2201,14 @@ class JobberClient:
         }}
         jobNumber
         title
-        description
-        status
-        scheduledStartAt
-        scheduledEndAt
+        instructions
+        jobStatus
+        startAt
+        endAt
         completedAt
-        amounts {{
-          total
-        }}
+        total
         notes(first: {nested_notes_limit}) {{
+          totalCount
           edges {{
             node {{
               ... on JobNote {{
@@ -2211,6 +2224,7 @@ class JobberClient:
           }}
         }}
         noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
           edges {{
             node {{
               id
@@ -2230,6 +2244,32 @@ class JobberClient:
             hasNextPage
             endCursor
           }}
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+        elif entity_type == "expense":
+            return f"""
+    query GetExpense($id: EncodedId!) {{
+      expense(id: $id) {{
+        id
+        linkedJob {{
+          id
+        }}
+        title
+        description
+        total
+        date
+        enteredBy {{
+          id
+        }}
+        paidBy {{
+          id
+        }}
+        reimbursableTo {{
+          id
         }}
         createdAt
         updatedAt
@@ -2303,6 +2343,126 @@ class JobberClient:
         except Exception as e:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(f"Unexpected error while fetching entity {entity_id}: {e}") from e
+
+    def fetch_additional_notes(
+        self, entity_id: str, entity_type: str, cursor: str, page_size: int = 100
+    ) -> dict[str, Any]:
+        """
+        Fetch additional page of notes for an entity using cursor pagination.
+
+        Args:
+            entity_id: The entity's ID (e.g., client ID, invoice ID)
+            entity_type: Type of entity ("client", "invoice", "job", "quote", "request")
+            cursor: The endCursor from previous page's pageInfo
+            page_size: Number of notes to fetch (default: 100)
+
+        Returns:
+            Dictionary with 'edges' and 'pageInfo' for the notes page
+
+        Raises:
+            JobberApiError: If API communication fails
+        """
+        note_type_map = {
+            "client": "ClientNote",
+            "invoice": "InvoiceNote",
+            "job": "JobNote",
+            "quote": "QuoteNote",
+            "request": "RequestNote",
+        }
+        note_type = note_type_map.get(entity_type)
+        if not note_type:
+            raise ValueError(f"Unsupported entity type for notes: {entity_type}")
+
+        query = f"""
+        query GetAdditionalNotes($id: EncodedId!, $cursor: String!) {{
+          {entity_type}(id: $id) {{
+            notes(first: {page_size}, after: $cursor) {{
+              totalCount
+              edges {{
+                node {{
+                  ... on {note_type} {{
+                    id
+                    message
+                    createdAt
+                  }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+          }}
+        }}
+        """
+
+        variables = {"id": entity_id, "cursor": cursor}
+        response = self._execute_graphql_request(query, variables=variables)
+        entity_data = response.get("data", {}).get(entity_type, {})
+        return entity_data.get("notes", {})
+
+    def fetch_additional_attachments(
+        self, entity_id: str, entity_type: str, cursor: str, page_size: int = 100
+    ) -> dict[str, Any]:
+        """
+        Fetch additional page of attachments for an entity using cursor pagination.
+
+        Args:
+            entity_id: The entity's ID (e.g., client ID, invoice ID)
+            entity_type: Type of entity ("client", "invoice", "job", "quote", "request")
+            cursor: The endCursor from previous page's pageInfo
+            page_size: Number of attachments to fetch (default: 100)
+
+        Returns:
+            Dictionary with 'edges' and 'pageInfo' for the attachments page
+
+        Raises:
+            JobberApiError: If API communication fails
+        """
+        note_type_map = {
+            "client": "ClientNote",
+            "invoice": "InvoiceNote",
+            "job": "JobNote",
+            "quote": "QuoteNote",
+            "request": "RequestNote",
+        }
+        note_type = note_type_map.get(entity_type)
+        if not note_type:
+            raise ValueError(f"Unsupported entity type for attachments: {entity_type}")
+
+        query = f"""
+        query GetAdditionalAttachments($id: EncodedId!, $cursor: String!) {{
+          {entity_type}(id: $id) {{
+            noteAttachments(first: {page_size}, after: $cursor) {{
+              totalCount
+              edges {{
+                node {{
+                  id
+                  note {{
+                    ... on {note_type} {{
+                      id
+                    }}
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+          }}
+        }}
+        """
+
+        variables = {"id": entity_id, "cursor": cursor}
+        response = self._execute_graphql_request(query, variables=variables)
+        entity_data = response.get("data", {}).get(entity_type, {})
+        return entity_data.get("noteAttachments", {})
 
     # ========================================================================
     # Map Mode Query Variants - Lightweight queries for discovery pass
