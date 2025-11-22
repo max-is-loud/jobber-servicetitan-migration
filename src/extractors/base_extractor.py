@@ -161,6 +161,10 @@ class BaseExtractor(ABC, Generic[T]):
         self._map_snapshot_id = kwargs.get("map_snapshot_id")
         self._attachments_queued = 0  # Track attachments added to queue
 
+        # Data quality issue tracking - detailed failure information
+        # Preserves specific IDs and errors for debugging and reporting
+        self._data_quality_issues: list[dict[str, Any]] = []
+
     def _should_skip_entity(self, entity_id: str) -> bool:
         """Check if an entity should be skipped based on existence in database.
 
@@ -753,6 +757,68 @@ class BaseExtractor(ABC, Generic[T]):
             "attachment_mapping_failures": self._attachment_mapping_failures,
         }
 
+    def get_data_quality_issues(self) -> dict[str, Any]:
+        """Get detailed data quality issue information.
+
+        Returns:
+            Dictionary containing:
+            - total_entities_with_issues: Count of entities that had data quality problems
+            - total_notes_skipped: Aggregate count of skipped notes
+            - total_attachments_orphaned: Aggregate count of orphaned attachments
+            - issues: List of specific entity IDs with their issue counts and types
+        """
+        total_notes_skipped = sum(issue.get("notes_skipped", 0) for issue in self._data_quality_issues)
+        total_attachments_orphaned = sum(issue.get("attachments_orphaned", 0) for issue in self._data_quality_issues)
+
+        return {
+            "total_entities_with_issues": len(self._data_quality_issues),
+            "total_notes_skipped": total_notes_skipped,
+            "total_attachments_orphaned": total_attachments_orphaned,
+            "issues": self._data_quality_issues.copy(),
+        }
+
+    def _get_entity_display_identifier(self, entity: T) -> str:
+        """Extract human-readable identifier for entity (for Jobber UI cross-reference).
+
+        Args:
+            entity: The entity object (Invoice, Job, Quote, Client, etc.)
+
+        Returns:
+            Human-readable identifier string (e.g., "INV-1234", "Job #5678", "John Smith")
+        """
+        try:
+            # Invoice: number field (e.g., "INV-1234")
+            if hasattr(entity, "number"):
+                return f"Invoice #{entity.number}"
+
+            # Job: job_number field (e.g., "J-5678")
+            if hasattr(entity, "job_number"):
+                return f"Job #{entity.job_number}"
+
+            # Quote: quote_number field (e.g., "Q-9012")
+            if hasattr(entity, "quote_number"):
+                return f"Quote #{entity.quote_number}"
+
+            # Client: first_name + last_name
+            if hasattr(entity, "first_name") and hasattr(entity, "last_name"):
+                name = f"{entity.first_name} {entity.last_name}".strip()
+                return f"Client: {name}" if name else "Client: (unnamed)"
+
+            # Request: request_number (if it exists)
+            if hasattr(entity, "request_number"):
+                return f"Request #{entity.request_number}"
+
+            # Visit: visit_number (if it exists)
+            if hasattr(entity, "visit_number"):
+                return f"Visit #{entity.visit_number}"
+
+            # Fallback: use entity type name
+            return f"{self._entity_name.title()}"
+
+        except Exception:
+            # If anything fails, return entity type as fallback
+            return f"{self._entity_name.title()}"
+
     def _update_extraction_summary(
         self,
         entities_processed: int,
@@ -789,6 +855,159 @@ class BaseExtractor(ABC, Generic[T]):
             "error_count": error_count,
         }
 
+    def _fetch_all_remaining_notes(self, entity_id: str, cursor: str | None) -> list[Any]:
+        """
+        Fetch all remaining pages of notes for an entity using cursor pagination.
+
+        Args:
+            entity_id: The entity's ID
+            cursor: Starting cursor from pageInfo.endCursor
+
+        Returns:
+            List of mapped note entities
+        """
+        if not cursor or not self._jobber_client:
+            return []
+
+        all_notes = []
+        current_cursor = cursor
+        page_num = 2  # Starting from page 2 (first page already fetched)
+
+        while current_cursor:
+            try:
+                response = self._jobber_client.fetch_additional_notes(
+                    entity_id=entity_id,
+                    entity_type=self._entity_name,
+                    cursor=current_cursor,
+                    page_size=100  # Fetch in larger batches for efficiency
+                )
+
+                edges = response.get("edges", [])
+                page_info = response.get("pageInfo", {})
+
+                # Map notes from this page
+                for note_edge in edges:
+                    note_node = note_edge.get("node", {})
+                    if not note_node or not note_node.get("id"):
+                        continue
+
+                    try:
+                        note_data = {
+                            **note_node,
+                            self._entity_name: {"id": entity_id},
+                        }
+                        note = self._entity_mapper.map_note(note_data)
+                        all_notes.append(note)
+                    except MappingError as e:
+                        # Try lenient mapping to preserve orphaned notes
+                        try:
+                            orphaned_note = self._entity_mapper.map_note(note_node, lenient=True)
+                            all_notes.append(orphaned_note)
+                            self._logger.debug(f"Saved orphaned note with lenient mapping (pagination) for {self._entity_name} {entity_id}: {e}")
+                        except Exception as lenient_error:
+                            # Even lenient mapping failed
+                            self._logger.debug(f"Failed to map note even with lenient mode (pagination) for {self._entity_name} {entity_id}: {lenient_error}")
+
+                # Check if there are more pages
+                if page_info.get("hasNextPage", False):
+                    current_cursor = page_info.get("endCursor")
+                    page_num += 1
+                    self._logger.debug(
+                        f"Fetching notes page {page_num} for {self._entity_name} {entity_id} "
+                        f"({len(all_notes)} notes fetched so far)"
+                    )
+                else:
+                    current_cursor = None
+
+            except Exception as e:
+                self._logger.warning(
+                    f"Error fetching additional notes for {self._entity_name} {entity_id}: {e}. "
+                    f"Returning {len(all_notes)} notes fetched so far."
+                )
+                break
+
+        return all_notes
+
+    def _fetch_all_remaining_attachments(self, entity_id: str, cursor: str | None) -> list[Any]:
+        """
+        Fetch all remaining pages of attachments for an entity using cursor pagination.
+
+        Args:
+            entity_id: The entity's ID
+            cursor: Starting cursor from pageInfo.endCursor
+
+        Returns:
+            List of mapped attachment entities
+        """
+        if not cursor or not self._jobber_client:
+            return []
+
+        all_attachments = []
+        current_cursor = cursor
+        page_num = 2  # Starting from page 2 (first page already fetched)
+
+        while current_cursor:
+            try:
+                response = self._jobber_client.fetch_additional_attachments(
+                    entity_id=entity_id,
+                    entity_type=self._entity_name,
+                    cursor=current_cursor,
+                    page_size=100  # Fetch in larger batches for efficiency
+                )
+
+                edges = response.get("edges", [])
+                page_info = response.get("pageInfo", {})
+
+                # Map attachments from this page
+                for attachment_edge in edges:
+                    attachment_node = attachment_edge.get("node", {})
+                    if not attachment_node:
+                        continue
+
+                    try:
+                        attachment = self._entity_mapper.map_attachment(attachment_node)
+                        all_attachments.append(attachment)
+                    except MappingError as e:
+                        self._attachment_mapping_failures += 1
+                        error_msg = str(e).lower()
+                        # Try lenient mapping to preserve orphaned attachments
+                        if "note id is required" in error_msg or "note id" in error_msg:
+                            try:
+                                orphaned_attachment = self._entity_mapper.map_attachment(
+                                    attachment_node,
+                                    lenient=True,
+                                    parent_entity_id=entity_id
+                                )
+                                all_attachments.append(orphaned_attachment)
+                            except Exception as lenient_error:
+                                self._logger.warning(
+                                    f"Failed to map orphaned attachment even with lenient mode (pagination) for {self._entity_name} {entity_id}: {lenient_error}"
+                                )
+                        else:
+                            self._logger.warning(
+                                f"Failed to map attachment for {self._entity_name} {entity_id}: {e}"
+                            )
+
+                # Check if there are more pages
+                if page_info.get("hasNextPage", False):
+                    current_cursor = page_info.get("endCursor")
+                    page_num += 1
+                    self._logger.debug(
+                        f"Fetching attachments page {page_num} for {self._entity_name} {entity_id} "
+                        f"({len(all_attachments)} attachments fetched so far)"
+                    )
+                else:
+                    current_cursor = None
+
+            except Exception as e:
+                self._logger.warning(
+                    f"Error fetching additional attachments for {self._entity_name} {entity_id}: {e}. "
+                    f"Returning {len(all_attachments)} attachments fetched so far."
+                )
+                break
+
+        return all_attachments
+
     def _extract_notes_and_attachments(self, node: dict[str, Any], primary_entity: T) -> dict[str, Any]:
         """Extract nested notes and attachments from entity query response.
 
@@ -809,14 +1028,14 @@ class BaseExtractor(ABC, Generic[T]):
         notes_data = node.get("notes", {})
         entity_notes = notes_data.get("edges", [])
         notes_page_info = notes_data.get("pageInfo", {})
+        notes = []  # Initialize outside if block so we can track skipped notes
 
         if entity_notes:
-            notes = []
             for note_edge in entity_notes:
                 note_node = note_edge.get("node", {})
                 # Skip empty nodes or nodes missing ID (can happen with union fragments)
+                # Don't log individual skips - will consolidate at end with orphaned attachments
                 if not note_node or not note_node.get("id"):
-                    self._logger.debug(f"Skipping note with missing data for {self._entity_name} {primary_entity.id}")
                     continue
 
                 try:
@@ -829,17 +1048,26 @@ class BaseExtractor(ABC, Generic[T]):
                     note = self._entity_mapper.map_note(note_data)
                     notes.append(note)
                 except MappingError as e:
-                    self._logger.debug(f"Failed to map note for {self._entity_name} {primary_entity.id}: {e}")
+                    # Try lenient mapping to preserve orphaned notes
+                    try:
+                        orphaned_note = self._entity_mapper.map_note(note_node, lenient=True)
+                        notes.append(orphaned_note)
+                        self._logger.debug(f"Saved orphaned note with lenient mapping for {self._entity_name} {primary_entity.id}: {e}")
+                    except Exception as lenient_error:
+                        # Even lenient mapping failed - truly broken data
+                        self._logger.debug(f"Failed to map note even with lenient mode for {self._entity_name} {primary_entity.id}: {lenient_error}")
+
+            # Auto-paginate to fetch all remaining notes
+            if notes_page_info.get("hasNextPage", False):
+                total_count = notes_data.get("totalCount", "unknown")
+                self._logger.debug(
+                    f"Fetching additional notes for {self._entity_name} {primary_entity.id} "
+                    f"(total: {total_count}, fetched so far: {len(notes)})"
+                )
+                notes.extend(self._fetch_all_remaining_notes(primary_entity.id, notes_page_info.get("endCursor")))
+
             if notes:
                 related["notes"] = notes
-
-                # Warn if there are more notes that weren't fetched
-                if notes_page_info.get("hasNextPage", False):
-                    self._logger.warning(
-                        f"{self._entity_name.capitalize()} {primary_entity.id} has additional notes beyond the "
-                        f"{len(notes)} fetched. Increase pagination.nested_notes in "
-                        f"settings.yaml to fetch more notes inline."
-                    )
 
         # Extract attachments if present
         attachments_data = node.get("noteAttachments", {})
@@ -848,6 +1076,7 @@ class BaseExtractor(ABC, Generic[T]):
 
         if entity_attachments:
             attachments = []
+            orphaned_attachments_saved = 0  # Track orphaned attachments saved with lenient mapping
             for attachment_edge in entity_attachments:
                 attachment_node = attachment_edge.get("node", {})
                 if attachment_node:
@@ -856,19 +1085,64 @@ class BaseExtractor(ABC, Generic[T]):
                         attachments.append(attachment)
                     except MappingError as e:
                         self._attachment_mapping_failures += 1
-                        self._logger.warning(
-                            f"Failed to map attachment for {self._entity_name} {primary_entity.id}: {e}"
-                        )
+                        error_msg = str(e).lower()
+                        # Try lenient mapping to preserve orphaned attachments
+                        if "note id is required" in error_msg or "note id" in error_msg:
+                            try:
+                                # Use lenient mode with parent entity ID for file organization
+                                orphaned_attachment = self._entity_mapper.map_attachment(
+                                    attachment_node,
+                                    lenient=True,
+                                    parent_entity_id=primary_entity.id
+                                )
+                                attachments.append(orphaned_attachment)
+                                orphaned_attachments_saved += 1
+                            except Exception as lenient_error:
+                                # Even lenient mapping failed
+                                self._logger.warning(
+                                    f"Failed to map orphaned attachment even with lenient mode for {self._entity_name} {primary_entity.id}: {lenient_error}"
+                                )
+                        else:
+                            # Unexpected attachment mapping error - worth logging
+                            self._logger.warning(
+                                f"Failed to map attachment for {self._entity_name} {primary_entity.id}: {e}"
+                            )
+
+            # Auto-paginate to fetch all remaining attachments
+            if attachments_page_info.get("hasNextPage", False):
+                total_count = attachments_data.get("totalCount", "unknown")
+                self._logger.debug(
+                    f"Fetching additional attachments for {self._entity_name} {primary_entity.id} "
+                    f"(total: {total_count}, fetched so far: {len(attachments)})"
+                )
+                attachments.extend(self._fetch_all_remaining_attachments(primary_entity.id, attachments_page_info.get("endCursor")))
+
+            # Log consolidated message if we found and saved orphaned data
+            if orphaned_attachments_saved > 0:
+                # Count notes with ORPHANED entity_type to track how many orphaned notes were saved
+                orphaned_notes_saved = sum(1 for note in notes if note.entity_type == "ORPHANED")
+
+                # Extract human-readable identifier for cross-reference with Jobber UI
+                display_id = self._get_entity_display_identifier(primary_entity)
+
+                if orphaned_notes_saved > 0 or orphaned_attachments_saved > 0:
+                    self._logger.info(
+                        f"Saved {orphaned_notes_saved} orphaned note(s) and {orphaned_attachments_saved} "
+                        f"orphaned attachment(s) for {display_id} (review in ./attachments/ORPHANED/)"
+                    )
+                    # Track detailed information for reporting
+                    self._data_quality_issues.append({
+                        "entity_type": self._entity_name,
+                        "entity_id": primary_entity.id,
+                        "display_id": display_id,
+                        "notes_saved_orphaned": orphaned_notes_saved,
+                        "attachments_saved_orphaned": orphaned_attachments_saved,
+                        "issue_type": "orphaned_data_preserved",
+                        "review_path": f"./attachments/ORPHANED/{primary_entity.id}/"
+                    })
+
             if attachments:
                 related["attachments"] = attachments
-
-                # Warn if there are more attachments that weren't fetched
-                if attachments_page_info.get("hasNextPage", False):
-                    self._logger.warning(
-                        f"{self._entity_name.capitalize()} {primary_entity.id} has additional attachments beyond the "
-                        f"{len(attachments)} fetched. Increase pagination.nested_notes in "
-                        f"settings.yaml to fetch more attachments inline."
-                    )
 
         return related
 
