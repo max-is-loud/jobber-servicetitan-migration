@@ -3,6 +3,7 @@
 from typing import Any, List, Optional
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import Expense
@@ -29,6 +30,7 @@ class ExpensesExtractor(BaseExtractor[Expense]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
         **kwargs,
     ) -> None:
@@ -39,6 +41,7 @@ class ExpensesExtractor(BaseExtractor[Expense]):
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
             **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
         """
@@ -48,6 +51,7 @@ class ExpensesExtractor(BaseExtractor[Expense]):
             repository=repository,
             logger=logger,
             entity_type=Expense,
+            config_manager=config_manager,
             entity_name="expense",
             skip_existing_entities=skip_existing_entities,
             **kwargs,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, List, Optional
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
@@ -31,6 +32,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
         **kwargs,
     ) -> None:
@@ -41,6 +43,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
             **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
         """
@@ -51,6 +54,7 @@ class VisitsExtractor(BaseExtractor[Visit]):
             logger=logger,
             entity_type=Visit,
             entity_name="visit",
+            config_manager=config_manager,
             skip_existing_entities=skip_existing_entities,
             **kwargs,
         )

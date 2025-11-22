@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, List, Optional
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models import Job
@@ -27,6 +28,9 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        config_manager: Optional[ConfigManagerImpl] = None,
+        skip_existing_entities: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize JobsExtractor with required dependencies.
 
@@ -35,6 +39,9 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            config_manager: Optional ConfigManager for delays and pagination settings
+            skip_existing_entities: Whether to skip entities that already exist in database
+            **kwargs: Additional parameters (e.g., queue_attachments, map_snapshot_id)
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -43,6 +50,9 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
             logger=logger,
             entity_type=Job,
             entity_name="job",
+            config_manager=config_manager,
+            skip_existing_entities=skip_existing_entities,
+            **kwargs,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Job] = []
