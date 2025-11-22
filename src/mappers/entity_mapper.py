@@ -54,12 +54,26 @@ class EntityMapper:
             last_name = data.get("lastName", "")
 
             # Extract primary email from emails array
+            # GraphQL returns: emails { address }
             emails = data.get("emails", [])
-            email = MapperUtils.extract_primary_field(emails, "value", "primary")
+            email = MapperUtils.extract_primary_field(emails, "address", "primary")
 
             # Extract primary phone from phones array
+            # GraphQL returns: phones { number }
             phones = data.get("phones", [])
-            phone = MapperUtils.extract_primary_field(phones, "value", "primary")
+            phone = MapperUtils.extract_primary_field(phones, "number", "primary")
+
+            # Extract ALL emails and phones for additional contact methods
+            all_emails = MapperUtils.extract_all_fields(emails, "address")
+            all_phones = MapperUtils.extract_all_fields(phones, "number")
+
+            # Remove primary from additional lists to avoid duplication
+            additional_emails = [e for e in all_emails if e != email]
+            additional_phones = [p for p in all_phones if p != phone]
+
+            # Serialize to JSON for SQLite TEXT storage
+            additional_emails_json = MapperUtils.serialize_json_field(additional_emails)
+            additional_phones_json = MapperUtils.serialize_json_field(additional_phones)
 
             # Format ISO datetime
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -71,6 +85,8 @@ class EntityMapper:
                 email=email,
                 phone=phone,
                 created_at=created_at,
+                additional_emails=additional_emails_json,
+                additional_phones=additional_phones_json,
             )
 
         except Exception as e:
@@ -106,18 +122,27 @@ class EntityMapper:
             # Extract invoice number
             number = data.get("invoiceNumber", "")
 
-            # Extract and convert total amount to cents
+            # Extract and convert amounts to cents
             amounts = data.get("amounts", {})
             total_amount = None
+            subtotal_amount = None
             if isinstance(amounts, dict):
                 total_amount = amounts.get("total")
+                subtotal_amount = amounts.get("subtotal")
+
             total_cents = MapperUtils.convert_to_cents(total_amount)
+            subtotal = MapperUtils.convert_to_cents(subtotal_amount)
 
             # Extract invoice status
             status = data.get("invoiceStatus", "")
 
-            # Format issued date
+            # Format dates
             issued_at = self._format_iso_datetime(data.get("issuedDate"))
+            due_date = MapperUtils.format_iso_datetime(data.get("dueDate"))
+
+            # Extract and serialize line items
+            line_items_data = data.get("lineItems", {})
+            line_items = self._serialize_line_items(line_items_data)
 
             return Invoice(
                 id=invoice_id,
@@ -126,6 +151,9 @@ class EntityMapper:
                 total_cents=total_cents,
                 status=status,
                 issued_at=issued_at,
+                due_date=due_date,
+                subtotal=subtotal,
+                line_items=line_items,
             )
 
         except Exception as e:

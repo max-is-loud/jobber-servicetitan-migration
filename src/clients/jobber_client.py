@@ -133,9 +133,21 @@ class JobberClient:
             invoiceNumber
             amounts {{
               total
+              subtotal
             }}
             invoiceStatus
             issuedDate
+            dueDate
+            lineItems {{
+              edges {{
+                node {{
+                  description
+                  quantity
+                  unitCost
+                  total
+                }}
+              }}
+            }}
             notes(first: {nested_notes_limit}) {{
               totalCount
               edges {{
@@ -174,6 +186,8 @@ class JobberClient:
                 endCursor
               }}
             }}
+            createdAt
+            updatedAt
           }}
         }}
         pageInfo {{
@@ -205,7 +219,15 @@ class JobberClient:
             }}
             message
             lineItems {{
-              totalCount
+              edges {{
+                node {{
+                  name
+                  description
+                  qty
+                  unitCost
+                  total
+                }}
+              }}
             }}
             notes(first: {nested_notes_limit}) {{
               totalCount
@@ -2276,6 +2298,27 @@ class JobberClient:
       }}
     }}
     """
+        elif entity_type == "productOrService":
+            return f"""
+    query GetProductService($id: EncodedId!) {{
+      productOrService(id: $id) {{
+        id
+        name
+        description
+        category {{
+          name
+        }}
+        defaultUnitCost
+        internalUnitCost
+        markup
+        durationMinutes
+        taxable
+        visible
+        onlineBookingEnabled
+        onlineBookingSortOrder
+      }}
+    }}
+    """
         else:
             # For other entity types, use a minimal query
             # This can be expanded as needed for specific entity types
@@ -2315,8 +2358,8 @@ class JobberClient:
 
             # Decode the base64 ID to extract entity type
             # Format: gid://Jobber/Client/12345
-            decoded_id = base64.b64decode(entity_id).decode('utf-8')
-            entity_type = decoded_id.split('/')[3]  # Extract "Client" from gid://Jobber/Client/12345
+            decoded_id = base64.b64decode(entity_id).decode("utf-8")
+            entity_type = decoded_id.split("/")[3]  # Extract "Client" from gid://Jobber/Client/12345
 
             # Map entity type to query field name (lowercase)
             query_field = entity_type[0].lower() + entity_type[1:]  # Client -> client
