@@ -157,7 +157,7 @@ class BaseMapExtractor(ABC):
             cursor = page_info.get("endCursor")
 
             self._logger.debug(
-                f"Processed page {self._total_pages} " f"({len(entities)} entities, total: {self._total_entities})"
+                f"Processed page {self._total_pages} ({len(entities)} entities, total: {self._total_entities})"
             )
 
             # Record adaptive metrics and refresh current settings
@@ -178,10 +178,10 @@ class BaseMapExtractor(ABC):
                 )
                 current_page_size = self._adaptive_optimizer.current_settings.page_size
 
-        self._logger.success(
-            f"Completed map mode extraction for {self._entity_type_name}: "
-            f"{self._total_entities} entities in {self._total_pages} pages"
-        )
+        # self._logger.success(
+        #     f"Completed map mode extraction for {self._entity_type_name}: "
+        #     f"{self._total_entities} entities in {self._total_pages} pages"
+        # )
 
         return {
             "total_entities": self._total_entities,

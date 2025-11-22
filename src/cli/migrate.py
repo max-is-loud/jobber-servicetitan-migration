@@ -169,7 +169,7 @@ def migrate_callback(
     except ConfigurationError:
         available_levels = ["conservative", "moderate", "aggressive"]
         typer.echo(
-            f"Error: Invalid optimization level '{optimization_level}'. " f"Choose from: {', '.join(available_levels)}"
+            f"Error: Invalid optimization level '{optimization_level}'. Choose from: {', '.join(available_levels)}"
         )
         raise typer.Exit(1) from None
 
@@ -263,7 +263,7 @@ def migrate_map(
     enable_cost_monitoring = config.get("enable_cost_monitoring", True)
     enable_adaptive_optimization = config.get("enable_adaptive_optimization", False)
 
-    logger = RichLogger(verbose=verbose)
+    logger = RichLogger(verbose=verbose, console=ServiceFactory.get_console())
 
     # Normalize entity selections and validate against supported types
     available_entity_types = MapModeCoordinator.supported_entity_types()
@@ -398,7 +398,7 @@ def migrate_extract(
     verbose = config.get("verbose", False)
     enable_cost_monitoring = config.get("enable_cost_monitoring", True)
 
-    logger = RichLogger(verbose=verbose)
+    logger = RichLogger(verbose=verbose, console=ServiceFactory.get_console())
 
     # Normalize entity selections and validate against supported types
     available_entity_types = ExtractModeCoordinator.supported_entity_types()
@@ -439,9 +439,7 @@ def migrate_extract(
             enable_cost_monitoring=enable_cost_monitoring,
         )
 
-        logger.info(
-            f"Starting extract pass for snapshot {snapshot_id} " f"with {optimization_level.upper()} optimization"
-        )
+        logger.info(f"Starting extract pass for snapshot {snapshot_id} with {optimization_level.upper()} optimization")
 
         entity_mapper = EntityMapper()
 
@@ -544,7 +542,7 @@ def migrate_reconcile(
     verbose = config.get("verbose", False)
     enable_cost_monitoring = config.get("enable_cost_monitoring", True)
 
-    logger = RichLogger(verbose=verbose)
+    logger = RichLogger(verbose=verbose, console=ServiceFactory.get_console())
 
     repository = None
     try:
@@ -684,9 +682,7 @@ def migrate_reconcile(
                 enable_cost_monitoring=enable_cost_monitoring,
             )
 
-            logger.info(
-                f"Extracting {total_deltas} delta entities " f"with {extract_optimization.upper()} optimization"
-            )
+            logger.info(f"Extracting {total_deltas} delta entities with {extract_optimization.upper()} optimization")
 
             entity_mapper = EntityMapper()
             extract_coordinator = ExtractModeCoordinator(
@@ -1024,7 +1020,7 @@ def migrate_start(
             )
 
             logger.info(
-                f"Starting extract pass for snapshot {snapshot_id} " f"with {extract_optimization.upper()} optimization"
+                f"Starting extract pass for snapshot {snapshot_id} with {extract_optimization.upper()} optimization"
             )
 
             entity_mapper = EntityMapper()
@@ -1398,7 +1394,7 @@ def migrate_all(
         rate_limiter = jobber_client.http_client.get_rate_limiter()
         logger.info(f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
-            f"   • Refill rate: {rate_limiter.get_refill_rate()}/min (~{rate_limiter.get_refill_rate()/60:.1f}/sec)"
+            f"   • Refill rate: {rate_limiter.get_refill_rate()}/min (~{rate_limiter.get_refill_rate() / 60:.1f}/sec)"
         )
 
         summary = migration_coordinator.migrate()
@@ -1512,12 +1508,10 @@ def migrate_all(
         logger.info("🔍 Final Token Status:")
         logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
-            f"   • Total requests: {rate_metrics['total_requests']} "
-            f"(avg: {rate_metrics['requests_per_minute']}/min)"
+            f"   • Total requests: {rate_metrics['total_requests']} (avg: {rate_metrics['requests_per_minute']}/min)"
         )
         logger.info(
-            f"   • Throttling rate: {rate_metrics['throttle_rate']} "
-            f"({rate_metrics['throttled_requests']} throttled)"
+            f"   • Throttling rate: {rate_metrics['throttle_rate']} ({rate_metrics['throttled_requests']} throttled)"
         )
         if float(rate_metrics["throttle_rate"].rstrip("%")) < 1.0:
             logger.info("   ✅ Jobber-optimized rate limiting working effectively!")

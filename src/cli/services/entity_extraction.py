@@ -42,7 +42,7 @@ def _execute_entity_extraction(
 
     try:
         # Create database connection and logger
-        logger = RichLogger(verbose=verbose)
+        logger = RichLogger(verbose=verbose, console=ServiceFactory.get_console())
         logger.info(f"Starting {entity_type} extraction to database: {db}")
 
         # Ensure parent directory exists
@@ -255,8 +255,7 @@ def _execute_entity_extraction(
         logger.info("🔍 Final Token Status:")
         logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
-            f"   • Throttling rate: {rate_metrics['throttle_rate']} "
-            f"({rate_metrics['throttled_requests']} throttled)"
+            f"   • Throttling rate: {rate_metrics['throttle_rate']} ({rate_metrics['throttled_requests']} throttled)"
         )
         if float(rate_metrics["throttle_rate"].rstrip("%")) < 1.0:
             logger.info("   ✅ Jobber-optimized rate limiting working effectively!")
@@ -306,7 +305,7 @@ def _execute_entity_extraction(
         exit_code = 0 if extraction_summary["error_count"] == 0 else 1
 
     except Exception as e:
-        logger = RichLogger(verbose=verbose)
+        logger = RichLogger(verbose=verbose, console=ServiceFactory.get_console())
         logger.error(f"Error during {entity_type} extraction: {e}")
         exit_code = 1
     finally:

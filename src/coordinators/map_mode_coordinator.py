@@ -4,11 +4,11 @@ import uuid
 from datetime import datetime, UTC
 from typing import Any, List, Optional
 
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
+from ..cli.services.shared import SharedServices
 from ..extractors.map_mode import (
     ClientsMapExtractor,
     ExpensesMapExtractor,
@@ -79,7 +79,7 @@ class MapModeCoordinator:
         self._jobber_client = jobber_client
         self._repository = repository
         self._logger = logger
-        self._console = Console()
+        self._console = SharedServices.get_console()
         self._config_manager = config_manager or ConfigManagerImpl()
         self._adaptive_optimizer: Optional[AdaptivePerformanceOptimizer] = None
         if enable_adaptive_optimization:
@@ -117,7 +117,7 @@ class MapModeCoordinator:
         Raises:
             ValueError: If invalid entity types are provided
         """
-        self._logger.info(f"Starting map mode extraction for entity types: {entity_types}")
+        # self._logger.info(f"Starting map mode extraction for entity types: {entity_types}")
         if self._adaptive_optimizer:
             self._logger.info("🤖 Adaptive optimization enabled for map pass (auto-tuning page size/delays)")
 
@@ -134,9 +134,6 @@ class MapModeCoordinator:
         entity_results = {}
         total_entities = 0
         mapped_counts: dict[TaskID, int] = {}
-
-        # Add a spacer line so subsequent progress output doesn't overlap prior logs
-        self._console.print()
 
         # Run extraction with Rich progress display
         with Progress(
@@ -159,7 +156,7 @@ class MapModeCoordinator:
                 # Run extractor
                 extractor = self._create_extractor(entity_type, snapshot.id, progress_cb=_increment)
                 # Add a blank line to keep log output from colliding with progress row
-                self._console.line()
+                # self._console.line()
                 result = extractor.extract()
 
                 # Update progress line for completed task
@@ -170,7 +167,7 @@ class MapModeCoordinator:
                     completed=result["total_entities"],
                     mapped=result["total_entities"],
                     description=f"Mapped {entity_type} (done)",
-                    visible=True,
+                    visible=False,
                 )
 
                 # Track results
@@ -186,8 +183,7 @@ class MapModeCoordinator:
         duration = (end_time - start_time).total_seconds()
 
         self._logger.success(
-            f"Map pass completed: {total_entities} total entities across "
-            f"{len(entity_types)} types in {duration:.1f}s"
+            f"Map pass completed: {total_entities} total entities across {len(entity_types)} types in {duration:.1f}s"
         )
 
         if self._adaptive_optimizer:

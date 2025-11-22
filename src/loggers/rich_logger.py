@@ -1,7 +1,6 @@
 """Rich-enhanced logger implementation with beautiful terminal formatting."""
 
-from typing import Any
-
+from typing import Any, Optional
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -17,14 +16,15 @@ class RichLogger(Logger):
     maintaining full compatibility with the Logger protocol.
     """
 
-    def __init__(self, verbose: bool = False) -> None:
+    def __init__(self, verbose: bool = False, console: Optional[Console] = None) -> None:
         """Initialize Rich logger.
 
         Args:
             verbose: Whether to enable debug message output
+            console: Optional Rich console instance to use
         """
         self.verbose = verbose
-        self.console = Console()
+        self.console = console or Console()
         self.error_console = Console(stderr=True)
 
     def info(self, message: str) -> None:

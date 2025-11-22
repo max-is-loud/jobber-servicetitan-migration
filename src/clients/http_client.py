@@ -23,8 +23,18 @@ class HttpClient:
     processing to ensure consistent behavior across all HTTP communications.
     """
 
-    # Request timeout configuration (connect, read) in seconds
-    TIMEOUT = (10, 30)
+    # Default request timeout configuration (connect, read) in seconds
+    DEFAULT_TIMEOUT = (10, 30)
+
+    def __init__(self, timeout: tuple[int, int] | tuple[float, float] | None = None) -> None:
+        """
+        Initialize HttpClient with optional custom timeout.
+
+        Args:
+            timeout: Optional tuple of (connect_timeout, read_timeout) in seconds.
+                    If None, uses DEFAULT_TIMEOUT (10, 30).
+        """
+        self.timeout = timeout or self.DEFAULT_TIMEOUT
 
     def post(
         self,
@@ -58,7 +68,7 @@ class HttpClient:
 
         try:
             # Make HTTP POST request with timeout
-            response = requests.post(url, headers=headers, json=json, data=data, timeout=self.TIMEOUT)
+            response = requests.post(url, headers=headers, json=json, data=data, timeout=self.timeout)
 
             # Handle HTTP status code errors
             if response.status_code == 401:
@@ -77,12 +87,12 @@ class HttpClient:
 
         except requests.exceptions.Timeout as e:
             raise JobberApiError(
-                f"Request timed out after {self.TIMEOUT} seconds. "
+                f"Request timed out after {self.timeout} seconds. "
                 "Please check your network connection or try again later."
             ) from e
         except requests.exceptions.ConnectionError as e:
             raise JobberApiError(
-                f"Failed to connect to {url}. " "Please check your network connection and API endpoint."
+                f"Failed to connect to {url}. Please check your network connection and API endpoint."
             ) from e
         except requests.exceptions.RequestException as e:
             raise JobberApiError(f"Network error occurred while contacting API: {e}") from e
