@@ -204,7 +204,7 @@ class EntityMapper:
         except Exception as e:
             raise MappingError(f"Failed to map Quote data: {e}") from e
 
-    def map_note(self, data: dict[str, Any]) -> Note:
+    def map_note(self, data: dict[str, Any], lenient: bool = False) -> Note:
         """
         Map GraphQL Note data to Note domain model.
 
@@ -214,18 +214,23 @@ class EntityMapper:
 
         Args:
             data: Raw GraphQL Note node data from polymorphic query
+            lenient: If True, use placeholder values for missing required fields
+                    instead of raising MappingError (useful for orphaned notes)
 
         Returns:
             Note: Typed Note dataclass instance
 
         Raises:
-            MappingError: If required fields are missing or invalid
+            MappingError: If required fields are missing or invalid (unless lenient=True)
         """
         try:
             # Extract required fields with validation
             note_id = data.get("id")
             if not note_id:
-                raise MappingError("Note ID is required but missing")
+                if lenient:
+                    note_id = "ORPHANED_NOTE_MISSING_ID"
+                else:
+                    raise MappingError("Note ID is required but missing")
 
             # Extract message
             message = data.get("message", "")
@@ -251,10 +256,17 @@ class EntityMapper:
                 entity_type = "invoice"
                 entity_id = data["invoice"].get("id", "")
             else:
-                raise MappingError("Note entity relationship is required but missing")
+                if lenient:
+                    entity_type = "ORPHANED"
+                    entity_id = "UNKNOWN"
+                else:
+                    raise MappingError("Note entity relationship is required but missing")
 
             if not entity_id:
-                raise MappingError(f"Note {entity_type} ID is required but missing")
+                if lenient:
+                    entity_id = "UNKNOWN"
+                else:
+                    raise MappingError(f"Note {entity_type} ID is required but missing")
 
             # Format ISO datetimes
             created_at = self._format_iso_datetime(data.get("createdAt"))
@@ -272,24 +284,30 @@ class EntityMapper:
         except Exception as e:
             raise MappingError(f"Failed to map Note data: {e}") from e
 
-    def map_attachment(self, data: dict[str, Any]) -> Attachment:
+    def map_attachment(self, data: dict[str, Any], lenient: bool = False, parent_entity_id: str = "") -> Attachment:
         """
         Map GraphQL Attachment data to Attachment domain model.
 
         Args:
             data: Raw GraphQL Attachment (noteFile) node data
+            lenient: If True, use placeholder values for missing required fields
+                    instead of raising MappingError (useful for orphaned attachments)
+            parent_entity_id: Parent entity ID (job/client/etc) for organizing orphaned attachments
 
         Returns:
             Attachment: Typed Attachment dataclass instance
 
         Raises:
-            MappingError: If required fields are missing or invalid
+            MappingError: If required fields are missing or invalid (unless lenient=True)
         """
         try:
             # Extract required fields with validation
             attachment_id = data.get("id")
             if not attachment_id:
-                raise MappingError("Attachment ID is required but missing")
+                if lenient:
+                    attachment_id = "ORPHANED_ATTACHMENT_MISSING_ID"
+                else:
+                    raise MappingError("Attachment ID is required but missing")
 
             # Extract note ID from note relationship
             note = data.get("note", {})
@@ -297,7 +315,11 @@ class EntityMapper:
             if isinstance(note, dict):
                 note_id = note.get("id", "")
             if not note_id:
-                raise MappingError("Attachment note ID is required but missing")
+                if lenient:
+                    # Use ORPHANED marker so files get organized in orphaned directory
+                    note_id = "ORPHANED"
+                else:
+                    raise MappingError("Attachment note ID is required but missing")
 
             # Extract file metadata
             file_name = data.get("fileName", "")
@@ -306,8 +328,12 @@ class EntityMapper:
             original_url = data.get("url", "")
 
             # Generate local file path following convention:
-            # ./attachments/{note_id}/{filename}
-            local_file_path = f"./attachments/{note_id}/{file_name}" if file_name else ""
+            # For orphaned: ./attachments/ORPHANED/{parent_entity_id}/{filename}
+            # For normal: ./attachments/{note_id}/{filename}
+            if note_id == "ORPHANED" and parent_entity_id:
+                local_file_path = f"./attachments/ORPHANED/{parent_entity_id}/{file_name}" if file_name else ""
+            else:
+                local_file_path = f"./attachments/{note_id}/{file_name}" if file_name else ""
 
             # Extract file size
             file_size = data.get("fileSize", 0)
@@ -364,17 +390,20 @@ class EntityMapper:
             # Extract job details
             job_number = data.get("jobNumber", "")
             title = data.get("title", "")
-            description = data.get("description", "")
-            status = data.get("status", "")
+            # API provides 'instructions' field, use it for description
+            description = data.get("instructions", "")
+            # API uses 'jobStatus' not 'status'
+            status = data.get("jobStatus", "")
 
             # Extract scheduling information
-            scheduled_start_at = MapperUtils.format_iso_datetime(data.get("scheduledStartAt"))
-            scheduled_end_at = MapperUtils.format_iso_datetime(data.get("scheduledEndAt"))
+            # API uses 'startAt' and 'endAt' not 'scheduledStartAt' and 'scheduledEndAt'
+            scheduled_start_at = MapperUtils.format_iso_datetime(data.get("startAt"))
+            scheduled_end_at = MapperUtils.format_iso_datetime(data.get("endAt"))
             completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
 
             # Extract and convert total amount to cents
-            amounts = data.get("amounts", {})
-            total_amount = MapperUtils.safe_get_nested(amounts, "total")
+            # API provides 'total' directly, not nested in 'amounts'
+            total_amount = data.get("total")
             total = MapperUtils.convert_to_cents(total_amount)
 
             # Format ISO datetimes
