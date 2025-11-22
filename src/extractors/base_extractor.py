@@ -266,18 +266,27 @@ class BaseExtractor(ABC, Generic[T]):
         Raises:
             JobberApiError: If API communication fails
         """
-        # Default implementation: fetch a page and filter by ID
-        # Subclasses should override with node(id:) interface if available
+        # Use the node(id:) interface for direct entity fetching
+        # This is much more efficient than pagination-based search
         try:
-            response = self._fetch_page(cursor=None)
-            edges, _ = self._extract_edges_and_page_info(response)
+            # Get nested notes limit from config
+            nested_notes_limit = 10
+            if self._config_manager:
+                try:
+                    nested_notes_limit = self._config_manager.get_pagination_config("nested_notes")
+                except:
+                    pass  # Use default if not configured
 
-            for edge in edges:
-                node = edge.get("node", {})
-                if node.get("id") == entity_id:
-                    return node
+            # Fetch entity using node interface
+            response = self._jobber_client.fetch_entity_by_id(
+                entity_id=entity_id,
+                nested_notes_limit=nested_notes_limit
+            )
 
-            return None
+            # Extract the node from the response
+            node = response.get("data", {}).get("node")
+            return node
+
         except Exception as e:
             self._logger.debug(f"Failed to fetch single entity {entity_id}: {e}")
             return None

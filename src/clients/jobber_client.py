@@ -716,6 +716,434 @@ class JobberClient:
     }
     """
 
+    # GraphQL query for fetching any entity by ID using node interface
+    # Used for single entity extraction in extract mode
+    ENTITY_BY_ID_QUERY = """
+    query GetEntityById($id: ID!) {
+      node(id: $id) {
+        ... on Client {
+          id
+          firstName
+          lastName
+          emails {
+            address
+          }
+          phones {
+            number
+          }
+          notes(first: 10) {
+            edges {
+              node {
+                ... on ClientNote {
+                  id
+                  message
+                  createdAt
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  id
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          createdAt
+          updatedAt
+        }
+        ... on Invoice {
+          id
+          client {
+            id
+          }
+          invoiceNumber
+          amounts {
+            total
+          }
+          invoiceStatus
+          issuedDate
+          notes(first: 10) {
+            edges {
+              node {
+                ... on InvoiceNote {
+                  id
+                  message
+                  createdAt
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  ... on InvoiceNote {
+                    id
+                  }
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        ... on Quote {
+          id
+          client {
+            id
+          }
+          quoteNumber
+          title
+          amounts {
+            total
+            subtotal
+          }
+          message
+          lineItems {
+            totalCount
+          }
+          notes(first: 10) {
+            edges {
+              node {
+                ... on QuoteNote {
+                  id
+                  message
+                  createdAt
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  ... on QuoteNote {
+                    id
+                  }
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          createdAt
+          transitionedAt
+          updatedAt
+        }
+        ... on Job {
+          id
+          client {
+            id
+          }
+          property {
+            id
+          }
+          quote {
+            id
+          }
+          jobNumber
+          title
+          description
+          status
+          scheduledStartAt
+          scheduledEndAt
+          completedAt
+          amounts {
+            total
+          }
+          notes(first: 10) {
+            edges {
+              node {
+                ... on JobNote {
+                  id
+                  message
+                  createdAt
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  ... on JobNote {
+                    id
+                  }
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          createdAt
+          updatedAt
+        }
+        ... on Property {
+          id
+          client {
+            id
+          }
+          name
+          address {
+            line1
+            line2
+            city
+            stateProvince
+            postalCode
+            country
+          }
+          coordinates {
+            latitude
+            longitude
+          }
+          createdAt
+          updatedAt
+        }
+        ... on Request {
+          id
+          client {
+            id
+          }
+          property {
+            id
+          }
+          title
+          description
+          status
+          priority
+          source
+          assignedTo
+          convertedToQuote {
+            id
+          }
+          convertedToJob {
+            id
+          }
+          notes(first: 10) {
+            edges {
+              node {
+                ... on RequestNote {
+                  id
+                  message
+                  createdAt
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  ... on RequestNote {
+                    id
+                  }
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          createdAt
+          updatedAt
+        }
+        ... on User {
+          id
+          name {
+            first
+            last
+          }
+          email {
+            email
+          }
+          isAccountAdmin
+          isAccountOwner
+          status
+          phone {
+            number
+          }
+          timezone {
+            identifier
+          }
+          createdAt
+          lastLoginAt
+        }
+        ... on Expense {
+          id
+          linkedJob {
+            id
+          }
+          title
+          description
+          total
+          date
+          enteredBy {
+            id
+          }
+          paidBy {
+            id
+          }
+          reimbursableTo {
+            id
+          }
+          createdAt
+          updatedAt
+        }
+        ... on Visit {
+          id
+          job {
+            id
+          }
+          client {
+            id
+          }
+          property {
+            id
+          }
+          assignedUsers {
+            edges {
+              node {
+                id
+              }
+            }
+          }
+          title
+          instructions
+          visitStatus
+          allDay
+          duration
+          startAt
+          endAt
+          completedAt
+          createdAt
+        }
+        ... on TimesheetEntry {
+          id
+          user {
+            id
+          }
+          job {
+            id
+          }
+          visit {
+            id
+          }
+          approvedBy {
+            id
+          }
+          paidBy {
+            id
+          }
+          label
+          note
+          labourRate
+          finalDuration
+          visitDurationTotal
+          approved
+          ticking
+          startAt
+          endAt
+          createdAt
+          updatedAt
+        }
+        ... on ProductOrService {
+          id
+          name
+          description
+          category {
+            name
+          }
+          defaultUnitCost
+          internalUnitCost
+          markup
+          durationMinutes
+          taxable
+          visible
+          onlineBookingEnabled
+          onlineBookingSortOrder
+        }
+        ... on TaxRate {
+          id
+          name
+          rate
+          region
+          compound
+          active
+          description
+          taxNumber
+          displayOrder
+          defaultForRegion
+          createdAt
+          updatedAt
+        }
+      }
+    }
+    """
+
     def __init__(
         self,
         auth_provider: AuthProvider,
@@ -739,9 +1167,23 @@ class JobberClient:
                           If not provided, a new instance will be created.
         """
         self.auth_provider = auth_provider
-        self.http_client = http_client or HttpClient()
+
         self.metrics_collector = metrics_collector
         self.config_manager = config_manager or ConfigManagerImpl()
+
+        # Configure HTTP client with timeout settings
+        if http_client:
+            self.http_client = http_client
+        else:
+            # Get timeout from config (default to 30s if not set)
+            try:
+                request_timeout = self.config_manager.get_delay_config("request_timeout")
+            except ConfigurationError:
+                request_timeout = 30.0
+
+            # Use default connect timeout (10s) and configured read timeout
+            timeout = (10, request_timeout)
+            self.http_client = HttpClient(timeout=timeout)
 
         # Track throttling events for performance optimization
         self._throttling_events = 0
@@ -910,7 +1352,7 @@ class JobberClient:
             except Exception as e:
                 # Catch any other unexpected authentication errors
                 raise ConfigurationError(
-                    f"Authentication failed: {e}. " "Please verify your authentication configuration."
+                    f"Authentication failed: {e}. Please verify your authentication configuration."
                 ) from e
 
             # Add required API version header - this is mandatory for all
@@ -1549,6 +1991,319 @@ class JobberClient:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(f"Unexpected error while fetching note {note_id}: {e}") from e
 
+    def _build_single_entity_query(self, entity_type: str, nested_notes_limit: int = 10) -> str:
+        """
+        Build a GraphQL query for fetching a single entity by ID.
+
+        Jobber's API uses entity-specific queries (client, invoice, job, etc.)
+        instead of a generic node interface.
+
+        Args:
+            entity_type: The entity type (e.g., "client", "invoice", "job")
+            nested_notes_limit: Number of nested notes to fetch
+
+        Returns:
+            GraphQL query string for fetching single entity
+        """
+        # Entity-specific query templates based on existing pagination queries
+        if entity_type == "client":
+            return f"""
+    query GetClient($id: EncodedId!) {{
+      client(id: $id) {{
+        id
+        firstName
+        lastName
+        emails {{
+          address
+        }}
+        phones {{
+          number
+        }}
+        notes(first: {nested_notes_limit}) {{
+          edges {{
+            node {{
+              ... on ClientNote {{
+                id
+                message
+                createdAt
+              }}
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          edges {{
+            node {{
+              id
+              note {{
+                id
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+        elif entity_type == "invoice":
+            return f"""
+    query GetInvoice($id: EncodedId!) {{
+      invoice(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        invoiceNumber
+        amounts {{
+          total
+        }}
+        invoiceStatus
+        issuedDate
+        notes(first: {nested_notes_limit}) {{
+          edges {{
+            node {{
+              ... on InvoiceNote {{
+                id
+                message
+                createdAt
+              }}
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          edges {{
+            node {{
+              id
+              note {{
+                ... on InvoiceNote {{
+                  id
+                }}
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+      }}
+    }}
+    """
+        elif entity_type == "quote":
+            return f"""
+    query GetQuote($id: EncodedId!) {{
+      quote(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        quoteNumber
+        title
+        amounts {{
+          total
+          subtotal
+        }}
+        message
+        lineItems {{
+          totalCount
+        }}
+        notes(first: {nested_notes_limit}) {{
+          edges {{
+            node {{
+              ... on QuoteNote {{
+                id
+                message
+                createdAt
+              }}
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          edges {{
+            node {{
+              id
+              note {{
+                ... on QuoteNote {{
+                  id
+                }}
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        createdAt
+        transitionedAt
+        updatedAt
+      }}
+    }}
+    """
+        elif entity_type == "job":
+            return f"""
+    query GetJob($id: EncodedId!) {{
+      job(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        property {{
+          id
+        }}
+        quote {{
+          id
+        }}
+        jobNumber
+        title
+        description
+        status
+        scheduledStartAt
+        scheduledEndAt
+        completedAt
+        amounts {{
+          total
+        }}
+        notes(first: {nested_notes_limit}) {{
+          edges {{
+            node {{
+              ... on JobNote {{
+                id
+                message
+                createdAt
+              }}
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          edges {{
+            node {{
+              id
+              note {{
+                ... on JobNote {{
+                  id
+                }}
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+        else:
+            # For other entity types, use a minimal query
+            # This can be expanded as needed for specific entity types
+            return f"""
+    query GetEntity($id: EncodedId!) {{
+      {entity_type}(id: $id) {{
+        id
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+
+    def fetch_entity_by_id(self, entity_id: str, nested_notes_limit: int = 10) -> dict[str, Any]:
+        """
+        Fetch any entity by ID from Jobber GraphQL API using entity-specific queries.
+
+        Jobber's API doesn't support the generic node(id:) interface. Instead,
+        it uses entity-specific queries like client(id:), invoice(id:), etc.
+        This method decodes the base64 ID to determine the entity type and
+        uses the appropriate query.
+
+        Args:
+            entity_id: The base64-encoded unique identifier (e.g., "Z2lkOi8vSm9iYmVyL0NsaWVudC80...")
+            nested_notes_limit: Number of nested notes to fetch (default: 10)
+
+        Returns:
+            Dictionary containing GraphQL response with entity data
+
+        Raises:
+            JobberApiError: If API communication fails or entity not found
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            import base64
+
+            # Decode the base64 ID to extract entity type
+            # Format: gid://Jobber/Client/12345
+            decoded_id = base64.b64decode(entity_id).decode('utf-8')
+            entity_type = decoded_id.split('/')[3]  # Extract "Client" from gid://Jobber/Client/12345
+
+            # Map entity type to query field name (lowercase)
+            query_field = entity_type[0].lower() + entity_type[1:]  # Client -> client
+
+            # Build entity-specific query based on type
+            query = self._build_single_entity_query(query_field, nested_notes_limit)
+
+            # Execute GraphQL request
+            response_data = self._execute_graphql_request(query=query, variables={"id": entity_id})
+
+            # Extract entity data from response
+            entity_data = response_data.get("data", {}).get(query_field)
+            if entity_data is None:
+                raise JobberApiError(f"Entity with ID '{entity_id}' not found")
+
+            # Wrap in same structure as pagination queries for consistency
+            # This allows extractors to process single entities the same way as batch entities
+            response_data["data"]["node"] = entity_data
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching entity {entity_id}: {e}") from e
+
     # ========================================================================
     # Map Mode Query Variants - Lightweight queries for discovery pass
     # ========================================================================
@@ -1582,9 +2337,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_invoices_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for invoices map mode."""
@@ -1611,9 +2364,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_quotes_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for quotes map mode."""
@@ -1643,9 +2394,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_jobs_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for jobs map mode."""
@@ -1672,9 +2421,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_properties_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for properties map mode."""
@@ -1694,9 +2441,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_requests_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for requests map mode."""
@@ -1723,9 +2468,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_users_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for users map mode."""
@@ -1746,9 +2489,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_expenses_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for expenses map mode."""
@@ -1769,9 +2510,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_visits_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for visits map mode."""
@@ -1792,9 +2531,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_timesheet_entries_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for timesheet entries map mode."""
@@ -1815,9 +2552,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_products_services_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for products/services map mode."""
@@ -1837,9 +2572,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def _get_tax_rates_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for tax rates map mode."""
@@ -1859,9 +2592,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(
-            size=size
-        )
+    """.format(size=size)
 
     def fetch_clients_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
         """Fetch clients with minimal fields for map mode (discovery pass)."""

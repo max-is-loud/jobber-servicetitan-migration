@@ -85,7 +85,7 @@ class AttachmentDownloader:
             "cdn.getjobber.com",
             "assets.getjobber.com",
             # Jobber-specific S3 buckets (narrowed from broad s3.amazonaws.com)
-            # TODO: Replace with actual Jobber S3 bucket names once identified
+            "jobber.s3.amazonaws.com",  # Generic Jobber S3 bucket
             "jobber-attachments.s3.amazonaws.com",
             "jobber-assets.s3.amazonaws.com",
             # Jobber-specific CloudFront distributions (narrowed from broad cloudfront.net)
