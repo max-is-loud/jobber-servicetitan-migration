@@ -528,6 +528,10 @@ class BaseMigrationCoordinator:
             summary.download_failures += metrics["download_failures"]
             summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
 
+            # Collect data quality issues
+            dq_issues = self._clients_extractor.get_data_quality_issues()
+            summary.data_quality_issues.extend(dq_issues["issues"])
+
             return result["entities_processed"]
 
         except (JobberApiError, MappingError, RepositoryError) as e:
@@ -600,6 +604,10 @@ class BaseMigrationCoordinator:
             summary.total_bytes_downloaded += metrics["bytes_downloaded"]
             summary.download_failures += metrics["download_failures"]
             summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
+
+            # Collect data quality issues
+            dq_issues = self._invoices_extractor.get_data_quality_issues()
+            summary.data_quality_issues.extend(dq_issues["issues"])
 
             return result["entities_processed"]
 
@@ -725,6 +733,10 @@ class BaseMigrationCoordinator:
             summary.total_bytes_downloaded += metrics["bytes_downloaded"]
             summary.download_failures += metrics["download_failures"]
             summary.attachment_mapping_failures += metrics["attachment_mapping_failures"]
+
+            # Collect data quality issues
+            dq_issues = self._quotes_extractor.get_data_quality_issues()
+            summary.data_quality_issues.extend(dq_issues["issues"])
 
             self._logger.info(f"Quote migration completed: {result['entities_processed']} quotes processed")
             return result["entities_processed"]
