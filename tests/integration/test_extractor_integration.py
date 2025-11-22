@@ -466,11 +466,12 @@ class TestExtractorIntegration:
         """Test error handling when notes pagination has issues.
 
         Validates:
-        - Extraction continues even if notes have pagination issues
-        - Warning is logged when notes are truncated
+        - With auto-pagination, additional notes are fetched when hasNextPage=True
+        - If pagination fails, extraction continues with partial notes
+        - Warning is logged when auto-pagination fails
         - Primary entity extraction succeeds
         """
-        # Mock response with truncated notes (hasNextPage=True)
+        # Mock initial response with hasNextPage=True and endCursor
         mock_jobber_client.fetch_clients.return_value = {
             "data": {
                 "clients": {
@@ -485,11 +486,15 @@ class TestExtractorIntegration:
                                 "phone": "555-0100",
                                 "createdAt": "2023-11-15T10:00:00Z",
                                 "notes": {
+                                    "totalCount": 4,
                                     "edges": [
-                                        {"node": {"id": "note_1", "body": "Note 1"}},
-                                        {"node": {"id": "note_2", "body": "Note 2"}},
+                                        {"node": {"id": "note_1", "body": "Note 1", "createdAt": "2023-11-15T10:00:00Z"}},
+                                        {"node": {"id": "note_2", "body": "Note 2", "createdAt": "2023-11-15T10:00:00Z"}},
                                     ],
-                                    "pageInfo": {"hasNextPage": True},  # More notes exist!
+                                    "pageInfo": {
+                                        "hasNextPage": True,
+                                        "endCursor": "cursor_note_2",
+                                    },
                                 },
                             },
                         }
@@ -498,6 +503,9 @@ class TestExtractorIntegration:
                 }
             }
         }
+
+        # Mock fetch_additional_notes to raise an error (simulating pagination failure)
+        mock_jobber_client.fetch_additional_notes.side_effect = Exception("Pagination API error")
 
         # Create extractor
         extractor = ClientsExtractor(
@@ -511,14 +519,27 @@ class TestExtractorIntegration:
         # Execute extraction
         result = extractor.extract()
 
-        # Verify extraction succeeded despite note truncation
+        # Verify extraction succeeded despite note pagination failure
         assert result["entities_processed"] == 1, "Should process client successfully"
 
-        # Verify warning was logged about truncated notes
-        assert mock_logger.warning.called, "Should warn about truncated notes"
+        # Verify fetch_additional_notes was called (auto-pagination attempted)
+        mock_jobber_client.fetch_additional_notes.assert_called_once_with(
+            entity_id="client_1",
+            entity_type="client",
+            cursor="cursor_note_2",
+            page_size=100,
+        )
+
+        # Verify warning was logged about pagination failure
+        assert mock_logger.warning.called, "Should warn about pagination failure"
+        warning_message = str(mock_logger.warning.call_args)
+        assert "Error fetching additional notes" in warning_message
 
         # Verify client was still saved
         mock_repository.save_clients.assert_called_once()
+
+        # Verify initial notes were still saved (partial success)
+        mock_repository.save_notes.assert_called()
 
     def test_error_handling_mapping_error_in_nested_notes(
         self,
@@ -670,6 +691,355 @@ class TestReportGenerationIntegration:
             warning_calls = [call for call in mock_logger.warning.call_args_list if "report" in str(call).lower()]
             # May or may not have warnings depending on when the error occurs
             # The key is that the migration didn't raise an exception
+
+
+class TestAutoPagination:
+    """Tests for auto-pagination of notes and attachments."""
+
+    def test_auto_pagination_fetches_all_notes(
+        self, mock_jobber_client, mock_entity_mapper, mock_repository, mock_config_manager, mock_logger
+    ):
+        """Test that extractor automatically fetches all notes when hasNextPage is True."""
+        # Initial page with hasNextPage=True
+        mock_jobber_client.fetch_clients.return_value = {
+            "data": {
+                "clients": {
+                    "totalCount": 1,
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "client_1",
+                                "firstName": "John",
+                                "lastName": "Doe",
+                                "notes": {
+                                    "totalCount": 25,  # More than initial fetch limit
+                                    "edges": [
+                                        {"node": {"id": "note_1", "message": "First note", "createdAt": "2023-01-01"}}
+                                    ],
+                                    "pageInfo": {
+                                        "hasNextPage": True,
+                                        "endCursor": "cursor_page_2"
+                                    }
+                                },
+                                "noteAttachments": {
+                                    "totalCount": 0,
+                                    "edges": [],
+                                    "pageInfo": {"hasNextPage": False}
+                                }
+                            }
+                        }
+                    ],
+                    "pageInfo": {"hasNextPage": False}
+                }
+            }
+        }
+
+        # Additional notes pages
+        mock_jobber_client.fetch_additional_notes.side_effect = [
+            # Page 2
+            {
+                "totalCount": 25,
+                "edges": [
+                    {"node": {"id": "note_2", "message": "Second note", "createdAt": "2023-01-02"}},
+                    {"node": {"id": "note_3", "message": "Third note", "createdAt": "2023-01-03"}}
+                ],
+                "pageInfo": {
+                    "hasNextPage": True,
+                    "endCursor": "cursor_page_3"
+                }
+            },
+            # Page 3 (final)
+            {
+                "totalCount": 25,
+                "edges": [
+                    {"node": {"id": "note_4", "message": "Fourth note", "createdAt": "2023-01-04"}}
+                ],
+                "pageInfo": {
+                    "hasNextPage": False,
+                    "endCursor": None
+                }
+            }
+        ]
+
+        # Setup mapper to return mock entities
+        mock_client = Mock(spec=Client, id="client_1")
+        mock_entity_mapper.map_client.return_value = mock_client
+        mock_entity_mapper.map_note.side_effect = [
+            Mock(spec=Note, id="note_1"),
+            Mock(spec=Note, id="note_2"),
+            Mock(spec=Note, id="note_3"),
+            Mock(spec=Note, id="note_4"),
+        ]
+
+        # Create extractor and run extraction
+        extractor = ClientsExtractor(
+            jobber_client=mock_jobber_client,
+            repository=mock_repository,
+            entity_mapper=mock_entity_mapper,
+            logger=mock_logger,
+            config_manager=mock_config_manager,
+        )
+
+        extractor.extract()
+
+        # Verify fetch_additional_notes was called twice (for pages 2 and 3)
+        assert mock_jobber_client.fetch_additional_notes.call_count == 2
+
+        # Verify it was called with correct parameters
+        first_call = mock_jobber_client.fetch_additional_notes.call_args_list[0]
+        assert first_call[1]["entity_id"] == "client_1"
+        assert first_call[1]["entity_type"] == "client"
+        assert first_call[1]["cursor"] == "cursor_page_2"
+
+        second_call = mock_jobber_client.fetch_additional_notes.call_args_list[1]
+        assert second_call[1]["cursor"] == "cursor_page_3"
+
+        # Verify all 4 notes were mapped
+        assert mock_entity_mapper.map_note.call_count == 4
+
+        # Verify all notes were saved
+        assert mock_repository.save_notes.called
+
+    def test_auto_pagination_fetches_all_attachments(
+        self, mock_jobber_client, mock_entity_mapper, mock_repository, mock_config_manager, mock_logger
+    ):
+        """Test that extractor automatically fetches all attachments when hasNextPage is True."""
+        # Initial page with hasNextPage=True
+        mock_jobber_client.fetch_invoices.return_value = {
+            "data": {
+                "invoices": {
+                    "totalCount": 1,
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "invoice_1",
+                                "invoiceNumber": "INV-001",
+                                "notes": {
+                                    "totalCount": 0,
+                                    "edges": [],
+                                    "pageInfo": {"hasNextPage": False}
+                                },
+                                "noteAttachments": {
+                                    "totalCount": 15,  # More than initial fetch limit
+                                    "edges": [
+                                        {"node": {"id": "att_1", "fileName": "file1.pdf", "url": "https://example.com/1"}}
+                                    ],
+                                    "pageInfo": {
+                                        "hasNextPage": True,
+                                        "endCursor": "att_cursor_2"
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "pageInfo": {"hasNextPage": False}
+                }
+            }
+        }
+
+        # Additional attachments page (final)
+        mock_jobber_client.fetch_additional_attachments.return_value = {
+            "totalCount": 15,
+            "edges": [
+                {"node": {"id": "att_2", "fileName": "file2.pdf", "url": "https://example.com/2"}},
+                {"node": {"id": "att_3", "fileName": "file3.pdf", "url": "https://example.com/3"}}
+            ],
+            "pageInfo": {
+                "hasNextPage": False,
+                "endCursor": None
+            }
+        }
+
+        # Setup mapper
+        mock_invoice = Mock(spec=Invoice, id="invoice_1")
+        mock_entity_mapper.map_invoice.return_value = mock_invoice
+
+        # Create mock attachments with required attributes
+        mock_att_1 = Mock(
+            spec=Attachment,
+            id="att_1",
+            file_name="file1.pdf",
+            original_url="https://example.com/1",
+            local_path=None,
+            file_size=1024,
+            content_type="application/pdf"
+        )
+        mock_att_2 = Mock(
+            spec=Attachment,
+            id="att_2",
+            file_name="file2.pdf",
+            original_url="https://example.com/2",
+            local_path=None,
+            file_size=2048,
+            content_type="application/pdf"
+        )
+        mock_att_3 = Mock(
+            spec=Attachment,
+            id="att_3",
+            file_name="file3.pdf",
+            original_url="https://example.com/3",
+            local_path=None,
+            file_size=3072,
+            content_type="application/pdf"
+        )
+
+        mock_entity_mapper.map_attachment.side_effect = [mock_att_1, mock_att_2, mock_att_3]
+
+        # Disable auto-download in config to test only pagination
+        mock_config_manager.get_auto_download.return_value = False
+
+        # Create extractor
+        extractor = InvoicesExtractor(
+            jobber_client=mock_jobber_client,
+            repository=mock_repository,
+            entity_mapper=mock_entity_mapper,
+            logger=mock_logger,
+            config_manager=mock_config_manager,
+        )
+
+        extractor.extract()
+
+        # Verify fetch_additional_attachments was called
+        assert mock_jobber_client.fetch_additional_attachments.call_count == 1
+
+        # Verify correct parameters
+        call_args = mock_jobber_client.fetch_additional_attachments.call_args[1]
+        assert call_args["entity_id"] == "invoice_1"
+        assert call_args["entity_type"] == "invoice"
+        assert call_args["cursor"] == "att_cursor_2"
+
+        # Verify all 3 attachments were mapped
+        assert mock_entity_mapper.map_attachment.call_count == 3
+
+    def test_auto_pagination_handles_errors_gracefully(
+        self, mock_jobber_client, mock_entity_mapper, mock_repository, mock_config_manager, mock_logger
+    ):
+        """Test that pagination errors don't break the extraction."""
+        # Initial page with hasNextPage=True
+        mock_jobber_client.fetch_clients.return_value = {
+            "data": {
+                "clients": {
+                    "totalCount": 1,
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "client_1",
+                                "firstName": "John",
+                                "lastName": "Doe",
+                                "notes": {
+                                    "totalCount": 20,
+                                    "edges": [
+                                        {"node": {"id": "note_1", "message": "First note", "createdAt": "2023-01-01"}}
+                                    ],
+                                    "pageInfo": {
+                                        "hasNextPage": True,
+                                        "endCursor": "cursor_page_2"
+                                    }
+                                },
+                                "noteAttachments": {
+                                    "totalCount": 0,
+                                    "edges": [],
+                                    "pageInfo": {"hasNextPage": False}
+                                }
+                            }
+                        }
+                    ],
+                    "pageInfo": {"hasNextPage": False}
+                }
+            }
+        }
+
+        # Mock fetch_additional_notes to raise an error
+        mock_jobber_client.fetch_additional_notes.side_effect = Exception("API error during pagination")
+
+        # Setup mapper
+        mock_client = Mock(spec=Client, id="client_1")
+        mock_entity_mapper.map_client.return_value = mock_client
+        mock_entity_mapper.map_note.return_value = Mock(spec=Note, id="note_1")
+
+        # Create extractor
+        extractor = ClientsExtractor(
+            jobber_client=mock_jobber_client,
+            repository=mock_repository,
+            entity_mapper=mock_entity_mapper,
+            logger=mock_logger,
+            config_manager=mock_config_manager,
+        )
+
+        # Should complete without raising exception
+        extractor.extract()
+
+        # Verify warning was logged about the error
+        warning_calls = [str(call) for call in mock_logger.warning.call_args_list]
+        assert any("Error fetching additional notes" in call for call in warning_calls)
+
+        # Verify client was still saved despite pagination error
+        assert mock_repository.save_clients.called
+
+    def test_no_pagination_when_hasNextPage_false(
+        self, mock_jobber_client, mock_entity_mapper, mock_repository, mock_config_manager, mock_logger
+    ):
+        """Test that no additional requests are made when hasNextPage is False."""
+        # Page with hasNextPage=False
+        mock_jobber_client.fetch_clients.return_value = {
+            "data": {
+                "clients": {
+                    "totalCount": 1,
+                    "edges": [
+                        {
+                            "node": {
+                                "id": "client_1",
+                                "firstName": "John",
+                                "lastName": "Doe",
+                                "notes": {
+                                    "totalCount": 2,
+                                    "edges": [
+                                        {"node": {"id": "note_1", "message": "First note", "createdAt": "2023-01-01"}},
+                                        {"node": {"id": "note_2", "message": "Second note", "createdAt": "2023-01-02"}}
+                                    ],
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None
+                                    }
+                                },
+                                "noteAttachments": {
+                                    "totalCount": 0,
+                                    "edges": [],
+                                    "pageInfo": {"hasNextPage": False}
+                                }
+                            }
+                        }
+                    ],
+                    "pageInfo": {"hasNextPage": False}
+                }
+            }
+        }
+
+        # Setup mapper
+        mock_client = Mock(spec=Client, id="client_1")
+        mock_entity_mapper.map_client.return_value = mock_client
+        mock_entity_mapper.map_note.side_effect = [
+            Mock(spec=Note, id="note_1"),
+            Mock(spec=Note, id="note_2"),
+        ]
+
+        # Create extractor
+        extractor = ClientsExtractor(
+            jobber_client=mock_jobber_client,
+            repository=mock_repository,
+            entity_mapper=mock_entity_mapper,
+            logger=mock_logger,
+            config_manager=mock_config_manager,
+        )
+
+        extractor.extract()
+
+        # Verify fetch_additional_notes was NOT called (since no need for auto-pagination, fetch_additional_notes may not exist as an attribute)
+        if hasattr(mock_jobber_client, 'fetch_additional_notes'):
+            assert not mock_jobber_client.fetch_additional_notes.called
+
+        # Verify only 2 notes were mapped (from first page)
+        assert mock_entity_mapper.map_note.call_count == 2
 
 
 if __name__ == "__main__":
