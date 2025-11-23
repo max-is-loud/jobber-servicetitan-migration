@@ -2356,19 +2356,13 @@ class JobberClient:
         }}
         name
         address {{
-          line1
-          line2
+          street1
+          street2
           city
-          stateProvince
+          province
           postalCode
           country
         }}
-        coordinates {{
-          latitude
-          longitude
-        }}
-        createdAt
-        updatedAt
       }}
     }}
     """
