@@ -2302,9 +2302,8 @@ class Repository:
                 new_tokens = refresh_callback(old_refresh_token)
 
                 # Calculate new expiration
-                expires_in = new_tokens.get("expires_in")
-                if expires_in is None:
-                    raise RepositoryError("Missing 'expires_in' in token response")
+                # Handle missing expires_in field (Jobber API doesn't always include it)
+                expires_in = new_tokens.get("expires_in", 3600)  # Default to 1 hour
 
                 from datetime import datetime, timezone, timedelta
 
