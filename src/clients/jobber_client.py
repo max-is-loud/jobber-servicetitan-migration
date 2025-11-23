@@ -643,22 +643,20 @@ class JobberClient:
     # GraphQL query for fetching products or services with cursor pagination
     PRODUCTS_SERVICES_QUERY = """
     query GetProductsServices($cursor: String) {
-      productsAndServices(first: 100, after: $cursor) {
+      productOrServices(first: 100, after: $cursor) {
         edges {
           node {
             id
             name
             description
-            category {
-              name
-            }
+            category
             defaultUnitCost
             internalUnitCost
             markup
             durationMinutes
             taxable
             visible
-            onlineBookingEnabled
+            onlineBookingsEnabled
             onlineBookingSortOrder
           }
         }
@@ -1144,16 +1142,14 @@ class JobberClient:
           id
           name
           description
-          category {
-            name
-          }
+          category
           defaultUnitCost
           internalUnitCost
           markup
           durationMinutes
           taxable
           visible
-          onlineBookingEnabled
+          onlineBookingsEnabled
           onlineBookingSortOrder
         }
         ... on TaxRate {
@@ -1964,9 +1960,9 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.PRODUCTS_SERVICES_QUERY, cursor)
 
             # Validate that products and services data exists in response
-            if response_data.get("data") is not None and "productsAndServices" not in response_data["data"]:
+            if response_data.get("data") is not None and "productOrServices" not in response_data["data"]:
                 raise JobberApiError(
-                    "Invalid response structure: missing 'productsAndServices' field in data"  # noqa: E501
+                    "Invalid response structure: missing 'productOrServices' field in data"  # noqa: E501
                 )
 
             return response_data
@@ -2338,16 +2334,14 @@ class JobberClient:
         id
         name
         description
-        category {{
-          name
-        }}
+        category
         defaultUnitCost
         internalUnitCost
         markup
         durationMinutes
         taxable
         visible
-        onlineBookingEnabled
+        onlineBookingsEnabled
         onlineBookingSortOrder
       }}
     }}
@@ -2405,6 +2399,7 @@ class JobberClient:
 
             # Extract entity data from response
             entity_data = response_data.get("data", {}).get(query_field)
+
             if entity_data is None:
                 raise JobberApiError(f"Entity with ID '{entity_id}' not found")
 
