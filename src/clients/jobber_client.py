@@ -2346,6 +2346,32 @@ class JobberClient:
       }}
     }}
     """
+        elif entity_type == "property":
+            return f"""
+    query GetProperty($id: EncodedId!) {{
+      property(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        name
+        address {{
+          line1
+          line2
+          city
+          stateProvince
+          postalCode
+          country
+        }}
+        coordinates {{
+          latitude
+          longitude
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
         else:
             # For other entity types, use a minimal query
             # This can be expanded as needed for specific entity types
