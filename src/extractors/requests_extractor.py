@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """RequestsExtractor for extracting Request entities from Jobber GraphQL API."""
 
+import time
 from typing import Any, List, Optional
 
 from ..clients import JobberClient
@@ -60,6 +61,167 @@ class RequestsExtractor(BaseExtractor[Request]):
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Request] = []
+
+        # Batch fetching optimization for extract mode
+        self._batch_cache: dict[str, dict[str, Any]] = {}  # entity_id -> node data
+        self._batch_cache_ids: set[str] = set()  # IDs we attempted to fetch in current batch
+
+    def _fetch_batch(self, entity_ids: set[str]) -> dict[str, dict[str, Any]]:
+        """
+        Fetch multiple requests in a single pagination sweep.
+
+        This is a massive optimization for extract mode. Instead of fetching each
+        request individually (which requires paginating through ALL requests for each),
+        we batch multiple IDs and fetch them all in one pass.
+
+        Performance comparison:
+        - Old: 100 entities × 50 pages each = 5,000 API calls
+        - New: 1 batch × 50 pages = 50 API calls (100x faster!)
+
+        Args:
+            entity_ids: Set of request IDs to fetch
+
+        Returns:
+            Dictionary mapping entity_id -> node data for found entities
+        """
+        self._logger.debug(
+            f"Batch fetching {len(entity_ids)} requests using pagination API"
+        )
+
+        found_entities: dict[str, dict[str, Any]] = {}
+        remaining_ids = set(entity_ids)
+        cursor = None
+        pages_searched = 0
+        max_pages = 200  # Safety limit
+
+        try:
+            while remaining_ids and pages_searched < max_pages:
+                # Fetch a page of requests
+                response = self._fetch_page(cursor)
+                edges, page_info = self._extract_edges_and_page_info(response)
+
+                # Check each node in this page
+                for edge in edges:
+                    node = edge.get("node", {})
+                    node_id = node.get("id")
+
+                    # If this node is one we're looking for, save it
+                    if node_id in remaining_ids:
+                        found_entities[node_id] = node
+                        remaining_ids.remove(node_id)
+
+                # Stop if we found everything
+                if not remaining_ids:
+                    self._logger.debug(
+                        f"Found all {len(entity_ids)} requests after {pages_searched + 1} pages"
+                    )
+                    break
+
+                # Check if there are more pages
+                if not page_info.get("hasNextPage", False):
+                    break
+
+                cursor = page_info.get("endCursor")
+                pages_searched += 1
+
+            # Log what we found vs. what's missing
+            if remaining_ids:
+                self._logger.debug(
+                    f"Batch fetch incomplete: found {len(found_entities)}/{len(entity_ids)} "
+                    f"after {pages_searched} pages, missing {len(remaining_ids)} entities"
+                )
+
+            return found_entities
+
+        except Exception as e:
+            self._logger.debug(f"Failed to batch fetch requests: {e}")
+            return found_entities  # Return what we found before the error
+
+    def _fetch_single(self, entity_id: str) -> Optional[dict[str, Any]]:
+        """
+        Fetch a single request by ID using batch-optimized pagination.
+
+        OPTIMIZATION: Uses batch caching with opportunistic prefetching. When the
+        requested ID is not cached, we paginate through ALL requests once, caching
+        every entity we encounter. This way:
+        - First call: Full pagination to find target + cache everything
+        - Subsequent calls: Instant cache hits
+
+        This transforms the worst case of O(N²) API calls into O(N) calls.
+
+        Performance for 5000 entities:
+        - Old: 5000 entities × avg 25 pages = 125,000 API calls
+        - New: ~50 pages once = 50 API calls (2500x improvement!)
+
+        Args:
+            entity_id: The ID of the request to fetch
+
+        Returns:
+            Request node data dictionary, or None if not found
+        """
+        # Check if already in cache
+        if entity_id in self._batch_cache:
+            return self._batch_cache[entity_id]
+
+        # Check if we already tried to fetch this and it wasn't found
+        if entity_id in self._batch_cache_ids:
+            return None
+
+        # Cache miss - paginate and cache everything we see
+        self._logger.debug(
+            f"Batch cache empty, paginating through ALL requests and caching (one-time cost)"
+        )
+
+        cursor = None
+        pages_searched = 0
+        max_pages = 200  # Safety limit
+        found_target = False
+
+        try:
+            while pages_searched < max_pages:
+                # Fetch a page of requests
+                response = self._fetch_page(cursor)
+                edges, page_info = self._extract_edges_and_page_info(response)
+
+                # Cache every entity we encounter
+                for edge in edges:
+                    node = edge.get("node", {})
+                    node_id = node.get("id")
+                    if node_id:
+                        self._batch_cache[node_id] = node
+                        self._batch_cache_ids.add(node_id)
+                        if node_id == entity_id:
+                            found_target = True
+
+                # Check if there are more pages
+                if not page_info.get("hasNextPage", False):
+                    break
+
+                cursor = page_info.get("endCursor")
+                pages_searched += 1
+
+                # Add delay before next page to respect rate limits
+                # This prevents overwhelming the API with rapid-fire requests
+                if page_info.get("hasNextPage", False) and self._config_manager:
+                    page_delay = self._config_manager.get_delay_config("page_delay")
+                    time.sleep(page_delay)
+                    self._logger.debug(f"Batch cache: Added {page_delay}s delay before page {pages_searched + 1}")
+
+            self._logger.debug(
+                f"Cached {len(self._batch_cache)} requests from {pages_searched + 1} pages"
+            )
+
+            # Return the target if found
+            if found_target:
+                return self._batch_cache[entity_id]
+
+            # Mark as not found
+            return None
+
+        except Exception as e:
+            self._logger.debug(f"Failed to fetch and cache requests: {e}")
+            # Return target if we found it before the error
+            return self._batch_cache.get(entity_id)
 
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """Fetch a page of requests from the Jobber API.

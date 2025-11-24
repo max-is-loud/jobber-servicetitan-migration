@@ -1,5 +1,6 @@
 """TaxRatesExtractor for extracting TaxRate entities from Jobber GraphQL API."""
 
+import time
 from typing import Any, List, Optional
 
 from ..clients import JobberClient
@@ -58,6 +59,87 @@ class TaxRatesExtractor(BaseExtractor[TaxRate]):
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[TaxRate] = []
+
+        # Batch fetching optimization for extract mode
+        self._batch_cache: dict[str, dict[str, Any]] = {}  # entity_id -> node data
+        self._batch_cache_ids: set[str] = set()  # IDs we attempted to fetch in current batch
+
+    def _fetch_single(self, entity_id: str) -> Optional[dict[str, Any]]:
+        """
+        Fetch a single tax rate by ID using batch-optimized pagination.
+
+        Jobber's API doesn't support single-entity queries for tax rates.
+        This method uses pagination to search for the specific ID, caching
+        all entities encountered for subsequent lookups.
+
+        Args:
+            entity_id: The ID of the tax rate to fetch
+
+        Returns:
+            Tax rate node data dictionary, or None if not found
+        """
+        # Check if already in cache
+        if entity_id in self._batch_cache:
+            return self._batch_cache[entity_id]
+
+        # Check if we already tried to fetch this and it wasn't found
+        if entity_id in self._batch_cache_ids:
+            return None
+
+        # Cache miss - paginate and cache everything we see
+        self._logger.debug(
+            f"Batch cache empty, paginating through ALL tax rates and caching (one-time cost)"
+        )
+
+        cursor = None
+        pages_searched = 0
+        max_pages = 200  # Safety limit
+        found_target = False
+
+        try:
+            while pages_searched < max_pages:
+                # Fetch a page of tax rates
+                response = self._fetch_page(cursor)
+                edges, page_info = self._extract_edges_and_page_info(response)
+
+                # Cache every entity we encounter
+                for edge in edges:
+                    node = edge.get("node", {})
+                    node_id = node.get("id")
+                    if node_id:
+                        self._batch_cache[node_id] = node
+                        self._batch_cache_ids.add(node_id)
+                        if node_id == entity_id:
+                            found_target = True
+
+                # Check if there are more pages
+                if not page_info.get("hasNextPage", False):
+                    break
+
+                cursor = page_info.get("endCursor")
+                pages_searched += 1
+
+                # Add delay before next page to respect rate limits
+                if page_info.get("hasNextPage", False) and self._config_manager:
+                    page_delay = self._config_manager.get_delay_config("page_delay")
+                    time.sleep(page_delay)
+                    self._logger.debug(f"Batch cache: Added {page_delay}s delay before page {pages_searched + 1}")
+
+            self._logger.debug(
+                f"Cached {len(self._batch_cache)} tax rates from {pages_searched + 1} pages"
+            )
+
+            # Return the target if found
+            if found_target:
+                return self._batch_cache[entity_id]
+
+            # Mark as not found
+            return None
+
+        except Exception as e:
+            self._logger.debug(f"Failed to fetch and cache tax rates: {e}")
+            # Return target if we found it before the error
+            return self._batch_cache.get(entity_id)
 
     def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """Fetch a page of tax rates from the Jobber API.

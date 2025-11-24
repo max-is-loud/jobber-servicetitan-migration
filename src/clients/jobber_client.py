@@ -408,7 +408,17 @@ class JobberClient:
     """
 
     def _get_requests_query(self) -> str:
-        """Get GraphQL query for fetching requests with configurable pagination and optimized nested notes."""
+        """
+        Get GraphQL query for fetching requests with configurable pagination and optimized nested notes.
+
+        Based on Jobber API schema: https://developer.getjobber.com/docs/
+        Request type includes: id, client, property, title, source, requestStatus,
+        companyName, contactName, email, phone, notes, noteAttachments, jobs, quotes,
+        assessment, referringClient, jobberWebUri, createdAt, updatedAt
+
+        Fields NOT in schema: description, status (use requestStatus), priority,
+        assignedTo, convertedToQuote (use quotes connection), convertedToJob (use jobs connection)
+        """
         page_size = self._get_pagination_size("requests")
         nested_notes_limit = self._get_pagination_size("nested_notes")
         return f"""
@@ -424,17 +434,12 @@ class JobberClient:
               id
             }}
             title
-            description
-            status
-            priority
             source
-            assignedTo
-            convertedToQuote {{
-              id
-            }}
-            convertedToJob {{
-              id
-            }}
+            requestStatus
+            companyName
+            contactName
+            email
+            phone
             notes(first: {nested_notes_limit}) {{
               totalCount
               edges {{
@@ -600,7 +605,7 @@ class JobberClient:
     # GraphQL query for fetching timesheet entries with cursor pagination
     TIMESHEET_ENTRIES_QUERY = """
     query GetTimesheetEntries($cursor: String) {
-      timesheetEntries(first: 100, after: $cursor) {
+      timeSheetEntries(first: 100, after: $cursor) {
         edges {
           node {
             id
@@ -676,16 +681,7 @@ class JobberClient:
           node {
             id
             name
-            rate
-            region
-            compound
-            active
             description
-            taxNumber
-            displayOrder
-            defaultForRegion
-            createdAt
-            updatedAt
           }
         }
         pageInfo {
@@ -1922,9 +1918,9 @@ class JobberClient:
             response_data = self._execute_graphql_request(self.TIMESHEET_ENTRIES_QUERY, cursor)
 
             # Validate that timesheet entries data exists in response
-            if response_data.get("data") is not None and "timesheetEntries" not in response_data["data"]:
+            if response_data.get("data") is not None and "timeSheetEntries" not in response_data["data"]:
                 raise JobberApiError(
-                    "Invalid response structure: missing 'timesheetEntries' field in data"  # noqa: E501
+                    "Invalid response structure: missing 'timeSheetEntries' field in data"  # noqa: E501
                 )
 
             return response_data
@@ -2366,6 +2362,69 @@ class JobberClient:
       }}
     }}
     """
+        elif entity_type == "request":
+            # Query for Request using correct field names from Jobber API schema
+            # See: https://developer.getjobber.com/docs/
+            return f"""
+    query GetRequest($id: EncodedId!) {{
+      request(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        property {{
+          id
+        }}
+        title
+        source
+        requestStatus
+        companyName
+        contactName
+        email
+        phone
+        notes(first: {nested_notes_limit}) {{
+          totalCount
+          edges {{
+            node {{
+              ... on RequestNote {{
+                id
+                message
+                createdAt
+              }}
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
+          edges {{
+            node {{
+              id
+              note {{
+                ... on RequestNote {{
+                  id
+                }}
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
         else:
             # For other entity types, use a minimal query
             # This can be expanded as needed for specific entity types
@@ -2408,8 +2467,19 @@ class JobberClient:
             decoded_id = base64.b64decode(entity_id).decode("utf-8")
             entity_type = decoded_id.split("/")[3]  # Extract "Client" from gid://Jobber/Client/12345
 
-            # Map entity type to query field name (lowercase)
-            query_field = entity_type[0].lower() + entity_type[1:]  # Client -> client
+            # Map entity type to query field name
+            # Some entity types use plural forms or different casing in GraphQL queries
+            entity_type_to_query_field = {
+                "TaxRate": "taxRates",  # Plural form
+                "TimeSheetEntry": "timeSheetEntries",  # Plural with capital 'S'
+                "ProductOrService": "productOrService",  # Singular, but with 'Or' capitalized
+            }
+
+            # Use mapping if available, otherwise convert to camelCase
+            query_field = entity_type_to_query_field.get(
+                entity_type,
+                entity_type[0].lower() + entity_type[1:]  # Default: Client -> client
+            )
 
             # Build entity-specific query based on type
             query = self._build_single_entity_query(query_field, nested_notes_limit)

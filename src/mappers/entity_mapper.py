@@ -526,6 +526,10 @@ class EntityMapper:
         """
         Map GraphQL Request data to Request domain model.
 
+        Based on Jobber API schema: https://developer.getjobber.com/docs/
+        Available fields: id, client, property, title, source, requestStatus,
+        companyName, contactName, email, phone, notes, noteAttachments, createdAt, updatedAt
+
         Args:
             data: Raw GraphQL Request node data
 
@@ -549,17 +553,24 @@ class EntityMapper:
             # Extract optional property ID from property relationship
             property_id = MapperUtils.extract_id_from_relationship(data.get("property"))
 
-            # Extract request details
+            # Extract request details - using correct API field names
             title = data.get("title", "")
-            description = data.get("description", "")
-            status = data.get("status", "")
-            priority = data.get("priority", "")
             source = data.get("source", "")
-            assigned_to = data.get("assignedTo", "")
+            # API uses 'requestStatus' not 'status'
+            status = data.get("requestStatus", "")
 
-            # Extract conversion relationships
-            converted_to_quote_id = MapperUtils.extract_id_from_relationship(data.get("convertedToQuote"))
-            converted_to_job_id = MapperUtils.extract_id_from_relationship(data.get("convertedToJob"))
+            # Additional contact fields from API
+            company_name = data.get("companyName", "")
+            contact_name = data.get("contactName", "")
+            email = data.get("email", "")
+            phone = data.get("phone", "")
+
+            # Fields not available in API - use empty defaults
+            description = ""  # Not in API schema
+            priority = ""  # Not in API schema
+            assigned_to = ""  # Not in API schema
+            converted_to_quote_id = ""  # Not in API schema (use quotes connection instead)
+            converted_to_job_id = ""  # Not in API schema (use jobs connection instead)
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))

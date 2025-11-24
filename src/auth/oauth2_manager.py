@@ -206,6 +206,13 @@ class OAuth2Manager:
                 data=payload,
                 return_headers=False,
             )
+
+            # DEBUG: Log the full response for diagnosing token rotation issues
+            import json
+
+            print(f"[DEBUG] Token refresh response keys: {list(response_data.keys())}")
+            print(f"[DEBUG] Token refresh response: {json.dumps(response_data, indent=2)}")
+
         except Exception as e:
             if "Invalid or expired" in str(e) or "Access forbidden" in str(e):
                 raise ConfigurationError(
@@ -215,6 +222,21 @@ class OAuth2Manager:
 
         # Validate token response structure
         self._validate_token_response(response_data)
+
+        # DEFENSIVE: If Jobber doesn't return a new refresh_token, preserve the old one
+        # Per OAuth 2.0 spec, refresh_token is optional in refresh responses.
+        # However, Jobber has Refresh Token Rotation ON by default (required for App Marketplace),
+        # which means each refresh SHOULD return a new refresh token.
+        if "refresh_token" not in response_data:
+            print("[WARNING] Jobber did not return a new refresh_token in refresh response")
+            print("[WARNING] This is unexpected - Jobber has Refresh Token Rotation enabled by default")
+            print("[WARNING] Preserving existing refresh_token - this may fail on next refresh")
+            response_data["refresh_token"] = refresh_token
+        elif response_data["refresh_token"] != refresh_token:
+            print("[INFO] Refresh token rotated successfully (old token is now invalid)")
+        else:
+            print("[INFO] Refresh token unchanged (rotation may be disabled for this app)")
+
         return response_data
 
     def _validate_token_response(self, response_data: dict[str, Any]) -> None:
@@ -249,3 +271,12 @@ class OAuth2Manager:
         token_type = response_data.get("token_type", "bearer")
         if token_type and token_type.casefold() != "bearer".casefold():
             raise OAuth2Error(f"Unsupported token type: expected 'Bearer', got '{token_type}'")
+
+        # Warn about missing optional but important fields
+        if "refresh_token" not in response_data:
+            # Don't raise error - per OAuth 2.0 spec this is optional
+            # But log warning since Jobber rotation requires it
+            print("[WARNING] Token response missing 'refresh_token' field")
+
+        if "expires_in" not in response_data:
+            print("[WARNING] Token response missing 'expires_in' field, will use default (3600s)")
