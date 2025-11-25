@@ -69,7 +69,7 @@ class JobberClient:
             phones {{
               number
             }}
-            notes(first: 100) {{
+            notes(first: {nested_notes_size}) {{
               totalCount
               edges {{
                 node {{
@@ -134,7 +134,7 @@ class JobberClient:
             invoiceStatus
             issuedDate
             dueDate
-            lineItems {{
+            lineItems(first: 50) {{
               edges {{
                 node {{
                   description
@@ -143,8 +143,12 @@ class JobberClient:
                   total
                 }}
               }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
             }}
-            notes(first: 100) {{
+            notes(first: {nested_notes_limit}) {{
               totalCount
               edges {{
                 node {{
@@ -203,6 +207,9 @@ class JobberClient:
             client {{
               id
             }}
+            property {{
+              id
+            }}
             quoteNumber
             title
             amounts {{
@@ -210,7 +217,7 @@ class JobberClient:
               subtotal
             }}
             message
-            lineItems {{
+            lineItems(first: 50) {{
               edges {{
                 node {{
                   name
@@ -220,8 +227,12 @@ class JobberClient:
                   total
                 }}
               }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
             }}
-            notes(first: 100) {{
+            notes(first: {nested_notes_limit}) {{
               totalCount
               edges {{
                 node {{
@@ -310,7 +321,7 @@ class JobberClient:
             endAt
             completedAt
             total
-            notes(first: 100) {{
+            notes(first: {nested_notes_limit}) {{
               totalCount
               edges {{
                 node {{
@@ -356,39 +367,41 @@ class JobberClient:
     }}
     """
 
-    # GraphQL query for fetching properties with cursor pagination
-    PROPERTIES_QUERY = """
-    query GetProperties($cursor: String) {
-      properties(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_properties_query(self) -> str:
+        """Get GraphQL query for fetching properties with configurable pagination."""
+        size = self._get_pagination_size("properties")
+        return f"""
+    query GetProperties($cursor: String) {{
+      properties(first: {size}, after: $cursor) {{
+        edges {{
+          node {{
             id
-            client {
+            client {{
               id
-            }
+            }}
             name
-            address {
+            address {{
               line1
               line2
               city
               stateProvince
               postalCode
               country
-            }
-            coordinates {
+            }}
+            coordinates {{
               latitude
               longitude
-            }
+            }}
             createdAt
             updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
     def _get_requests_query(self) -> str:
@@ -424,7 +437,7 @@ class JobberClient:
             contactName
             email
             phone
-            notes(first: 100) {{
+            notes(first: {nested_notes_limit}) {{
               totalCount
               edges {{
                 node {{
@@ -572,6 +585,7 @@ class JobberClient:
             endAt
             completedAt
             createdAt
+            updatedAt
           }
         }
         pageInfo {
@@ -1703,7 +1717,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.PROPERTIES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_properties_query(), cursor)
 
             # Validate that properties data exists in response
             if response_data.get("data") is not None and "properties" not in response_data["data"]:

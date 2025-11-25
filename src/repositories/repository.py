@@ -1158,6 +1158,7 @@ class Repository:
                 (
                     quote.id,
                     quote.client_id,
+                    quote.property_id,
                     quote.quote_number,
                     quote.title,
                     quote.total,
@@ -1173,8 +1174,8 @@ class Repository:
 
             cursor.executemany(
                 """INSERT OR REPLACE INTO quotes
-                   (id, client_id, quote_number, title, total, subtotal, disclaimer, line_items, created_at, transitioned_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                   (id, client_id, property_id, quote_number, title, total, subtotal, disclaimer, line_items, created_at, transitioned_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                 quote_data,
             )
 

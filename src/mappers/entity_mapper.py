@@ -186,6 +186,12 @@ class EntityMapper:
             if not client_id:
                 raise MappingError("Quote client ID is required but missing")
 
+            # Extract property ID from property relationship (optional)
+            property_obj = data.get("property", {})
+            property_id = ""
+            if isinstance(property_obj, dict):
+                property_id = property_obj.get("id", "")
+
             # Extract quote number
             quote_number = data.get("quoteNumber", "")
 
@@ -218,6 +224,7 @@ class EntityMapper:
             return Quote(
                 id=quote_id,
                 client_id=client_id,
+                property_id=property_id,
                 quote_number=quote_number,
                 title=title,
                 total=total,
@@ -237,8 +244,8 @@ class EntityMapper:
         Map GraphQL Note data to Note domain model.
 
         Handles polymorphic note types from different GraphQL fragments
-        (ClientNote, JobNote, QuoteNote, InvoiceNote) and extracts the
-        appropriate entity type and ID relationships.
+        (ClientNote, PropertyNote, RequestNote, JobNote, VisitNote, QuoteNote, InvoiceNote)
+        and extracts the appropriate entity type and ID relationships.
 
         Args:
             data: Raw GraphQL Note node data from polymorphic query
@@ -271,10 +278,22 @@ class EntityMapper:
             if "client" in data and isinstance(data["client"], dict):
                 entity_type = "client"
                 entity_id = data["client"].get("id", "")
+            # Check for property relationship (PropertyNote)
+            elif "property" in data and isinstance(data["property"], dict):
+                entity_type = "property"
+                entity_id = data["property"].get("id", "")
+            # Check for request relationship (RequestNote)
+            elif "request" in data and isinstance(data["request"], dict):
+                entity_type = "request"
+                entity_id = data["request"].get("id", "")
             # Check for job relationship (JobNote)
             elif "job" in data and isinstance(data["job"], dict):
                 entity_type = "job"
                 entity_id = data["job"].get("id", "")
+            # Check for visit relationship (VisitNote)
+            elif "visit" in data and isinstance(data["visit"], dict):
+                entity_type = "visit"
+                entity_id = data["visit"].get("id", "")
             # Check for quote relationship (QuoteNote)
             elif "quote" in data and isinstance(data["quote"], dict):
                 entity_type = "quote"
@@ -791,7 +810,7 @@ class EntityMapper:
             end_at = MapperUtils.format_iso_datetime(data.get("endAt"))
             completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
-            updated_at = MapperUtils.format_iso_datetime(data.get("createdAt"))  # Use createdAt for updated_at
+            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
 
             return Visit(
                 id=visit_id,
