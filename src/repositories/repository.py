@@ -1257,14 +1257,19 @@ class Repository:
                     attachment.local_file_path,
                     attachment.file_size,
                     attachment.created_at,
+                    attachment.download_status,
+                    attachment.hash,
+                    attachment.downloaded_at,
+                    attachment.download_error,
                 )
                 for attachment in attachments
             ]
 
             cursor.executemany(
                 """INSERT OR REPLACE INTO attachments
-                   (id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                   (id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at,
+                    download_status, hash, downloaded_at, download_error)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 attachment_data,
             )
 
@@ -1961,7 +1966,9 @@ class Repository:
         try:
             cursor = self._connection.cursor()
             cursor.execute(
-                "SELECT id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at FROM attachments ORDER BY id"  # noqa: E501
+                """SELECT id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at,
+                          download_status, hash, downloaded_at, download_error
+                   FROM attachments ORDER BY id"""
             )
             rows = cursor.fetchall()
             cursor.close()
@@ -1976,12 +1983,83 @@ class Repository:
                     local_file_path=row[5],
                     file_size=row[6],
                     created_at=row[7],
+                    download_status=row[8] or "pending",
+                    hash=row[9],
+                    downloaded_at=row[10],
+                    download_error=row[11],
                 )
                 for row in rows
             ]
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve all attachments: {e}") from e
+
+    def get_pending_attachments(self, entity_types: Optional[List[str]] = None) -> List[Attachment]:
+        """Retrieve attachments with pending download status.
+
+        Filters attachments that need to be downloaded (download_status='pending').
+        Optionally filters by parent entity types via note relationships.
+
+        Args:
+            entity_types: Optional list of entity types to filter by (e.g., ['client', 'job'])
+                         Filters via note.entity_type relationship
+
+        Returns:
+            List of Attachment entities with download_status='pending'
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+
+            if entity_types:
+                # Join with notes table to filter by entity type
+                placeholders = ",".join("?" * len(entity_types))
+                query = f"""
+                    SELECT a.id, a.note_id, a.file_name, a.content_type, a.original_url,
+                           a.local_file_path, a.file_size, a.created_at,
+                           a.download_status, a.hash, a.downloaded_at, a.download_error
+                    FROM attachments a
+                    JOIN notes n ON a.note_id = n.id
+                    WHERE a.download_status = 'pending'
+                      AND n.entity_type IN ({placeholders})
+                    ORDER BY a.id
+                """
+                cursor.execute(query, entity_types)
+            else:
+                # Get all pending attachments
+                cursor.execute(
+                    """SELECT id, note_id, file_name, content_type, original_url, local_file_path,
+                              file_size, created_at, download_status, hash, downloaded_at, download_error
+                       FROM attachments
+                       WHERE download_status = 'pending'
+                       ORDER BY id"""
+                )
+
+            rows = cursor.fetchall()
+            cursor.close()
+
+            return [
+                Attachment(
+                    id=row[0],
+                    note_id=row[1],
+                    file_name=row[2],
+                    content_type=row[3],
+                    original_url=row[4],
+                    local_file_path=row[5],
+                    file_size=row[6],
+                    created_at=row[7],
+                    download_status=row[8] or "pending",
+                    hash=row[9],
+                    downloaded_at=row[10],
+                    download_error=row[11],
+                )
+                for row in rows
+            ]
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to retrieve pending attachments: {e}") from e
 
     def get_attachment_by_id(self, attachment_id: str) -> Optional[Attachment]:
         """Retrieve a single attachment by ID.
@@ -1998,7 +2076,9 @@ class Repository:
         try:
             cursor = self._connection.cursor()
             cursor.execute(
-                "SELECT id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at FROM attachments WHERE id = ?",  # noqa: E501
+                """SELECT id, note_id, file_name, content_type, original_url, local_file_path, file_size, created_at,
+                          download_status, hash, downloaded_at, download_error
+                   FROM attachments WHERE id = ?""",
                 (attachment_id,),
             )
             row = cursor.fetchone()
@@ -2016,6 +2096,10 @@ class Repository:
                 local_file_path=row[5],
                 file_size=row[6],
                 created_at=row[7],
+                download_status=row[8] or "pending",
+                hash=row[9],
+                downloaded_at=row[10],
+                download_error=row[11],
             )
 
         except sqlite3.Error as e:
