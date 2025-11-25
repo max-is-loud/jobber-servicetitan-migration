@@ -1556,6 +1556,7 @@ def migrate_all(
             logger,
             config_manager=config_manager,
             skip_existing_entities=actual_resume,
+            note_reference_collector=note_reference_collector,
         )
         invoices_extractor = InvoicesExtractor(
             jobber_client,
@@ -1564,6 +1565,7 @@ def migrate_all(
             logger,
             config_manager=config_manager,
             skip_existing_entities=actual_resume,
+            note_reference_collector=note_reference_collector,
         )
         quotes_extractor = QuotesExtractor(
             jobber_client,
@@ -1572,6 +1574,7 @@ def migrate_all(
             logger,
             config_manager=config_manager,
             skip_existing_entities=actual_resume,
+            note_reference_collector=note_reference_collector,
         )
 
         # Note: AttachmentDownloader is now a helper class used by extractors

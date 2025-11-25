@@ -69,15 +69,11 @@ class JobberClient:
             phones {{
               number
             }}
-            notes(first: {nested_notes_size}) {{
+            notes(first: 100) {{
               totalCount
               edges {{
                 node {{
-                  ... on ClientNote {{
-                    id
-                    message
-                    createdAt
-                  }}
+                  id
                 }}
               }}
               pageInfo {{
@@ -148,15 +144,11 @@ class JobberClient:
                 }}
               }}
             }}
-            notes(first: {nested_notes_limit}) {{
+            notes(first: 100) {{
               totalCount
               edges {{
                 node {{
-                  ... on InvoiceNote {{
-                    id
-                    message
-                    createdAt
-                  }}
+                  id
                 }}
               }}
               pageInfo {{
@@ -229,15 +221,11 @@ class JobberClient:
                 }}
               }}
             }}
-            notes(first: {nested_notes_limit}) {{
+            notes(first: 100) {{
               totalCount
               edges {{
                 node {{
-                  ... on QuoteNote {{
-                    id
-                    message
-                    createdAt
-                  }}
+                  id
                 }}
               }}
               pageInfo {{
@@ -322,15 +310,11 @@ class JobberClient:
             endAt
             completedAt
             total
-            notes(first: {nested_notes_limit}) {{
+            notes(first: 100) {{
               totalCount
               edges {{
                 node {{
-                  ... on JobNote {{
-                    id
-                    message
-                    createdAt
-                  }}
+                  id
                 }}
               }}
               pageInfo {{
@@ -440,15 +424,11 @@ class JobberClient:
             contactName
             email
             phone
-            notes(first: {nested_notes_limit}) {{
+            notes(first: 100) {{
               totalCount
               edges {{
                 node {{
-                  ... on RequestNote {{
-                    id
-                    message
-                    createdAt
-                  }}
+                  id
                 }}
               }}
               pageInfo {{
@@ -755,14 +735,11 @@ class JobberClient:
           phones {
             number
           }
-          notes(first: 10) {
+          notes(first: 100) {
+            totalCount
             edges {
               node {
-                ... on ClientNote {
-                  id
-                  message
-                  createdAt
-                }
+                id
               }
             }
             pageInfo {
@@ -803,14 +780,11 @@ class JobberClient:
           }
           invoiceStatus
           issuedDate
-          notes(first: 10) {
+          notes(first: 100) {
+            totalCount
             edges {
               node {
-                ... on InvoiceNote {
-                  id
-                  message
-                  createdAt
-                }
+                id
               }
             }
             pageInfo {
@@ -855,14 +829,11 @@ class JobberClient:
           lineItems {
             totalCount
           }
-          notes(first: 10) {
+          notes(first: 100) {
+            totalCount
             edges {
               node {
-                ... on QuoteNote {
-                  id
-                  message
-                  createdAt
-                }
+                id
               }
             }
             pageInfo {
@@ -916,14 +887,11 @@ class JobberClient:
           amounts {
             total
           }
-          notes(first: 10) {
+          notes(first: 100) {
+            totalCount
             edges {
               node {
-                ... on JobNote {
-                  id
-                  message
-                  createdAt
-                }
+                id
               }
             }
             pageInfo {
@@ -996,14 +964,11 @@ class JobberClient:
           convertedToJob {
             id
           }
-          notes(first: 10) {
+          notes(first: 100) {
+            totalCount
             edges {
               node {
-                ... on RequestNote {
-                  id
-                  message
-                  createdAt
-                }
+                id
               }
             }
             pageInfo {
@@ -2046,6 +2011,44 @@ class JobberClient:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(f"Unexpected error while fetching note {note_id}: {e}") from e
 
+    def fetch_notes_bulk(self, note_ids: list[str]) -> list[dict[str, Any]]:
+        """
+        Fetch multiple notes by their IDs using the deferred loading pattern.
+
+        This method implements bulk note fetching by iterating through note IDs
+        and fetching each individually via the node(id:) interface. This is the
+        recommended approach for complete note extraction as Jobber does not
+        provide a top-level paginated notes query.
+
+        Args:
+            note_ids: List of note IDs to fetch
+
+        Returns:
+            List of note data dictionaries with polymorphic type information
+
+        Raises:
+            JobberApiError: If API communication fails for any note
+            ConfigurationError: If authentication configuration is invalid
+
+        Example:
+            >>> note_ids = ["note_123", "note_456", "note_789"]
+            >>> notes = client.fetch_notes_bulk(note_ids)
+            >>> print(f"Fetched {len(notes)} notes")
+        """
+        notes = []
+        for note_id in note_ids:
+            try:
+                response = self.fetch_note_by_id(note_id)
+                node_data = response.get("data", {}).get("node")
+                if node_data:
+                    notes.append(node_data)
+            except JobberApiError as e:
+                # Log warning but continue with other notes
+                debug_print(f"Warning: Failed to fetch note {note_id}: {e}")
+                continue
+
+        return notes
+
     def _build_single_entity_query(self, entity_type: str, nested_notes_limit: int = 10) -> str:
         """
         Build a GraphQL query for fetching a single entity by ID.
@@ -2074,15 +2077,11 @@ class JobberClient:
         phones {{
           number
         }}
-        notes(first: {nested_notes_limit}) {{
+        notes(first: 100) {{
           totalCount
           edges {{
             node {{
-              ... on ClientNote {{
-                id
-                message
-                createdAt
-              }}
+              id
             }}
           }}
           pageInfo {{
@@ -2129,15 +2128,11 @@ class JobberClient:
         }}
         invoiceStatus
         issuedDate
-        notes(first: {nested_notes_limit}) {{
+        notes(first: 100) {{
           totalCount
           edges {{
             node {{
-              ... on InvoiceNote {{
-                id
-                message
-                createdAt
-              }}
+              id
             }}
           }}
           pageInfo {{
@@ -2188,15 +2183,11 @@ class JobberClient:
         lineItems {{
           totalCount
         }}
-        notes(first: {nested_notes_limit}) {{
+        notes(first: 100) {{
           totalCount
           edges {{
             node {{
-              ... on QuoteNote {{
-                id
-                message
-                createdAt
-              }}
+              id
             }}
           }}
           pageInfo {{
@@ -2254,15 +2245,11 @@ class JobberClient:
         endAt
         completedAt
         total
-        notes(first: {nested_notes_limit}) {{
+        notes(first: 100) {{
           totalCount
           edges {{
             node {{
-              ... on JobNote {{
-                id
-                message
-                createdAt
-              }}
+              id
             }}
           }}
           pageInfo {{
@@ -2386,11 +2373,7 @@ class JobberClient:
           totalCount
           edges {{
             node {{
-              ... on RequestNote {{
-                id
-                message
-                createdAt
-              }}
+              id
             }}
           }}
           pageInfo {{
@@ -2559,6 +2542,54 @@ class JobberClient:
 
         variables = {"id": entity_id, "cursor": cursor}
         response = self._execute_graphql_request(query, variables=variables)
+        entity_data = response.get("data", {}).get(entity_type, {})
+        return entity_data.get("notes", {})
+
+    def fetch_additional_note_ids(
+        self, entity_id: str, entity_type: str, cursor: str, page_size: int = 100
+    ) -> dict[str, Any]:
+        """
+        Fetch additional page of note IDs for an entity using cursor pagination.
+
+        Used for deferred loading pattern - fetches only note IDs, not full content.
+        Full note content is fetched later via fetch_note_by_id().
+
+        Args:
+            entity_id: The entity's ID (e.g., client ID, invoice ID)
+            entity_type: Type of entity ("client", "invoice", "job", "quote", "request")
+            cursor: The endCursor from previous page's pageInfo
+            page_size: Number of note IDs to fetch (default: 100)
+
+        Returns:
+            Dictionary with 'edges' and 'pageInfo' for the note IDs page
+
+        Raises:
+            JobberApiError: If API communication fails
+        """
+        query = f"""
+        query GetAdditionalNoteIds($id: EncodedId!, $cursor: String!) {{
+          {entity_type}(id: $id) {{
+            notes(first: {page_size}, after: $cursor) {{
+              totalCount
+              edges {{
+                node {{
+                  id
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+          }}
+        }}
+        """
+
+        variables = {"id": entity_id, "cursor": cursor}
+
+        response = self._execute_graphql_request(query=query, variables=variables)
+
+        # Extract notes data from response
         entity_data = response.get("data", {}).get(entity_type, {})
         return entity_data.get("notes", {})
 
