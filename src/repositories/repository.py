@@ -65,6 +65,8 @@ class Repository:
 
         Adds additional_emails and additional_phones columns to clients table,
         and due_date, subtotal, and line_items columns to invoices table.
+        Extends migration_state table for entity sync tracking.
+        Adds download tracking fields to attachments table.
         Uses conditional ALTER TABLE statements to only add columns if they don't exist.
 
         Raises:
@@ -95,6 +97,35 @@ class Repository:
 
             if "line_items" not in invoices_columns:
                 cursor.execute("ALTER TABLE invoices ADD COLUMN line_items TEXT DEFAULT '[]'")
+
+            # Extend migration_state table for entity sync state tracking
+            cursor.execute("PRAGMA table_info(migration_state)")
+            migration_state_columns = {row[1] for row in cursor.fetchall()}
+
+            if "total_fetched" not in migration_state_columns:
+                cursor.execute("ALTER TABLE migration_state ADD COLUMN total_fetched INTEGER DEFAULT 0")
+
+            if "sync_status" not in migration_state_columns:
+                cursor.execute("ALTER TABLE migration_state ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+
+            if "last_sync_at" not in migration_state_columns:
+                cursor.execute("ALTER TABLE migration_state ADD COLUMN last_sync_at TEXT")
+
+            # Add download tracking fields to attachments table
+            cursor.execute("PRAGMA table_info(attachments)")
+            attachments_columns = {row[1] for row in cursor.fetchall()}
+
+            if "download_status" not in attachments_columns:
+                cursor.execute("ALTER TABLE attachments ADD COLUMN download_status TEXT DEFAULT 'pending'")
+
+            if "download_error" not in attachments_columns:
+                cursor.execute("ALTER TABLE attachments ADD COLUMN download_error TEXT")
+
+            if "downloaded_at" not in attachments_columns:
+                cursor.execute("ALTER TABLE attachments ADD COLUMN downloaded_at TEXT")
+
+            if "hash" not in attachments_columns:
+                cursor.execute("ALTER TABLE attachments ADD COLUMN hash TEXT")
 
             cursor.close()
 
