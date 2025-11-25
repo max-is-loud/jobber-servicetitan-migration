@@ -380,6 +380,10 @@ class EntityMapper:
                 local_file_path=local_file_path,
                 file_size=file_size,
                 created_at=created_at,
+                download_status="pending",  # Initial state for metadata-only extraction
+                hash=None,  # Computed during binary download phase
+                downloaded_at=None,  # Set when download completes
+                download_error=None,  # Set if download fails
             )
 
         except Exception as e:
