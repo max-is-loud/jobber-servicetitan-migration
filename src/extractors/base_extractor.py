@@ -165,6 +165,10 @@ class BaseExtractor(ABC, Generic[T]):
         # Preserves specific IDs and errors for debugging and reporting
         self._data_quality_issues: list[dict[str, Any]] = []
 
+        # Note reference collector for deferred note loading (Phase 2)
+        # Optional - only provided for extractors that collect note IDs
+        self._note_reference_collector = kwargs.get("note_reference_collector")
+
     def _should_skip_entity(self, entity_id: str) -> bool:
         """Check if an entity should be skipped based on existence in database.
 
@@ -1008,66 +1012,143 @@ class BaseExtractor(ABC, Generic[T]):
 
         return all_attachments
 
-    def _extract_notes_and_attachments(self, node: dict[str, Any], primary_entity: T) -> dict[str, Any]:
-        """Extract nested notes and attachments from entity query response.
+    def _collect_note_ids(self, node: dict[str, Any], primary_entity: T) -> None:
+        """Collect note IDs from entity response for deferred processing.
 
-        Common implementation for extracting notes and attachments that are
-        fetched inline with parent entities (clients, invoices, quotes, jobs, requests).
-        Uses optimized pagination (configurable via pagination.nested_notes) to reduce API costs.
+        Implements the deferred loading pattern (Option C) documented in
+        docs/notes_extraction_strategy.md. Collects note IDs instead of extracting
+        full note content. Note IDs are stored in the note_reference_collector
+        for later bulk fetching via NotesExtractor.
+
+        Strategy Reference: docs/notes_extraction_strategy.md - Phase 1: Collect Note IDs
+
+        Args:
+            node: Entity data from API response
+            primary_entity: The parent entity that was mapped
+        """
+        if not self._note_reference_collector:
+            # No collector configured - skip note ID collection
+            return
+
+        # Extract note IDs from nested notes field
+        notes_data = node.get("notes", {})
+        note_edges = notes_data.get("edges", [])
+        total_count = notes_data.get("totalCount", 0)
+        page_info = notes_data.get("pageInfo", {})
+
+        if note_edges:
+            # Collect note IDs from first page
+            self._note_reference_collector.collect_note_ids_from_edges(
+                note_edges=note_edges,
+                entity_type=self._entity_name,
+                entity_id=primary_entity.id,
+            )
+
+            # Handle pagination if more notes exist
+            if page_info.get("hasNextPage", False):
+                cursor = page_info.get("endCursor")
+                fetched_count = len(note_edges)
+
+                self._logger.debug(
+                    f"Entity {primary_entity.id} has {total_count} notes, "
+                    f"fetched {fetched_count} IDs, fetching remaining via pagination..."
+                )
+
+                # Fetch additional note ID pages
+                remaining_note_ids = self._fetch_remaining_note_ids(
+                    entity_id=primary_entity.id,
+                    cursor=cursor,
+                    total_count=total_count,
+                    fetched_count=fetched_count,
+                )
+
+                # Collect remaining IDs
+                for note_id in remaining_note_ids:
+                    self._note_reference_collector.collect_note_id(
+                        note_id=note_id,
+                        entity_type=self._entity_name,
+                        entity_id=primary_entity.id,
+                    )
+
+    def _fetch_remaining_note_ids(
+        self, entity_id: str, cursor: str, total_count: int, fetched_count: int
+    ) -> list[str]:
+        """Fetch remaining note IDs beyond the first page.
+
+        Args:
+            entity_id: Parent entity ID
+            cursor: Pagination cursor from first page
+            total_count: Total number of notes for this entity
+            fetched_count: Number of note IDs already fetched
+
+        Returns:
+            List of additional note IDs
+        """
+        note_ids = []
+        current_cursor = cursor
+        page_num = 2
+
+        while current_cursor and fetched_count < total_count:
+            try:
+                # Fetch next page of note IDs only
+                response = self._jobber_client.fetch_additional_note_ids(
+                    entity_id=entity_id,
+                    entity_type=self._entity_name,
+                    cursor=current_cursor,
+                    page_size=100,
+                )
+
+                edges = response.get("edges", [])
+                page_info = response.get("pageInfo", {})
+
+                # Extract note IDs from edges
+                for edge in edges:
+                    node = edge.get("node", {})
+                    note_id = node.get("id")
+                    if note_id:
+                        note_ids.append(note_id)
+                        fetched_count += 1
+
+                # Check for next page
+                if page_info.get("hasNextPage", False) and fetched_count < total_count:
+                    current_cursor = page_info.get("endCursor")
+                    page_num += 1
+                    self._logger.debug(
+                        f"Fetching note IDs page {page_num} for {self._entity_name} {entity_id} "
+                        f"({fetched_count}/{total_count} IDs collected)"
+                    )
+                else:
+                    break
+
+            except Exception as e:
+                self._logger.warning(
+                    f"Error fetching additional note IDs for {self._entity_name} {entity_id}: {e}. "
+                    f"Collected {len(note_ids)} additional IDs so far."
+                )
+                break
+
+        return note_ids
+
+    def _extract_notes_and_attachments(self, node: dict[str, Any], primary_entity: T) -> dict[str, Any]:
+        """Extract note IDs and attachments from entity query response.
+
+        REFACTORED for deferred loading pattern (docs/notes_extraction_strategy.md):
+        - Collects note IDs for later bulk fetching (via _collect_note_ids) - Phase 1
+        - Extracts attachment metadata inline (attachments not available via top-level query)
+
+        Strategy Reference: docs/notes_extraction_strategy.md - Option C: Deferred Loading
 
         Args:
             node: Entity data from API response
             primary_entity: The parent entity that was mapped
 
         Returns:
-            Dictionary with 'notes' and 'attachments' lists (if present)
+            Dictionary with 'attachments' list (notes are now collected separately)
         """
         related = {}
 
-        # Extract notes if present
-        notes_data = node.get("notes", {})
-        entity_notes = notes_data.get("edges", [])
-        notes_page_info = notes_data.get("pageInfo", {})
-        notes = []  # Initialize outside if block so we can track skipped notes
-
-        if entity_notes:
-            for note_edge in entity_notes:
-                note_node = note_edge.get("node", {})
-                # Skip empty nodes or nodes missing ID (can happen with union fragments)
-                # Don't log individual skips - will consolidate at end with orphaned attachments
-                if not note_node or not note_node.get("id"):
-                    continue
-
-                try:
-                    # Add parent entity relationship to note data
-                    # Uses entity_name to create dynamic relationship field (e.g., "client", "invoice")
-                    note_data = {
-                        **note_node,
-                        self._entity_name: {"id": primary_entity.id},
-                    }
-                    note = self._entity_mapper.map_note(note_data)
-                    notes.append(note)
-                except MappingError as e:
-                    # Try lenient mapping to preserve orphaned notes
-                    try:
-                        orphaned_note = self._entity_mapper.map_note(note_node, lenient=True)
-                        notes.append(orphaned_note)
-                        self._logger.debug(f"Saved orphaned note with lenient mapping for {self._entity_name} {primary_entity.id}: {e}")
-                    except Exception as lenient_error:
-                        # Even lenient mapping failed - truly broken data
-                        self._logger.debug(f"Failed to map note even with lenient mode for {self._entity_name} {primary_entity.id}: {lenient_error}")
-
-            # Auto-paginate to fetch all remaining notes
-            if notes_page_info.get("hasNextPage", False):
-                total_count = notes_data.get("totalCount", "unknown")
-                self._logger.debug(
-                    f"Fetching additional notes for {self._entity_name} {primary_entity.id} "
-                    f"(total: {total_count}, fetched so far: {len(notes)})"
-                )
-                notes.extend(self._fetch_all_remaining_notes(primary_entity.id, notes_page_info.get("endCursor")))
-
-            if notes:
-                related["notes"] = notes
+        # DEFERRED LOADING: Collect note IDs instead of extracting full content
+        self._collect_note_ids(node, primary_entity)
 
         # Extract attachments if present
         attachments_data = node.get("noteAttachments", {})
@@ -1117,29 +1198,26 @@ class BaseExtractor(ABC, Generic[T]):
                 )
                 attachments.extend(self._fetch_all_remaining_attachments(primary_entity.id, attachments_page_info.get("endCursor")))
 
-            # Log consolidated message if we found and saved orphaned data
+            # Log consolidated message if we found and saved orphaned attachments
+            # Note: Orphaned notes are no longer tracked here due to deferred loading pattern
+            # (see docs/notes_extraction_strategy.md - Option C: Deferred Loading)
             if orphaned_attachments_saved > 0:
-                # Count notes with ORPHANED entity_type to track how many orphaned notes were saved
-                orphaned_notes_saved = sum(1 for note in notes if note.entity_type == "ORPHANED")
-
                 # Extract human-readable identifier for cross-reference with Jobber UI
                 display_id = self._get_entity_display_identifier(primary_entity)
 
-                if orphaned_notes_saved > 0 or orphaned_attachments_saved > 0:
-                    self._logger.info(
-                        f"Saved {orphaned_notes_saved} orphaned note(s) and {orphaned_attachments_saved} "
-                        f"orphaned attachment(s) for {display_id} (review in ./attachments/ORPHANED/)"
-                    )
-                    # Track detailed information for reporting
-                    self._data_quality_issues.append({
-                        "entity_type": self._entity_name,
-                        "entity_id": primary_entity.id,
-                        "display_id": display_id,
-                        "notes_saved_orphaned": orphaned_notes_saved,
-                        "attachments_saved_orphaned": orphaned_attachments_saved,
-                        "issue_type": "orphaned_data_preserved",
-                        "review_path": f"./attachments/ORPHANED/{primary_entity.id}/"
-                    })
+                self._logger.info(
+                    f"Saved {orphaned_attachments_saved} orphaned attachment(s) for {display_id} "
+                    f"(review in ./attachments/ORPHANED/)"
+                )
+                # Track detailed information for reporting
+                self._data_quality_issues.append({
+                    "entity_type": self._entity_name,
+                    "entity_id": primary_entity.id,
+                    "display_id": display_id,
+                    "attachments_saved_orphaned": orphaned_attachments_saved,
+                    "issue_type": "orphaned_data_preserved",
+                    "review_path": f"./attachments/ORPHANED/{primary_entity.id}/"
+                })
 
             if attachments:
                 related["attachments"] = attachments
@@ -1147,20 +1225,21 @@ class BaseExtractor(ABC, Generic[T]):
         return related
 
     def _save_notes_and_attachments(self, related_entities: dict[str, Any]) -> None:
-        """Save notes and attachments to repository.
+        """Save attachments to repository.
 
-        Common implementation for saving notes and downloading/saving attachments.
+        REFACTORED for deferred loading pattern:
+        - Notes are NO LONGER saved here (collected as IDs, saved later via NotesExtractor)
+        - Only attachments are processed
+
         In queue mode (queue_attachments=True), attachments are added to attachment_queue
         for later batch processing. Otherwise, downloads attachment files and updates metadata
         with local file paths before saving (unless auto_download is disabled).
 
         Args:
-            related_entities: Dictionary with 'notes' and 'attachments' lists
+            related_entities: Dictionary with 'attachments' list (notes handled separately)
         """
-        # Save notes if present
-        notes = related_entities.get("notes", [])
-        if notes:
-            self._repository.save_notes(notes)
+        # Notes are now handled via deferred loading - skip inline saving
+        # This maintains backward compatibility but notes list should be empty
 
         # Handle attachments (queue or download)
         attachments = related_entities.get("attachments", [])
