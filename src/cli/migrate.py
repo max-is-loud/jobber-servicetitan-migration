@@ -2026,7 +2026,7 @@ def download_attachments(
     try:
         # Initialize services
         repository = ServiceFactory.create_repository(db)
-        logger = ServiceFactory.create_logger(verbose=True)
+        logger = RichLogger(verbose=True, console=ServiceFactory.get_console())
 
         # Check for pending attachments
         pending_count_query = repository._connection.cursor()
@@ -2196,7 +2196,7 @@ def max_extract(
     try:
         # Initialize services with optimization level
         repository = ServiceFactory.create_repository(db)
-        logger = ServiceFactory.create_logger(verbose=True)
+        logger = RichLogger(verbose=True, console=ServiceFactory.get_console())
         config_manager = ConfigManagerImpl()
 
         # Create authenticated Jobber client with rate limiting
