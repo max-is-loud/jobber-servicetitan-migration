@@ -1959,3 +1959,168 @@ def migrate_expenses(
 
 # Add remaining commands following the same pattern...
 # (visits, timesheet-entries, products, tax-rates)
+
+
+@migrate_app.command(name="download-attachments")
+def download_attachments(
+    db: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--db",
+            help="Path to SQLite database file",
+            show_default=True,
+        ),
+    ] = Path("jobber_export.db"),
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="Directory for downloaded attachment files",
+            show_default=True,
+        ),
+    ] = Path("./attachments"),
+    batch_size: Annotated[
+        int,
+        typer.Option(
+            "--batch-size",
+            help="Number of attachments to fetch per batch",
+            min=1,
+            max=1000,
+            show_default=True,
+        ),
+    ] = 100,
+) -> None:
+    """Download pending attachment files from Jobber.
+
+    Phase 2 of the two-phase ETL pattern for binary file downloads.
+    Fetches all attachments with download_status='pending' and saves them
+    to hash-based storage: {sha256_hash}.{original_extension}
+
+    The database must already contain attachment metadata from Phase 1
+    (entity extraction).
+
+    Examples:
+        # Download all pending attachments
+        tightbeam migrate download-attachments
+
+        # Specify custom database and output directory
+        tightbeam migrate download-attachments --db ./data/export.db --output-dir ./files
+
+        # Control batch size for large datasets
+        tightbeam migrate download-attachments --batch-size 50
+    """
+    from src.extractors.attachment_downloader import AttachmentDownloader
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+    console.print(f"\n{INFO_EMOJI} Starting attachment download")
+    console.print(f"   Database: {db}")
+    console.print(f"   Output directory: {output_dir}")
+    console.print(f"   Batch size: {batch_size}\n")
+
+    # Validate database exists
+    if not db.exists():
+        console.print(f"{ERROR_EMOJI} Database not found: {db}", style="bold red")
+        console.print(f"   Run 'tightbeam migrate jobber' first to extract metadata\n")
+        raise typer.Exit(code=1)
+
+    try:
+        # Initialize services
+        repository = ServiceFactory.create_repository(db_path=str(db))
+        logger = ServiceFactory.create_logger(verbose=True)
+
+        # Check for pending attachments
+        pending_count_query = repository._connection.cursor()
+        pending_count_query.execute("SELECT COUNT(*) FROM attachments WHERE download_status = 'pending'")
+        total_pending = pending_count_query.fetchone()[0]
+        pending_count_query.close()
+
+        if total_pending == 0:
+            console.print(f"{INFO_EMOJI} No pending attachments found", style="yellow")
+            console.print(f"   All attachments already downloaded or no attachments in database\n")
+            return
+
+        console.print(f"{INFO_EMOJI} Found {total_pending} pending attachment(s)\n")
+
+        # Initialize downloader
+        downloader = AttachmentDownloader(
+            repository=repository,
+            logger=logger,
+            base_download_path=str(output_dir),
+            max_retries=3,
+        )
+
+        # Validate dependencies
+        downloader.validate_dependencies()
+
+        # Download with progress tracking
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Downloading attachments...", total=total_pending)
+
+            # Get initial stats
+            stats = {"success": 0, "failed": 0, "total_bytes": 0}
+
+            # Process in batches
+            while True:
+                batch = repository.get_pending_attachments()
+                if not batch:
+                    break
+
+                # Limit batch size
+                batch = batch[:batch_size]
+
+                for attachment in batch:
+                    result = downloader.download_attachment(attachment)
+
+                    if result["success"]:
+                        stats["success"] += 1
+                        stats["total_bytes"] += result["bytes_downloaded"]
+                    else:
+                        stats["failed"] += 1
+
+                    # Update progress
+                    progress.update(task, advance=1)
+
+                # If we got fewer than batch_size, we're done
+                if len(batch) < batch_size:
+                    break
+
+        # Display summary
+        console.print()
+        console.print("📊 Download Summary:", style="bold cyan")
+        console.print(f"   ✓ Success: {stats['success']} files ({_format_bytes(stats['total_bytes'])})")
+        if stats["failed"] > 0:
+            console.print(f"   ✗ Failed: {stats['failed']} files", style="bold red")
+        console.print()
+
+        if stats["failed"] > 0:
+            console.print(f"{INFO_EMOJI} Check database download_error field for failure details:")
+            console.print(f"   SELECT id, file_name, download_error FROM attachments WHERE download_status = 'failed'\n")
+
+    except ConfigurationError as e:
+        console.print(f"{ERROR_EMOJI} Configuration error: {e}", style="bold red")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"{ERROR_EMOJI} Unexpected error: {e}", style="bold red")
+        raise typer.Exit(code=1)
+
+
+def _format_bytes(bytes_count: int) -> str:
+    """Format byte count as human-readable string.
+
+    Args:
+        bytes_count: Number of bytes
+
+    Returns:
+        Formatted string (e.g., "1.5 MB")
+    """
+    for unit in ["B", "KB", "MB", "GB"]:
+        if bytes_count < 1024.0:
+            return f"{bytes_count:.1f} {unit}"
+        bytes_count /= 1024.0
+    return f"{bytes_count:.1f} TB"

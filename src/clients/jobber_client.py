@@ -1190,20 +1190,46 @@ class JobberClient:
         self._throttling_events = 0
         self._last_request_was_throttled = False
 
+        # Track throttle status for adaptive page sizing
+        self._last_requested_cost: Optional[int] = None
+        self._last_currently_available: Optional[int] = None
+        self._last_maximum_available: Optional[int] = None
+
     def _get_pagination_size(self, entity_type: str) -> int:
-        """Get pagination size for the specified entity type from configuration.
+        """Get pagination size for the specified entity type with adaptive sizing.
+
+        Uses cost-aware pagination to automatically reduce page size when:
+        - Requested query cost exceeds 8000 points
+        - Currently available points drop below 2000
 
         Args:
             entity_type: The entity type (clients, invoices, quotes, etc.)
 
         Returns:
-            Pagination size for the entity type
+            Pagination size for the entity type (may be reduced from base size)
         """
         try:
-            return self.config_manager.get_pagination_config(entity_type)
-        except ConfigurationError:
-            # Fallback to default if entity type not found
-            return self.config_manager.get_pagination_config()
+            # Use adaptive page sizing based on last known throttle status
+            page_size, adjustment_reason = self.config_manager.get_adaptive_page_size(
+                entity_type=entity_type,
+                requested_cost=self._last_requested_cost,
+                currently_available=self._last_currently_available,
+                maximum_available=self._last_maximum_available,
+            )
+
+            # Track adjustments when page size is reduced
+            if adjustment_reason is not None:
+                debug_print(f"📉 Adaptive sizing: {entity_type} page size → {page_size} ({adjustment_reason})")
+                # TODO: Add metrics tracking for adjustments
+
+            return page_size
+
+        except (ConfigurationError, AttributeError):
+            # Fallback to default if entity type not found or adaptive sizing fails
+            try:
+                return self.config_manager.get_pagination_config(entity_type)
+            except ConfigurationError:
+                return self.config_manager.get_pagination_config()
 
     def set_http_client(self, http_client: IHttpClient) -> None:
         """
@@ -1241,6 +1267,20 @@ class JobberClient:
             requested_cost = cost_info.get("requestedQueryCost")
             actual_cost = cost_info.get("actualQueryCost")
 
+            # Extract throttle status from Jobber API response
+            throttle_status = cost_info.get("throttleStatus", {})
+            maximum_available = throttle_status.get("maximumAvailable")
+            currently_available = throttle_status.get("currentlyAvailable")
+            restore_rate = throttle_status.get("restoreRate")
+
+            # Store throttle status for adaptive page sizing
+            if requested_cost is not None:
+                self._last_requested_cost = int(requested_cost)
+            if currently_available is not None:
+                self._last_currently_available = int(currently_available)
+            if maximum_available is not None:
+                self._last_maximum_available = int(maximum_available)
+
             if requested_cost is not None and actual_cost is not None:
                 # Extract batch size from GraphQL query using regex
                 import re
@@ -1255,6 +1295,9 @@ class JobberClient:
                     int(actual_cost),
                     query_type=query_type,
                     batch_size=batch_size,
+                    maximum_available=maximum_available,
+                    currently_available=currently_available,
+                    restore_rate=restore_rate,
                 )
         except (KeyError, ValueError, TypeError):
             # Gracefully handle missing or invalid cost data

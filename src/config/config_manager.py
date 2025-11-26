@@ -390,3 +390,68 @@ class ConfigManagerImpl:
     def get_current_rate_limit_settings(self, optimization_level: str) -> dict[str, Any]:
         """Get current rate limiting settings for hot-reload updates."""
         return self.get_rate_limit_config(optimization_level)
+
+    def get_adaptive_page_size(
+        self,
+        entity_type: str,
+        requested_cost: int | None = None,
+        currently_available: int | None = None,
+        maximum_available: int | None = None,
+    ) -> tuple[int, str | None]:
+        """Calculate adaptive page size based on GraphQL cost and throttle status.
+
+        Implements cost-aware pagination by reducing page size when:
+        1. Requested query cost exceeds safety threshold (8000 points)
+        2. Currently available points drop below minimum threshold (2000 points)
+
+        This prevents throttling by proactively reducing batch sizes when approaching
+        API capacity limits, based on real-time throttle status from Jobber API.
+
+        Args:
+            entity_type: Entity type to get pagination for (e.g., 'clients', 'invoices')
+            requested_cost: Requested query cost from last response (optional)
+            currently_available: Currently available points from throttle status (optional)
+            maximum_available: Maximum available points from throttle status (optional)
+
+        Returns:
+            Tuple of (page_size, adjustment_reason):
+            - page_size: Calculated pagination size (reduced if needed)
+            - adjustment_reason: Explanation of adjustment, or None if not adjusted
+
+        Based on Jobber API documentation:
+        - maximumAvailable: 10000 (bucket capacity)
+        - currentlyAvailable: Points remaining after query
+        - restoreRate: 500 points/second
+        - requestedQueryCost: Expected cost before execution
+        """
+        # Get base page size for entity type
+        base_page_size = self.get_pagination_config(entity_type)
+
+        # If no throttle data available, return base size
+        if requested_cost is None and currently_available is None:
+            return (base_page_size, None)
+
+        # Threshold values based on task specification
+        HIGH_COST_THRESHOLD = 8000  # Reduce if requestedQueryCost > 8000
+        LOW_CAPACITY_THRESHOLD = 2000  # Reduce if currentlyAvailable < 2000
+
+        adjustment_reason = None
+
+        # Check if requested cost is too high
+        if requested_cost is not None and requested_cost > HIGH_COST_THRESHOLD:
+            # Reduce by 20% as specified in PRP (multiply by 0.8)
+            reduction_factor = 0.8
+            adjusted_size = max(10, int(base_page_size * reduction_factor))  # Minimum 10
+            adjustment_reason = f"High query cost ({requested_cost} > {HIGH_COST_THRESHOLD})"
+            return (adjusted_size, adjustment_reason)
+
+        # Check if available capacity is too low
+        if currently_available is not None and currently_available < LOW_CAPACITY_THRESHOLD:
+            # Reduce by 50% as specified in PRP (multiply by 0.5)
+            reduction_factor = 0.5
+            adjusted_size = max(10, int(base_page_size * reduction_factor))  # Minimum 10
+            adjustment_reason = f"Low capacity ({currently_available} < {LOW_CAPACITY_THRESHOLD})"
+            return (adjusted_size, adjustment_reason)
+
+        # No adjustment needed
+        return (base_page_size, None)

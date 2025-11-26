@@ -250,10 +250,22 @@ class Repository:
                     actual_cost INTEGER NOT NULL,
                     cost_difference INTEGER NOT NULL,
                     timestamp REAL NOT NULL,
-                    created_at TEXT DEFAULT (datetime('now'))
+                    created_at TEXT DEFAULT (datetime('now')),
+                    maximum_available INTEGER,
+                    currently_available INTEGER,
+                    restore_rate INTEGER
                 )
             """
             cursor.execute(graphql_costs_schema)
+
+            # Add throttle status columns if they don't exist (migration for existing databases)
+            try:
+                cursor.execute("SELECT maximum_available FROM graphql_costs LIMIT 1")
+            except sqlite3.OperationalError:
+                # Columns don't exist, add them
+                cursor.execute("ALTER TABLE graphql_costs ADD COLUMN maximum_available INTEGER")
+                cursor.execute("ALTER TABLE graphql_costs ADD COLUMN currently_available INTEGER")
+                cursor.execute("ALTER TABLE graphql_costs ADD COLUMN restore_rate INTEGER")
 
             # Create properties table for service locations
             properties_schema = """
@@ -2106,6 +2118,50 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve attachment {attachment_id}: {e}") from e
 
+    def update_attachment_download(
+        self,
+        attachment_id: str,
+        local_file_path: Optional[str] = None,
+        hash: Optional[str] = None,
+        download_status: Optional[str] = None,
+        downloaded_at: Optional[str] = None,
+        download_error: Optional[str] = None,
+    ) -> None:
+        """Update attachment download tracking fields after download completion.
+
+        Supports partial updates using COALESCE - only provided fields are updated,
+        NULL values preserve existing data. This enables incremental status updates
+        during multi-step download processes.
+
+        Args:
+            attachment_id: Attachment ID to update
+            local_file_path: Local file system path where file was downloaded
+            hash: SHA256 hash of downloaded file content
+            download_status: Download status ('pending', 'completed', 'failed')
+            downloaded_at: ISO8601 timestamp when download completed
+            download_error: Error message if download failed
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute(
+                """UPDATE attachments
+                   SET local_file_path = COALESCE(?, local_file_path),
+                       hash = COALESCE(?, hash),
+                       download_status = COALESCE(?, download_status),
+                       downloaded_at = COALESCE(?, downloaded_at),
+                       download_error = COALESCE(?, download_error)
+                   WHERE id = ?""",
+                (local_file_path, hash, download_status, downloaded_at, download_error, attachment_id),
+            )
+            self._connection.commit()
+            cursor.close()
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to update attachment {attachment_id}: {e}") from e
+
     def save_note_references(self, references: List[dict[str, str]]) -> None:
         """Batch save note references to temporary storage.
 
@@ -2467,7 +2523,8 @@ class Repository:
 
         Args:
             costs: List of dicts with query_type, batch_size, requested_cost,
-                   actual_cost, cost_difference, timestamp, created_at
+                   actual_cost, cost_difference, timestamp, created_at, and optional
+                   throttle status fields (maximum_available, currently_available, restore_rate)
 
         Raises:
             RepositoryError: If database operation fails
@@ -2488,6 +2545,9 @@ class Repository:
                     cost.get("cost_difference"),
                     cost.get("timestamp"),
                     cost.get("created_at"),
+                    cost.get("maximum_available"),
+                    cost.get("currently_available"),
+                    cost.get("restore_rate"),
                 )
                 for cost in costs
                 if all(
@@ -2506,8 +2566,9 @@ class Repository:
             if cost_data:
                 cursor.executemany(
                     """INSERT INTO graphql_costs
-                       (query_type, batch_size, requested_cost, actual_cost, cost_difference, timestamp, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                       (query_type, batch_size, requested_cost, actual_cost, cost_difference,
+                        timestamp, created_at, maximum_available, currently_available, restore_rate)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                     cost_data,
                 )
 
@@ -2521,7 +2582,7 @@ class Repository:
         """Retrieve all GraphQL cost records from the database.
 
         Returns:
-            List of all GraphQLCost entities
+            List of all GraphQLCost entities with throttle status
 
         Raises:
             RepositoryError: If database operation fails
@@ -2529,7 +2590,9 @@ class Repository:
         try:
             cursor = self._connection.cursor()
             cursor.execute(
-                "SELECT id, query_type, batch_size, requested_cost, actual_cost, cost_difference, timestamp, created_at FROM graphql_costs ORDER BY timestamp"  # noqa: E501
+                """SELECT id, query_type, batch_size, requested_cost, actual_cost, cost_difference,
+                          timestamp, created_at, maximum_available, currently_available, restore_rate
+                   FROM graphql_costs ORDER BY timestamp"""  # noqa: E501
             )
             rows = cursor.fetchall()
             cursor.close()
@@ -2544,6 +2607,9 @@ class Repository:
                     cost_difference=row[5],
                     timestamp=row[6],
                     created_at=row[7],
+                    maximum_available=row[8],
+                    currently_available=row[9],
+                    restore_rate=row[10],
                 )
                 for row in rows
             ]
