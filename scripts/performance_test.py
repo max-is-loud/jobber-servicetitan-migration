@@ -63,7 +63,7 @@ class PerformanceTestRunner:
         # Initialize dependencies
         config_manager = ConfigManagerImpl()
         logger = RichLogger(verbose=True)
-        repository = ServiceFactory.create_repository(self.db_path)
+        repository = ServiceFactory.create_repository(Path(self.db_path))
 
         # Initialize coordinator
         auth_provider = ServiceFactory.create_auth_provider(repository, logger)

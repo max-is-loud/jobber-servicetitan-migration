@@ -2025,7 +2025,7 @@ def download_attachments(
 
     try:
         # Initialize services
-        repository = ServiceFactory.create_repository(db_path=str(db))
+        repository = ServiceFactory.create_repository(db)
         logger = ServiceFactory.create_logger(verbose=True)
 
         # Check for pending attachments
@@ -2195,7 +2195,7 @@ def max_extract(
 
     try:
         # Initialize services with optimization level
-        repository = ServiceFactory.create_repository(db_path=str(db))
+        repository = ServiceFactory.create_repository(db)
         logger = ServiceFactory.create_logger(verbose=True)
         config_manager = ConfigManagerImpl()
 
