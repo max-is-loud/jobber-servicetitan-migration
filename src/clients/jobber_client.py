@@ -697,6 +697,18 @@ class JobberClient:
           client {
             id
           }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+          }
         }
         ... on JobNote {
           id
@@ -704,6 +716,18 @@ class JobberClient:
           createdAt
           job {
             id
+          }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
           }
         }
         ... on QuoteNote {
@@ -713,6 +737,18 @@ class JobberClient:
           quote {
             id
           }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+          }
         }
         ... on InvoiceNote {
           id
@@ -721,6 +757,18 @@ class JobberClient:
           invoice {
             id
           }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+          }
         }
         ... on RequestNote {
           id
@@ -728,6 +776,18 @@ class JobberClient:
           createdAt
           request {
             id
+          }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
           }
         }
       }

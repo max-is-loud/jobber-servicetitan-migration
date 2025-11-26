@@ -176,6 +176,10 @@ class NotesExtractor(BaseExtractor[Note]):
                 self._repository.save_notes([note])
                 processed_count += 1
 
+                # Process note attachments if present (Phase 6 Addendum)
+                # Note attachments are fetched as part of NOTE_BY_ID_QUERY
+                self._process_note_attachments(note_data, note)
+
                 # Log progress periodically with processed vs skipped counts
                 if (processed_count + skipped_count) % 10 == 0:
                     if self._skip_existing_entities and skipped_count > 0:
@@ -216,6 +220,51 @@ class NotesExtractor(BaseExtractor[Note]):
             )
 
         return {"processed": processed_count, "skipped": skipped_count}
+
+    def _process_note_attachments(self, note_data: dict[str, Any], note: Note) -> None:
+        """Process attachments from a note response.
+
+        Extracts attachment metadata from the note response and saves to attachments table
+        with download_status='pending'. This completes the two-pass architecture where:
+        - Pass 1 (max-extract): Collect attachment metadata → attachments table
+        - Pass 2 (download-attachments): Download binary files → filesystem
+
+        Args:
+            note_data: Raw GraphQL response data for the note (with attachments field)
+            note: Mapped Note domain model
+        """
+        attachments_data = note_data.get("attachments", {})
+        attachment_edges = attachments_data.get("edges", [])
+
+        if not attachment_edges:
+            return  # No attachments for this note
+
+        attachments = []
+        for edge in attachment_edges:
+            attachment_node = edge.get("node", {})
+            if not attachment_node:
+                continue
+
+            try:
+                # Add note relationship to attachment node for mapping
+                # EntityMapper expects note.id in the attachment data
+                attachment_node["note"] = {"id": note.id}
+
+                # Map attachment using entity mapper
+                attachment = self._entity_mapper.map_attachment(attachment_node)
+                attachments.append(attachment)
+            except Exception as e:
+                self._logger.debug(
+                    f"Failed to map attachment {attachment_node.get('id')} "
+                    f"for note {note.id}: {e}"
+                )
+
+        # Save all attachments for this note
+        if attachments:
+            self._repository.save_attachments(attachments)
+            self._logger.debug(
+                f"Saved {len(attachments)} attachment(s) for note {note.id}"
+            )
 
     def extract_all(self) -> List[Note]:
         """Extract all notes using deferred loading pattern.
