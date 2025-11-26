@@ -18,6 +18,7 @@ from src.exceptions import (
 )
 
 from .services import ServiceFactory
+from ..loggers.rich_logger import RichLogger
 
 # Get shared console instance
 console = ServiceFactory.get_console()
