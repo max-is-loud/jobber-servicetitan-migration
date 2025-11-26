@@ -2124,3 +2124,132 @@ def _format_bytes(bytes_count: int) -> str:
             return f"{bytes_count:.1f} {unit}"
         bytes_count /= 1024.0
     return f"{bytes_count:.1f} TB"
+
+
+@migrate_app.command(name="max-extract")
+def max_extract(
+    db: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--db",
+            help="Path to SQLite database file",
+            show_default=True,
+        ),
+    ] = Path("jobber_export.db"),
+    entities: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--entities",
+            help="Specific entities to extract (default: all)",
+        ),
+    ] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Resume from last checkpoint",
+        ),
+    ] = False,
+    optimization_level: Annotated[
+        str,
+        typer.Option(
+            "--optimization-level",
+            help="Rate limiting optimization level (conservative/moderate/aggressive)",
+            show_default=True,
+        ),
+    ] = "moderate",
+) -> None:
+    """Extract all Jobber data (Pass 1: metadata extraction with resumable checkpoints).
+
+    Phase 7 orchestrated extraction that processes all entities in dependency order.
+    Supports selective extraction and resume from checkpoint for interrupted migrations.
+
+    This is Pass 1 of the two-phase ETL pattern - it extracts all metadata including
+    attachment URLs but does not download binary files. Use 'download-attachments'
+    after this command to fetch binaries (Pass 2).
+
+    Examples:
+        # Extract all entities
+        tightbeam migrate max-extract
+
+        # Extract specific entities only
+        tightbeam migrate max-extract --entities clients --entities invoices
+
+        # Resume interrupted extraction
+        tightbeam migrate max-extract --resume
+
+        # Use aggressive rate limiting for faster extraction
+        tightbeam migrate max-extract --optimization-level aggressive
+    """
+    from src.coordinators.max_extract_coordinator import MaxExtractCoordinator
+
+    console.print(f"\n{MIGRATION_EMOJI} Starting Jobber Max Extract (Pass 1: Metadata)")
+    console.print(f"   Database: {db}")
+    console.print(f"   Optimization level: {optimization_level}")
+    console.print(f"   Resume: {resume}")
+    if entities:
+        console.print(f"   Entities: {', '.join(entities)}")
+    else:
+        console.print(f"   Entities: ALL (in dependency order)")
+    console.print()
+
+    try:
+        # Initialize services with optimization level
+        repository = ServiceFactory.create_repository(db_path=str(db))
+        logger = ServiceFactory.create_logger(verbose=True)
+        config_manager = ConfigManagerImpl()
+
+        # Create authenticated Jobber client with rate limiting
+        auth_provider = ServiceFactory.create_auth_provider(repository)
+        jobber_client = ServiceFactory.create_rate_limited_jobber_client(
+            auth_provider=auth_provider,
+            repository=repository,
+            config_manager=config_manager,
+            optimization_level=optimization_level,
+        )
+
+        # Create entity mapper
+        entity_mapper = ServiceFactory.create_entity_mapper()
+
+        # Initialize coordinator
+        coordinator = MaxExtractCoordinator(
+            jobber_client=jobber_client,
+            repository=repository,
+            logger=logger,
+            entity_mapper=entity_mapper,
+        )
+
+        # Execute extraction
+        console.print(f"{INFO_EMOJI} Beginning extraction...\n")
+
+        summary = coordinator.extract_all(
+            entities=entities,
+            resume=resume,
+        )
+
+        # Display results
+        console.print(f"\n{MIGRATION_EMOJI} Extraction Complete!")
+        console.print(f"\n📊 Summary:")
+        console.print(f"   Total entities extracted: {summary['total_entities']}")
+        console.print(f"   Entity types processed: {len(summary['results'])}")
+
+        # Show per-entity breakdown
+        console.print(f"\n📦 By Entity Type:")
+        for entity_type, count in summary['results'].items():
+            status_icon = "✓" if count > 0 else "○"
+            console.print(f"   {status_icon} {entity_type}: {count}")
+
+        # Show errors if any
+        if summary['errors']:
+            console.print(f"\n{ERROR_EMOJI} Errors ({len(summary['errors'])}):")
+            for error in summary['errors']:
+                console.print(f"   ✗ {error['entity_type']}: {error['error']}", style="bold red")
+
+        console.print(f"\n{INFO_EMOJI} Next step: Run 'tightbeam migrate download-attachments' to fetch binaries (Pass 2)\n")
+
+    except ConfigurationError as e:
+        console.print(f"{ERROR_EMOJI} Configuration error: {e}", style="bold red")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"{ERROR_EMOJI} Extraction failed: {e}", style="bold red")
+        raise typer.Exit(code=1)

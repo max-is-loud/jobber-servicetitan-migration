@@ -79,6 +79,8 @@ pagination:
   timesheet_entries: 30   # Timesheet entry entities per page
   product_services: 30    # Product/service entities per page
   tax_rates: 30           # Tax rate entities per page
+  notes: 50               # Note entities per page (Pass 1: metadata extraction)
+  nested_notes: 10        # Notes nested within other entities
   default: 30             # Default for new entity types
 ```
 
@@ -278,6 +280,8 @@ pagination:
   timesheet_entries: int   # 1-1,000
   product_services: int    # 1-1,000
   tax_rates: int           # 1-1,000
+  notes: int               # 1-1,000
+  nested_notes: int        # 1-100 (nested within parent entities)
   default: int             # 1-1,000
 
 # Timing delays for operations

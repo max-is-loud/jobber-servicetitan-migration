@@ -2646,15 +2646,24 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to check entity existence in {table_name}: {e}") from e
 
-    def save_migration_state(self, entity_type: str, last_cursor: Optional[str]) -> None:
-        """Save migration state for cursor-based resumption.
+    def save_migration_state(
+        self,
+        entity_type: str,
+        last_cursor: Optional[str] = None,
+        total_fetched: int = 0,
+        sync_status: str = "in_progress",
+    ) -> None:
+        """Save migration state for cursor-based resumption with progress tracking.
 
-        Stores the last processed cursor position for the specified entity type.
-        Uses INSERT OR REPLACE for upsert behavior following Repository patterns.
+        Stores the last processed cursor position, total fetched count, and sync status
+        for the specified entity type. Supports Phase 7's resumable extraction pattern
+        where migrations can be interrupted and resumed without re-processing data.
 
         Args:
             entity_type: Type of entity being migrated (e.g., 'clients', 'invoices')
-            last_cursor: Last processed cursor position, None if starting fresh
+            last_cursor: Last processed cursor position, None if starting fresh or completed
+            total_fetched: Total number of records fetched so far (default: 0)
+            sync_status: Current sync status - 'pending', 'in_progress', 'completed', 'error'
 
         Raises:
             RepositoryError: If database operation fails
@@ -2664,9 +2673,9 @@ class Repository:
 
             cursor.execute(
                 """INSERT OR REPLACE INTO migration_state
-                   (entity_type, last_cursor, updated_at)
-                   VALUES (?, ?, datetime('now'))""",
-                (entity_type, last_cursor),
+                   (entity_type, last_cursor, updated_at, total_fetched, sync_status, last_sync_at)
+                   VALUES (?, ?, datetime('now'), ?, ?, datetime('now'))""",
+                (entity_type, last_cursor, total_fetched, sync_status),
             )
 
             self._connection.commit()
@@ -2678,14 +2687,14 @@ class Repository:
     def get_migration_state(self, entity_type: str) -> Optional[MigrationState]:
         """Retrieve migration state for the specified entity type.
 
-        Gets the last processed cursor position for resuming migrations from
-        the last processed position.
+        Gets the last processed cursor position, total fetched count, and sync status
+        for resuming migrations from the last checkpoint.
 
         Args:
             entity_type: Type of entity to get state for (e.g., 'clients', 'invoices')
 
         Returns:
-            MigrationState instance if found, None if no state exists
+            MigrationState instance with all tracking fields if found, None if no state exists
 
         Raises:
             RepositoryError: If database operation fails
@@ -2694,14 +2703,22 @@ class Repository:
             cursor = self._connection.cursor()
 
             cursor.execute(
-                "SELECT entity_type, last_cursor, updated_at FROM migration_state WHERE entity_type = ?",
+                """SELECT entity_type, last_cursor, updated_at, total_fetched, sync_status, last_sync_at
+                   FROM migration_state WHERE entity_type = ?""",
                 (entity_type,),
             )
             row = cursor.fetchone()
             cursor.close()
 
             if row:
-                return MigrationState(entity_type=row[0], last_cursor=row[1], updated_at=row[2])
+                return MigrationState(
+                    entity_type=row[0],
+                    last_cursor=row[1],
+                    updated_at=row[2],
+                    total_fetched=row[3] or 0,
+                    sync_status=row[4] or "pending",
+                    last_sync_at=row[5],
+                )
 
             return None
 

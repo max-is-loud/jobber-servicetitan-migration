@@ -149,7 +149,7 @@ class BaseExtractor(ABC, Generic[T]):
 
         # Attachment downloader and metrics tracking
         # Used by extractors that handle nested attachments (clients, invoices, quotes, jobs, requests)
-        self._attachment_downloader = AttachmentDownloader(logger=logger)
+        self._attachment_downloader = AttachmentDownloader(repository=repository, logger=logger)
         self._attachments_processed = 0
         self._files_downloaded = 0
         self._bytes_downloaded = 0
@@ -644,12 +644,19 @@ class BaseExtractor(ABC, Generic[T]):
             self._logger.error(f"{self._entity_name} extraction failed: {e}")
             raise
 
-    def extract_all(self) -> List[T]:
-        """Extract all entities with automatic pagination until completion.
+    def extract_all(self, resume: bool = False) -> List[T]:
+        """Extract all entities with automatic pagination and resumable checkpoints.
 
         Continuously calls extract() with cursor pagination until all available
-        entities are processed. Provides complete dataset extraction with
-        comprehensive progress logging and error recovery.
+        entities are processed. Supports Phase 7's resumable extraction pattern
+        where migrations can be interrupted and resumed without re-processing data.
+
+        When resume=True, checks migration_state for existing progress and continues
+        from the last checkpoint. After each page, saves progress checkpoint to enable
+        resume on interruption. Marks extraction as completed when done.
+
+        Args:
+            resume: If True, resume from last checkpoint if available (default: False)
 
         Returns:
             List of all extracted entity objects
@@ -662,8 +669,28 @@ class BaseExtractor(ABC, Generic[T]):
         all_entities = []
         cursor = None
         total_pages = 0
+        total_fetched = 0
 
-        self._logger.info(f"Starting complete {self._entity_name} extraction")
+        # Check for existing progress if resume is enabled
+        if resume:
+            state = self._repository.get_migration_state(self._entity_name)
+            if state and state.sync_status != "completed":
+                cursor = state.last_cursor
+                total_fetched = state.total_fetched
+                self._logger.info(
+                    f"Resuming {self._entity_name} extraction from cursor: {cursor}, "
+                    f"already fetched: {total_fetched}"
+                )
+
+        # Mark extraction as in progress
+        self._repository.save_migration_state(
+            entity_type=self._entity_name,
+            last_cursor=cursor,
+            total_fetched=total_fetched,
+            sync_status="in_progress",
+        )
+
+        self._logger.info(f"Starting {self._entity_name} extraction (resume={resume})")
 
         while True:
             result = self.extract(cursor=cursor)
@@ -673,12 +700,29 @@ class BaseExtractor(ABC, Generic[T]):
             all_entities.extend(entities)
 
             total_pages += result["pages_processed"]
+            total_fetched += len(entities)
+            cursor = result["end_cursor"]
+
+            # Checkpoint progress after each page (enables resume)
+            self._repository.save_migration_state(
+                entity_type=self._entity_name,
+                last_cursor=cursor,
+                total_fetched=total_fetched,
+                sync_status="in_progress",
+            )
 
             if not result["has_next_page"]:
                 break
 
-            cursor = result["end_cursor"]
             self._logger.info(f"Continuing extraction from cursor: {cursor} " f"(total pages: {total_pages})")
+
+        # Mark extraction as completed
+        self._repository.save_migration_state(
+            entity_type=self._entity_name,
+            last_cursor=None,  # Clear cursor on completion
+            total_fetched=total_fetched,
+            sync_status="completed",
+        )
 
         self._logger.info(
             f"Completed full extraction: {len(all_entities)} {self._entity_name}s " f"from {total_pages} pages"

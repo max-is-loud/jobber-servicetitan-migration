@@ -28,6 +28,7 @@ pagination:
   timesheet_entries: 30
   product_services: 30
   tax_rates: 30
+  notes: 50
   nested_notes: 10
   default: 30
 delays:
