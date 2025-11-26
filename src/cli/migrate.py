@@ -2182,6 +2182,8 @@ def max_extract(
         # Use aggressive rate limiting for faster extraction
         tightbeam migrate max-extract --optimization-level aggressive
     """
+    from src.auth import AuthProvider
+    from src.config import ConfigManagerImpl
     from src.coordinators.max_extract_coordinator import MaxExtractCoordinator
 
     console.print(f"\n{MIGRATION_EMOJI} Starting Jobber Max Extract (Pass 1: Metadata)")
@@ -2201,7 +2203,8 @@ def max_extract(
         config_manager = ConfigManagerImpl()
 
         # Create authenticated Jobber client with rate limiting
-        auth_provider = ServiceFactory.create_auth_provider(repository)
+        oauth_manager = ServiceFactory.create_oauth2_manager()
+        auth_provider = AuthProvider(oauth_manager, repository)
         jobber_client = ServiceFactory.create_rate_limited_jobber_client(
             auth_provider=auth_provider,
             repository=repository,
