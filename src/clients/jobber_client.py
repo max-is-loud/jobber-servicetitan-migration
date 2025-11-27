@@ -139,6 +139,7 @@ class JobberClient:
                 node {{
                   description
                   quantity
+                  unitPrice
                 }}
               }}
               pageInfo {{
@@ -216,6 +217,8 @@ class JobberClient:
                   name
                   description
                   qty
+                  unitCost
+                  unitPrice
                 }}
               }}
               pageInfo {{
@@ -351,8 +354,8 @@ class JobberClient:
     def _get_properties_query(self) -> str:
         """Get GraphQL query for fetching properties with configurable pagination.
 
-        Note: PropertyAddress field structure unknown - excluding address details for now.
-        Property type does not have: name, coordinates, createdAt, updatedAt fields.
+        PropertyAddress has: street, street1, street2, city, province, postalCode, country, coordinates
+        Property has 'name' field but NOT coordinates, createdAt, updatedAt (those are on address)
         """
         size = self._get_pagination_size("properties")
         return f"""
@@ -363,6 +366,19 @@ class JobberClient:
             id
             client {{
               id
+            }}
+            address {{
+              street
+              street1
+              street2
+              city
+              province
+              postalCode
+              country
+              coordinates {{
+                latitude
+                longitude
+              }}
             }}
           }}
         }}
@@ -449,9 +465,9 @@ class JobberClient:
     """
 
     # GraphQL query for fetching users with cursor pagination
-    # email: UserEmail! (object type with fields TBD - excluding for now)
-    # phone: UserPhone (object type with fields TBD - excluding for now)
-    # timezone: Timezone (could be scalar or object - excluding to avoid errors)
+    # UserEmail has 'raw' field (not 'email')
+    # UserPhone has 'raw' field (not 'number')
+    # Timezone is SCALAR (query directly)
     USERS_QUERY = """
     query GetUsers($cursor: String) {
       users(first: 100, after: $cursor) {
@@ -462,6 +478,13 @@ class JobberClient:
               first
               last
             }
+            email {
+              raw
+            }
+            phone {
+              raw
+            }
+            timezone
             isAccountAdmin
             isAccountOwner
             status
