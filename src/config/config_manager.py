@@ -352,6 +352,9 @@ class ConfigManagerImpl:
                 old_config = self.config
                 self._load_config()
 
+                # Only print message if configuration actually changed
+                config_changed = old_config != self.config
+
                 # Notify callbacks of configuration change
                 for callback in self._reload_callbacks:
                     try:
@@ -360,7 +363,9 @@ class ConfigManagerImpl:
                         # Don't let callback errors break the reload
                         pass
 
-                print(f"🔄 Configuration reloaded from {self.config_dir / 'settings.yaml'}")
+                # Only notify user if something actually changed
+                if config_changed:
+                    print(f"🔄 Configuration reloaded from {self.config_dir / 'settings.yaml'}")
 
             except Exception as e:
                 print(f"❌ Failed to reload configuration: {e}")
