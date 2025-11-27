@@ -25,12 +25,12 @@ class User:
     id: str  # EncodedId! - The unique identifier
     first_name: str  # name.first: String! - User's first name
     last_name: str  # name.last: String! - User's last name
-    email: str  # email.email: String! - Primary email address
+    email: str  # email.raw: String! - Primary email address (UserEmail type)
     role: str  # Derived from isAccountAdmin/isAccountOwner flags
     is_account_admin: str  # isAccountAdmin: Boolean! - Admin privileges
     is_account_owner: str  # isAccountOwner: Boolean! - Account ownership
     status: str  # status: UserStatusEnum! - User status
-    phone: str  # phone.number: String - Phone number
-    timezone: str  # timezone.identifier: String - User's timezone
+    phone: str  # phone.raw: String - Phone number (UserPhone type)
+    timezone: str  # timezone: Timezone (scalar) - User's timezone
     created_at: str  # createdAt: ISO8601DateTime! - When user was created
     last_login_at: str  # lastLoginAt: ISO8601DateTime - Last login timestamp

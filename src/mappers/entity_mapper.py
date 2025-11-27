@@ -642,9 +642,9 @@ class EntityMapper:
             first_name = MapperUtils.safe_get_nested(name, "first", default="")
             last_name = MapperUtils.safe_get_nested(name, "last", default="")
 
-            # Extract email
+            # Extract email (UserEmail type uses 'raw' field, not 'email')
             email_obj = data.get("email", {})
-            email = MapperUtils.safe_get_nested(email_obj, "email", default="")
+            email = MapperUtils.safe_get_nested(email_obj, "raw", default="")
 
             # Derive role from admin flags
             is_account_admin = data.get("isAccountAdmin", False)
@@ -661,13 +661,12 @@ class EntityMapper:
             is_account_owner_str = str(is_account_owner).lower()
             status = data.get("status", "")
 
-            # Extract phone
+            # Extract phone (UserPhone type uses 'raw' field, not 'number')
             phone_obj = data.get("phone", {})
-            phone = MapperUtils.safe_get_nested(phone_obj, "number", default="")
+            phone = MapperUtils.safe_get_nested(phone_obj, "raw", default="")
 
-            # Extract timezone
-            timezone_obj = data.get("timezone", {})
-            timezone = MapperUtils.safe_get_nested(timezone_obj, "identifier", default="")
+            # Extract timezone (Timezone is SCALAR, query directly)
+            timezone = data.get("timezone", "")
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
