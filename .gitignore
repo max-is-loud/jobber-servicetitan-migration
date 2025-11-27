@@ -192,6 +192,7 @@ downloads/
 
 # Workspace/development notes (not part of source)
 /CLAUDE.md
+/AGENTS.md
 /.document_archive/
 .obsidian/
 
