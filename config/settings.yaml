@@ -17,8 +17,8 @@ rate_limits:
 max_retries: 15
 pagination:
   clients: 50
-  invoices: 50
-  quotes: 50
+  invoices: 26
+  quotes: 18
   jobs: 30
   properties: 55
   requests: 30

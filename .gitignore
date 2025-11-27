@@ -195,6 +195,21 @@ downloads/
 /.document_archive/
 .obsidian/
 
+# Working/internal documentation (project root only - docs/ folder is tracked)
+/*_notes.md
+/*_draft.md
+/*_wip.md
+/*_scratch.md
+/*_todo.md
+/*_plan.md
+/NOTES*.md
+/TODO*.md
+/DRAFT*.md
+/WIP*.md
+/SCRATCH*.md
+/PLAN*.md
+# Only README.md is allowed in project root (CLAUDE.md is ignored above)
+
 # Temporary data and cache
 temp/
 tmp/

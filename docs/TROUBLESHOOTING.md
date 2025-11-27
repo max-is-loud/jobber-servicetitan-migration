@@ -159,7 +159,7 @@ Check throttle metrics in logs:
 1. **Reduce optimization level** (quickest fix):
    ```bash
    # Instead of aggressive
-   uv run tightbeam migrate start --optimization-level conservative
+   uv run tightbeam migrate max-extract --optimization-level conservative
    ```
 
 2. **Adjust rate limit config** in `config/settings.yaml`:
@@ -178,9 +178,9 @@ Check throttle metrics in logs:
 4. **Spread out migration** over multiple sessions:
    ```bash
    # Migrate in batches with pauses
-   uv run tightbeam migrate start --page-limit 10
+   uv run tightbeam migrate max-extract
    # Wait 5-10 minutes
-   uv run tightbeam migrate start --resume --page-limit 10
+   uv run tightbeam migrate max-extract --resume
    ```
 
 ### Issue: Rate limit errors despite conservative settings
@@ -290,7 +290,7 @@ sqlite3 tightbeam.db "PRAGMA integrity_check;"
 2. If severe, restore from backup (if available) or restart migration:
    ```bash
    rm tightbeam.db
-   uv run tightbeam migrate start
+   uv run tightbeam migrate max-extract
    ```
 
 **Prevention:** Always use `--resume` flag to enable migration state tracking.
@@ -435,7 +435,7 @@ sqlite3 tightbeam.db "SELECT * FROM migration_state;"
 2. If no entries, migration state wasn't initialized:
    ```bash
    # Restart migration with --resume from the beginning
-   uv run tightbeam migrate start --resume
+   uv run tightbeam migrate max-extract --resume
    ```
 
 3. If state exists but not working, check version compatibility:
@@ -483,10 +483,7 @@ For detailed diagnostic output:
 
 ```bash
 # Enable verbose mode for any command
-uv run tightbeam migrate start --verbose
-
-# For extractors
-uv run tightbeam extract clients --db debug.db --verbose
+uv run tightbeam migrate --verbose max-extract
 ```
 
 ### What Verbose Logging Shows
@@ -502,7 +499,7 @@ uv run tightbeam extract clients --db debug.db --verbose
 
 ```bash
 # Capture all output
-uv run tightbeam migrate start --verbose 2>&1 | tee migration.log
+uv run tightbeam migrate --verbose max-extract 2>&1 | tee migration.log
 
 # Review later
 less migration.log
@@ -538,7 +535,7 @@ grep -i "graphql\|api error" migration.log
 
 3. Resume from last checkpoint:
    ```bash
-   uv run tightbeam migrate start --resume
+   uv run tightbeam migrate max-extract --resume
    ```
 
 4. If resume fails, review error and fix underlying issue first
@@ -588,7 +585,7 @@ grep -i "graphql\|api error" migration.log
 4. Start fresh migration:
    ```bash
    uv run tightbeam oauth init  # If needed
-   uv run tightbeam migrate start
+   uv run tightbeam migrate max-extract
    ```
 
 ## Performance Optimization Tips
@@ -597,7 +594,7 @@ grep -i "graphql\|api error" migration.log
 
 1. **Use conservative rate limiting** to avoid throttling slowdowns
 2. **Run during off-peak hours** (Jobber API is faster at night)
-3. **Consider batching** with `--page-limit` and multiple runs
+3. **Monitor progress** and use `--resume` if needed for large datasets
 4. **Monitor disk space** - large databases grow to several GB
 5. **Use SSD storage** for faster SQLite operations
 
@@ -605,8 +602,8 @@ grep -i "graphql\|api error" migration.log
 
 1. **Use separate databases** per client:
    ```bash
-   uv run tightbeam migrate start --db client_a_$(date +%Y%m%d).db
-   uv run tightbeam migrate start --db client_b_$(date +%Y%m%d).db
+   uv run tightbeam migrate --db client_a_$(date +%Y%m%d).db max-extract
+   uv run tightbeam migrate --db client_b_$(date +%Y%m%d).db max-extract
    ```
 
 2. **Don't run concurrent migrations** - rate limits are shared

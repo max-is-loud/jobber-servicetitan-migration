@@ -66,33 +66,21 @@ uv run tightbeam oauth init
 # Follow the displayed instructions to set up your environment variables
 ```
 
-2. **Run a migration (multi-pass approach - recommended):**
+2. **Run a migration:**
 
 ```bash
-# Step 1: Map entities to get counts and estimate effort
-uv run tightbeam migrate map
+# Extract all Jobber data (Pass 1: metadata extraction)
+uv run tightbeam migrate max-extract
 
-# Step 2: Extract full data using the snapshot ID from map output
-uv run tightbeam migrate extract --snapshot-id <snapshot-id>
-
-# Step 3 (Optional): Reconcile to close gaps and handle drift
-uv run tightbeam migrate reconcile --snapshot-id <snapshot-id>
+# Download binary attachment files (Pass 2: file downloads)
+uv run tightbeam migrate download-attachments
 ```
 
-3. **Or use single-pass migration (traditional):**
+3. **Resume a migration:**
 
 ```bash
-uv run tightbeam migrate all
-```
-
-4. **Resume a migration:**
-
-```bash
-# For multi-pass extraction
-uv run tightbeam migrate extract --snapshot-id <id> --resume
-
-# For single-pass migration
-uv run tightbeam migrate all --resume
+# Resume from last checkpoint if interrupted
+uv run tightbeam migrate max-extract --resume
 ```
 
 ## Migration Coordinator Architecture
@@ -168,65 +156,40 @@ uv run tightbeam oauth init
 uv run tightbeam oauth status
 ```
 
-### Multi-Pass Migration (Recommended)
+### Phase 1: Metadata Extraction
 
-The multi-pass approach provides predictable effort estimation and better control:
+Extract all entity metadata including attachment URLs:
 
 ```bash
-# Step 1: Map mode - Discover entities and relation counts
-uv run tightbeam migrate map
+# Extract all entities (default)
+uv run tightbeam migrate max-extract
 
-# Optional: Map specific entity types with a label
-uv run tightbeam migrate map \
-    --entity clients \
-    --entity invoices \
-    --snapshot-label "Q1-2025"
+# Extract specific entity types only
+uv run tightbeam migrate max-extract --entities clients --entities invoices
 
-# Step 2: Extract mode - Hydrate full data from snapshot
-uv run tightbeam migrate extract --snapshot-id <snapshot-id>
+# Resume interrupted extraction
+uv run tightbeam migrate max-extract --resume
 
-# Resume extraction if interrupted
-uv run tightbeam migrate extract --snapshot-id <id> --resume
-
-# Extract specific entity types from snapshot
-uv run tightbeam migrate extract \
-    --snapshot-id <id> \
-    --entity clients \
-    --entity invoices
-
-# Step 3: Reconcile to handle data drift and retry failures
-uv run tightbeam migrate reconcile --snapshot-id <id>
-
-# Reconcile specific entity types
-uv run tightbeam migrate reconcile \
-    --snapshot-id <id> \
-    --entity clients \
-    --entity invoices
+# Use aggressive rate limiting for faster extraction
+uv run tightbeam migrate max-extract --optimization-level aggressive
 ```
 
-**Benefits:**
-- See entity counts before extraction
-- Choose which entities to extract
-- Resume from failures without restarting
-- Retry only failed entities
-- Handle data drift with reconciliation
-- Verify final completeness
+**Features:**
+- Resumable extraction with checkpoints
+- Processes entities in dependency order
+- Captures all metadata including attachment URLs
+- Configurable rate limiting (conservative/moderate/aggressive)
 
-See [MULTI_PASS_MIGRATION.md](MULTI_PASS_MIGRATION.md) for complete guide.
+### Phase 2: Binary File Downloads
 
-### Single-Pass Migration (Traditional)
-
-For simpler migrations or backward compatibility:
+Download attachment files after metadata extraction:
 
 ```bash
-# Migrate all entities in one pass
-uv run tightbeam migrate all
+# Download all pending attachments
+uv run tightbeam migrate download-attachments
 
-# Resume an interrupted migration
-uv run tightbeam migrate all --resume
-
-# Dry run mode (preview only)
-uv run tightbeam migrate all --dry-run
+# Resume interrupted downloads
+uv run tightbeam migrate download-attachments --resume
 ```
 
 ### Advanced Options
@@ -234,17 +197,14 @@ uv run tightbeam migrate all --dry-run
 Available for all migration commands:
 
 ```bash
-# Enable adaptive optimization (auto-tune performance)
-uv run tightbeam migrate --adaptive map
-
 # Set rate limiting level
-uv run tightbeam migrate --optimization-level conservative map
-
-# Enable cost monitoring
-uv run tightbeam migrate --enable-cost-monitoring map
+uv run tightbeam migrate --optimization-level conservative max-extract
 
 # Verbose logging
-uv run tightbeam migrate --verbose map
+uv run tightbeam migrate --verbose max-extract
+
+# Custom database path
+uv run tightbeam migrate --db custom_export.db max-extract
 ```
 
 ## Configuration
@@ -341,11 +301,10 @@ uv run black src/
 
 For detailed technical documentation:
 
-- **[Multi-Pass Migration Guide](MULTI_PASS_MIGRATION.md)**: Complete multi-pass workflow guide
-- **[Database Schema](DATABASE_SCHEMA.md)**: Complete database schema reference
-- **[Migration Coordinator Documentation](MIGRATION_COORDINATOR_DOCUMENTATION.md)**: Coordinator usage guide
-- **[Architecture Updates](ARCHITECTURE_UPDATES.md)**: Technical architecture changes
-- **[Rich Testing Results](RICH_TESTING_RESULTS.md)**: Environment compatibility testing
+- **[Database Schema](docs/DATABASE_SCHEMA.md)**: Complete database schema reference
+- **[Migration Coordinator Documentation](docs/MIGRATION_COORDINATOR_DOCUMENTATION.md)**: Coordinator usage guide
+- **[Configuration Guide](docs/CONFIGURATION.md)**: Configuration and settings reference
+- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)**: Common issues and solutions
 
 ## Contributing
 

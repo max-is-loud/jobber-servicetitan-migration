@@ -1,1061 +1,636 @@
-# Database Schema Documentation
+# TightBeam Database Schema
 
-Complete reference for the TightBeam SQLite database schema, automatically extracted from production code.
+This document describes the SQLite database schema used by TightBeam v2.
 
-**Schema Source:** `src/repositories/repository.py::init_schema()`
-**Total Tables:** 18
-**Database Engine:** SQLite 3
+## Overview
 
-## Table of Contents
+The database is organized into three logical groups:
 
-- [Core Entity Tables](#core-entity-tables)
-  - [clients](#clients)
-  - [invoices](#invoices)
-  - [quotes](#quotes)
-  - [jobs](#jobs)
-  - [properties](#properties)
-  - [requests](#requests)
-- [Resource Tables](#resource-tables)
-  - [users](#users)
-  - [products_services](#products_services)
-  - [tax_rates](#tax_rates)
-- [Content Tables](#content-tables)
-  - [notes](#notes)
-  - [attachments](#attachments)
-- [Time & Expense Tables](#time--expense-tables)
-  - [visits](#visits)
-  - [timesheet_entries](#timesheet_entries)
-  - [expenses](#expenses)
-- [System Tables](#system-tables)
-  - [oauth_tokens](#oauth_tokens)
-  - [migration_state](#migration_state)
-  - [note_references](#note_references)
-  - [graphql_costs](#graphql_costs)
-- [Entity Relationships](#entity-relationships)
-- [Indexes](#indexes)
-- [Common Queries](#common-queries)
+1. **Entity Tables** - Migrated data from Jobber API
+2. **Multi-Pass Tables** - Map/Extract workflow tracking
+3. **System Tables** - Migration state and monitoring
 
----
+## Entity Tables
 
-## Core Entity Tables
+These tables store the actual migrated data from Jobber.
 
 ### clients
 
-Primary customer entity representing Jobber account clients.
+Stores client/customer records.
 
-```sql
-CREATE TABLE clients (
-    id TEXT PRIMARY KEY,
-    first_name TEXT,
-    last_name TEXT,
-    email TEXT,
-    phone TEXT,
-    created_at TEXT,
-    additional_emails TEXT DEFAULT '[]',  -- JSON array
-    additional_phones TEXT DEFAULT '[]'   -- JSON array
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber client ID (primary key) |
-| first_name | TEXT | YES | Client's first name |
-| last_name | TEXT | YES | Client's last name |
-| email | TEXT | YES | Primary email address |
-| phone | TEXT | YES | Primary phone number |
-| created_at | TEXT | YES | ISO 8601 timestamp |
-| additional_emails | TEXT | YES | JSON array of additional emails |
-| additional_phones | TEXT | YES | JSON array of additional phones |
-
-**Relationships:**
-- Has many: invoices, quotes, jobs, properties, requests, visits
-
-**Notes:**
-- `additional_emails` and `additional_phones` added via migration (src/repositories/repository.py:62-65)
-- Stores JSON arrays as TEXT
-
-### invoices
-
-Financial invoice entities linked to clients.
-
-```sql
-CREATE TABLE invoices (
-    id TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL REFERENCES clients(id),
-    number TEXT,
-    total_cents INTEGER,
-    status TEXT,
-    issued_at TEXT,
-    due_date TEXT DEFAULT '',
-    subtotal INTEGER DEFAULT 0,
-    line_items TEXT DEFAULT '[]'  -- JSON array
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber invoice ID (primary key) |
-| client_id | TEXT | NO | Foreign key to clients |
-| number | TEXT | YES | Invoice number (e.g., "INV-001") |
-| total_cents | INTEGER | YES | Total amount in cents |
-| status | TEXT | YES | Invoice status (draft, sent, paid, etc.) |
-| issued_at | TEXT | YES | ISO 8601 timestamp |
-| due_date | TEXT | YES | ISO 8601 date |
-| subtotal | INTEGER | YES | Subtotal before taxes in cents |
-| line_items | TEXT | YES | JSON array of line items |
-
-**Relationships:**
-- Belongs to: clients
-
-**Indexes:**
-- `idx_invoices_client_id` on `client_id`
-
-### quotes
-
-Quote/estimate entities for potential work.
-
-```sql
-CREATE TABLE quotes (
-    id TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL REFERENCES clients(id),
-    quote_number TEXT,
-    title TEXT,
-    total INTEGER,
-    subtotal INTEGER,
-    disclaimer TEXT,
-    line_items TEXT,  -- JSON array
-    created_at TEXT,
-    transitioned_at TEXT,
-    updated_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber quote ID (primary key) |
-| client_id | TEXT | NO | Foreign key to clients |
-| quote_number | TEXT | YES | Quote identifier (e.g., "Q-001") |
-| title | TEXT | YES | Quote title/description |
-| total | INTEGER | YES | Total amount in cents |
-| subtotal | INTEGER | YES | Subtotal before taxes in cents |
-| disclaimer | TEXT | YES | Terms and conditions text |
-| line_items | TEXT | YES | JSON array of quote line items |
-| created_at | TEXT | YES | ISO 8601 timestamp |
-| transitioned_at | TEXT | YES | When quote was accepted/declined |
-| updated_at | TEXT | YES | Last modification timestamp |
-
-**Relationships:**
-- Belongs to: clients
-- May convert to: jobs (via jobs.quote_id), requests (via requests.converted_to_quote_id)
-
-**Indexes:**
-- `idx_quotes_client_id` on `client_id`
-
-### jobs
-
-Work order entities representing scheduled service work.
-
-```sql
-CREATE TABLE jobs (
-    id TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-    property_id TEXT REFERENCES properties(id) ON DELETE SET NULL,
-    quote_id TEXT REFERENCES quotes(id) ON DELETE SET NULL,
-    job_number TEXT,
-    title TEXT,
-    description TEXT,
-    status TEXT,
-    scheduled_start_at TEXT,
-    scheduled_end_at TEXT,
-    completed_at TEXT,
-    total INTEGER,
-    created_at TEXT,
-    updated_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber job ID (primary key) |
-| client_id | TEXT | NO | Foreign key to clients (CASCADE delete) |
-| property_id | TEXT | YES | Foreign key to properties (SET NULL on delete) |
-| quote_id | TEXT | YES | Foreign key to quotes if converted from quote |
-| job_number | TEXT | YES | Job identifier (e.g., "J-001") |
-| title | TEXT | YES | Job title |
-| description | TEXT | YES | Job description/scope |
-| status | TEXT | YES | Job status (pending, in_progress, complete, etc.) |
-| scheduled_start_at | TEXT | YES | Scheduled start timestamp |
-| scheduled_end_at | TEXT | YES | Scheduled end timestamp |
-| completed_at | TEXT | YES | Actual completion timestamp |
-| total | INTEGER | YES | Total job value in cents |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
-
-**Relationships:**
-- Belongs to: clients, properties (optional), quotes (optional)
-- Has many: expenses, visits, timesheet_entries
-
-**Indexes:**
-- `idx_jobs_client_id` on `client_id`
-- `idx_jobs_property_id` on `property_id`
-- `idx_jobs_quote_id` on `quote_id`
-
-**Cascade Behavior:**
-- If client deleted: job is deleted (CASCADE)
-- If property deleted: property_id set to NULL
-- If quote deleted: quote_id set to NULL
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber client ID |
+| first_name | TEXT | Client first name |
+| last_name | TEXT | Client last name |
+| company_name | TEXT | Company name (nullable) |
+| email | TEXT | Email address (nullable) |
+| phone_number | TEXT | Phone number (nullable) |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
 
 ### properties
 
-Service location entities representing client addresses.
+Stores property/service location records.
 
-```sql
-CREATE TABLE properties (
-    id TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-    name TEXT,
-    address_line1 TEXT,
-    address_line2 TEXT,
-    city TEXT,
-    state_province TEXT,
-    postal_code TEXT,
-    country TEXT,
-    latitude TEXT,
-    longitude TEXT,
-    created_at TEXT,
-    updated_at TEXT
-)
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber property ID |
+| client_id | TEXT | Foreign key to clients |
+| street1 | TEXT | Address line 1 (nullable) |
+| street2 | TEXT | Address line 2 (nullable) |
+| city | TEXT | City (nullable) |
+| province | TEXT | Province/state (nullable) |
+| postal_code | TEXT | Postal/ZIP code (nullable) |
+| country | TEXT | Country (nullable) |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
 
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber property ID (primary key) |
-| client_id | TEXT | NO | Foreign key to clients (CASCADE delete) |
-| name | TEXT | YES | Property name/label |
-| address_line1 | TEXT | YES | Street address line 1 |
-| address_line2 | TEXT | YES | Street address line 2 (apt, unit, etc.) |
-| city | TEXT | YES | City name |
-| state_province | TEXT | YES | State or province |
-| postal_code | TEXT | YES | ZIP/postal code |
-| country | TEXT | YES | Country name |
-| latitude | TEXT | YES | GPS latitude (stored as text) |
-| longitude | TEXT | YES | GPS longitude (stored as text) |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
+### jobs
 
-**Relationships:**
-- Belongs to: clients
-- Has many: jobs, requests, visits
+Stores job/work order records.
 
-**Indexes:**
-- `idx_properties_client_id` on `client_id`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber job ID |
+| client_id | TEXT | Foreign key to clients |
+| property_id | TEXT | Foreign key to properties |
+| job_number | TEXT | Human-readable job number |
+| title | TEXT | Job title |
+| description | TEXT | Job description (nullable) |
+| status | TEXT | Job status |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
+| start_at | TEXT | Scheduled start (nullable) |
+| end_at | TEXT | Scheduled end (nullable) |
+
+### invoices
+
+Stores invoice records.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber invoice ID |
+| client_id | TEXT | Foreign key to clients |
+| job_id | TEXT | Foreign key to jobs (nullable) |
+| invoice_number | TEXT | Human-readable invoice number |
+| subject | TEXT | Invoice subject/title |
+| message | TEXT | Invoice message (nullable) |
+| status | TEXT | Invoice status |
+| total | REAL | Total amount |
+| tax | REAL | Tax amount |
+| issued_at | TEXT | ISO8601 issue date |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
+
+### quotes
+
+Stores quote/estimate records.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber quote ID |
+| client_id | TEXT | Foreign key to clients |
+| quote_number | TEXT | Human-readable quote number |
+| message | TEXT | Quote message (nullable) |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
 
 ### requests
 
-Service request entities representing customer inquiries.
+Stores service request records.
 
-```sql
-CREATE TABLE requests (
-    id TEXT PRIMARY KEY,
-    client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-    property_id TEXT REFERENCES properties(id) ON DELETE SET NULL,
-    title TEXT,
-    description TEXT,
-    status TEXT,
-    priority TEXT,
-    source TEXT,
-    assigned_to TEXT,
-    converted_to_quote_id TEXT REFERENCES quotes(id) ON DELETE SET NULL,
-    converted_to_job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
-    created_at TEXT,
-    updated_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber request ID (primary key) |
-| client_id | TEXT | NO | Foreign key to clients (CASCADE delete) |
-| property_id | TEXT | YES | Foreign key to properties |
-| title | TEXT | YES | Request title |
-| description | TEXT | YES | Request details |
-| status | TEXT | YES | Request status (new, converted, cancelled) |
-| priority | TEXT | YES | Priority level (low, medium, high) |
-| source | TEXT | YES | How request originated (phone, email, web) |
-| assigned_to | TEXT | YES | Assigned user name/ID |
-| converted_to_quote_id | TEXT | YES | Quote ID if converted |
-| converted_to_job_id | TEXT | YES | Job ID if converted directly |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
-
-**Relationships:**
-- Belongs to: clients, properties (optional)
-- May convert to: quotes, jobs
-
-**Indexes:**
-- `idx_requests_client_id` on `client_id`
-- `idx_requests_property_id` on `property_id`
-- `idx_requests_converted_to_quote_id` on `converted_to_quote_id`
-- `idx_requests_converted_to_job_id` on `converted_to_job_id`
-
----
-
-## Resource Tables
-
-### users
-
-Team member entities for staff/technician management.
-
-```sql
-CREATE TABLE users (
-    id TEXT PRIMARY KEY,
-    first_name TEXT,
-    last_name TEXT,
-    email TEXT,
-    role TEXT,
-    is_account_admin TEXT,
-    is_account_owner TEXT,
-    status TEXT,
-    phone TEXT,
-    timezone TEXT,
-    created_at TEXT,
-    last_login_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber user ID (primary key) |
-| first_name | TEXT | YES | User's first name |
-| last_name | TEXT | YES | User's last name |
-| email | TEXT | YES | Email address |
-| role | TEXT | YES | User role (admin, technician, office) |
-| is_account_admin | TEXT | YES | Boolean stored as text ("true"/"false") |
-| is_account_owner | TEXT | YES | Boolean stored as text |
-| status | TEXT | YES | Account status (active, inactive) |
-| phone | TEXT | YES | Phone number |
-| timezone | TEXT | YES | User's timezone |
-| created_at | TEXT | YES | Creation timestamp |
-| last_login_at | TEXT | YES | Last login timestamp |
-
-**Relationships:**
-- Has many: timesheet_entries (as user, approver, or payer)
-- Referenced by: visits (assigned_user_id)
-
-**Notes:**
-- Booleans stored as TEXT ("true"/"false") due to SQLite limitations
-
-### products_services
-
-Service catalog items and products.
-
-```sql
-CREATE TABLE products_services (
-    id TEXT PRIMARY KEY,
-    name TEXT,
-    description TEXT,
-    category TEXT,
-    default_unit_cost_cents INTEGER,
-    internal_unit_cost_cents INTEGER,
-    markup_percentage TEXT,
-    duration_minutes INTEGER,
-    taxable TEXT,
-    visible TEXT,
-    online_booking_enabled TEXT,
-    online_booking_sort_order INTEGER,
-    active TEXT,
-    created_at TEXT,
-    updated_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber product/service ID (primary key) |
-| name | TEXT | YES | Product/service name |
-| description | TEXT | YES | Detailed description |
-| category | TEXT | YES | Category classification |
-| default_unit_cost_cents | INTEGER | YES | Default price in cents |
-| internal_unit_cost_cents | INTEGER | YES | Internal cost in cents |
-| markup_percentage | TEXT | YES | Markup % stored as text |
-| duration_minutes | INTEGER | YES | Expected service duration |
-| taxable | TEXT | YES | Boolean stored as text |
-| visible | TEXT | YES | Boolean - show to customers |
-| online_booking_enabled | TEXT | YES | Boolean - allow online booking |
-| online_booking_sort_order | INTEGER | YES | Display order online |
-| active | TEXT | YES | Boolean - currently offered |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
-
-**Notes:**
-- Used in line items for quotes, invoices, and jobs
-
-### tax_rates
-
-Regional tax configuration.
-
-```sql
-CREATE TABLE tax_rates (
-    id TEXT PRIMARY KEY,
-    name TEXT,
-    rate_percentage TEXT,
-    region TEXT,
-    compound TEXT,
-    active TEXT,
-    description TEXT,
-    tax_number TEXT,
-    display_order INTEGER,
-    default_for_region TEXT,
-    created_at TEXT,
-    updated_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber tax rate ID (primary key) |
-| name | TEXT | YES | Tax name (e.g., "GST", "PST", "VAT") |
-| rate_percentage | TEXT | YES | Tax rate as percentage text |
-| region | TEXT | YES | Geographic region |
-| compound | TEXT | YES | Boolean - compound tax |
-| active | TEXT | YES | Boolean - currently in use |
-| description | TEXT | YES | Tax description |
-| tax_number | TEXT | YES | Government tax number |
-| display_order | INTEGER | YES | Display order in UI |
-| default_for_region | TEXT | YES | Boolean - default for region |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
-
----
-
-## Content Tables
-
-### notes
-
-Polymorphic note entities that can attach to any parent entity.
-
-```sql
-CREATE TABLE notes (
-    id TEXT PRIMARY KEY,
-    entity_type TEXT NOT NULL,
-    entity_id TEXT NOT NULL,
-    message TEXT,
-    created_at TEXT,
-    updated_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber note ID (primary key) |
-| entity_type | TEXT | NO | Parent entity type (Client, Invoice, Job, etc.) |
-| entity_id | TEXT | NO | Parent entity ID |
-| message | TEXT | YES | Note content |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
-
-**Relationships:**
-- Polymorphic belongs to: clients, invoices, jobs, quotes, etc. (via entity_type + entity_id)
-- Has many: attachments
-
-**Indexes:**
-- `idx_notes_entity` composite index on `(entity_type, entity_id)`
-
-**Notes:**
-- Uses polymorphic association pattern
-- Single notes table for all entity types
-- Jobber GraphQL returns typed notes (ClientNote, InvoiceNote, etc.)
-
-### attachments
-
-File attachments linked to notes.
-
-```sql
-CREATE TABLE attachments (
-    id TEXT PRIMARY KEY,
-    note_id TEXT NOT NULL REFERENCES notes(id),
-    file_name TEXT,
-    content_type TEXT,
-    original_url TEXT,
-    local_file_path TEXT,
-    file_size INTEGER,
-    created_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber attachment ID (primary key) |
-| note_id | TEXT | NO | Foreign key to notes |
-| file_name | TEXT | YES | Original filename |
-| content_type | TEXT | YES | MIME type (e.g., "image/jpeg") |
-| original_url | TEXT | YES | Jobber CDN URL |
-| local_file_path | TEXT | YES | Local filesystem path after download |
-| file_size | INTEGER | YES | File size in bytes |
-| created_at | TEXT | YES | Upload timestamp |
-
-**Relationships:**
-- Belongs to: notes
-
-**Indexes:**
-- `idx_attachments_note_id` on `note_id`
-
-**Notes:**
-- `local_file_path` populated by AttachmentDownloader extractor
-- Files downloaded to `attachments/` directory by default
-
----
-
-## Time & Expense Tables
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber request ID |
+| client_id | TEXT | Foreign key to clients |
+| property_id | TEXT | Foreign key to properties (nullable) |
+| title | TEXT | Request title |
+| description | TEXT | Request description (nullable) |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
 
 ### visits
 
-Scheduled service visits/appointments.
+Stores visit/appointment records.
 
-```sql
-CREATE TABLE visits (
-    id TEXT PRIMARY KEY,
-    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-    property_id TEXT REFERENCES properties(id) ON DELETE SET NULL,
-    assigned_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    title TEXT,
-    instructions TEXT,
-    status TEXT,
-    all_day TEXT,
-    duration_minutes INTEGER,
-    start_at TEXT,
-    end_at TEXT,
-    completed_at TEXT,
-    created_at TEXT,
-    updated_at TEXT
-)
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber visit ID |
+| job_id | TEXT | Foreign key to jobs |
+| title | TEXT | Visit title |
+| start_at | TEXT | ISO8601 scheduled start |
+| end_at | TEXT | ISO8601 scheduled end |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
 
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber visit ID (primary key) |
-| job_id | TEXT | NO | Foreign key to jobs (CASCADE delete) |
-| client_id | TEXT | NO | Foreign key to clients (CASCADE delete) |
-| property_id | TEXT | YES | Foreign key to properties |
-| assigned_user_id | TEXT | YES | Foreign key to users (assigned technician) |
-| title | TEXT | YES | Visit title |
-| instructions | TEXT | YES | Special instructions |
-| status | TEXT | YES | Visit status (scheduled, in_progress, complete) |
-| all_day | TEXT | YES | Boolean - all-day event |
-| duration_minutes | INTEGER | YES | Scheduled duration |
-| start_at | TEXT | YES | Scheduled start timestamp |
-| end_at | TEXT | YES | Scheduled end timestamp |
-| completed_at | TEXT | YES | Actual completion timestamp |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
+### users
 
-**Relationships:**
-- Belongs to: jobs, clients, properties (optional), users (optional)
-- Has many: timesheet_entries
+Stores user/team member records.
 
-**Indexes:**
-- `idx_visits_job_id` on `job_id`
-- `idx_visits_client_id` on `client_id`
-- `idx_visits_property_id` on `property_id`
-- `idx_visits_assigned_user_id` on `assigned_user_id`
-
-### timesheet_entries
-
-Time tracking records for work performed.
-
-```sql
-CREATE TABLE timesheet_entries (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    visit_id TEXT REFERENCES visits(id) ON DELETE SET NULL,
-    approved_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    paid_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    label TEXT,
-    note TEXT,
-    labour_rate TEXT,
-    final_duration_seconds INTEGER,
-    visit_duration_total_seconds INTEGER,
-    approved TEXT,
-    ticking TEXT,
-    start_at TEXT,
-    end_at TEXT,
-    created_at TEXT,
-    updated_at TEXT
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber timesheet entry ID (primary key) |
-| user_id | TEXT | NO | Foreign key to users (worker) |
-| job_id | TEXT | NO | Foreign key to jobs |
-| visit_id | TEXT | YES | Foreign key to visits |
-| approved_by_id | TEXT | YES | Foreign key to users (approver) |
-| paid_by_id | TEXT | YES | Foreign key to users (payer) |
-| label | TEXT | YES | Entry label/category |
-| note | TEXT | YES | Additional notes |
-| labour_rate | TEXT | YES | Hourly rate (stored as text) |
-| final_duration_seconds | INTEGER | YES | Final worked duration |
-| visit_duration_total_seconds | INTEGER | YES | Total visit duration |
-| approved | TEXT | YES | Boolean - approval status |
-| ticking | TEXT | YES | Boolean - currently running |
-| start_at | TEXT | YES | Start timestamp |
-| end_at | TEXT | YES | End timestamp |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
-
-**Relationships:**
-- Belongs to: users (worker), jobs, visits (optional)
-- References: users (as approver), users (as payer)
-
-**Indexes:**
-- `idx_timesheet_entries_user_id` on `user_id`
-- `idx_timesheet_entries_job_id` on `job_id`
-- `idx_timesheet_entries_visit_id` on `visit_id`
-- `idx_timesheet_entries_approved_by_id` on `approved_by_id`
-- `idx_timesheet_entries_paid_by_id` on `paid_by_id`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber user ID |
+| first_name | TEXT | User first name |
+| last_name | TEXT | User last name |
+| email | TEXT | Email address |
+| account_role | TEXT | Role in account (nullable) |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
 
 ### expenses
 
-Job-related expense tracking.
+Stores expense records.
 
-```sql
-CREATE TABLE expenses (
-    id TEXT PRIMARY KEY,
-    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    amount_cents INTEGER,
-    description TEXT,
-    category TEXT,
-    receipt_url TEXT,
-    vendor TEXT,
-    expense_date TEXT,
-    created_at TEXT,
-    updated_at TEXT
-)
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber expense ID |
+| description | TEXT | Expense description |
+| total | REAL | Total amount |
+| category | TEXT | Expense category (nullable) |
+| incurred_at | TEXT | ISO8601 expense date |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
+
+### notes
+
+Stores note records attached to various entities.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber note ID |
+| parent_type | TEXT | Parent entity type |
+| parent_id | TEXT | Parent entity ID |
+| body | TEXT | Note content |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
+| author_id | TEXT | Foreign key to users (nullable) |
+
+### attachments
+
+Stores file attachment records.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber attachment ID |
+| parent_type | TEXT | Parent entity type |
+| parent_id | TEXT | Parent entity ID |
+| file_name | TEXT | Original filename |
+| file_url | TEXT | Jobber API URL |
+| local_path | TEXT | Local filesystem path (nullable) |
+| file_size | INTEGER | File size in bytes (nullable) |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
+
+### products_services
+
+Stores product and service catalog items.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber item ID |
+| name | TEXT | Product/service name |
+| description | TEXT | Description (nullable) |
+| unit_cost | REAL | Cost per unit |
+| type | TEXT | "PRODUCT" or "SERVICE" |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
+
+### tax_rates
+
+Stores tax rate configurations.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber tax rate ID |
+| name | TEXT | Tax rate name |
+| rate | REAL | Tax rate percentage |
+| compound | INTEGER | 1 if compound tax, 0 otherwise |
+| recoverable | INTEGER | 1 if recoverable, 0 otherwise |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
+
+### timesheet_entries
+
+Stores timesheet/time tracking entries.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | Jobber timesheet entry ID |
+| user_id | TEXT | Foreign key to users |
+| job_id | TEXT | Foreign key to jobs (nullable) |
+| description | TEXT | Work description (nullable) |
+| start_at | TEXT | ISO8601 start time |
+| end_at | TEXT | ISO8601 end time |
+| total_time | REAL | Total hours worked |
+| created_at | TEXT | ISO8601 creation timestamp |
+| updated_at | TEXT | ISO8601 last update timestamp |
+
+## Multi-Pass Workflow Tables
+
+These tables support the multi-pass map/extract migration strategy.
+
+### map_snapshot
+
+Tracks map pass execution metadata for multi-pass migrations.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | TEXT PRIMARY KEY | UUID snapshot identifier |
+| created_at | TEXT NOT NULL | ISO8601 creation timestamp |
+| pass1_cutoff | TEXT NOT NULL | ISO8601 cutoff time for snapshot |
+| label | TEXT | Optional human-friendly label |
+| entities_included | TEXT | JSON array of entity types |
+
+**Purpose:** Enables multiple extract passes from the same map data and comparison over time.
+
+**Example entities_included:**
+```json
+["clients", "invoices", "quotes", "jobs"]
 ```
 
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | TEXT | NO | Jobber expense ID (primary key) |
-| job_id | TEXT | NO | Foreign key to jobs (CASCADE delete) |
-| amount_cents | INTEGER | YES | Expense amount in cents |
-| description | TEXT | YES | Expense description |
-| category | TEXT | YES | Expense category |
-| receipt_url | TEXT | YES | URL to receipt image/document |
-| vendor | TEXT | YES | Vendor name |
-| expense_date | TEXT | YES | Date expense occurred |
-| created_at | TEXT | YES | Creation timestamp |
-| updated_at | TEXT | YES | Last modification timestamp |
+**Indexes:**
+- Primary key on `id`
+- Index on `created_at` for chronological queries
 
-**Relationships:**
-- Belongs to: jobs
+### entity_inventory
+
+Stores discovered entities from map pass with lightweight metadata.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| entity_type | TEXT NOT NULL | Entity type (e.g., "clients") |
+| entity_id | TEXT NOT NULL | Jobber API identifier |
+| discovered_at | TEXT NOT NULL | ISO8601 discovery timestamp |
+| map_snapshot_id | TEXT NOT NULL | Foreign key to map_snapshot |
+| updated_at | TEXT | Last update from API (nullable) |
+| estimated_relations_json | TEXT | JSON with relation counts |
+
+**Primary Key:** `(entity_type, entity_id, map_snapshot_id)`
+
+**Purpose:** Provides inventory for extract pass planning and cost estimation.
+
+**Example estimated_relations_json:**
+```json
+{"notes": 5, "attachments": 2, "line_items": 10, "visits": 3}
+```
 
 **Indexes:**
-- `idx_expenses_job_id` on `job_id`
+- Primary key on `(entity_type, entity_id, map_snapshot_id)`
+- Index on `map_snapshot_id` for snapshot queries
+- Index on `entity_type` for per-type aggregation
 
----
+### extract_queue_item
+
+Tracks extraction status per entity for resumable extraction.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| entity_type | TEXT NOT NULL | Entity type to extract |
+| entity_id | TEXT NOT NULL | Entity identifier |
+| status | TEXT NOT NULL | pending/in_progress/done/failed |
+| map_snapshot_id | TEXT NOT NULL | Foreign key to map_snapshot |
+| updated_at | TEXT NOT NULL | ISO8601 last update timestamp |
+| last_error | TEXT | Error message if failed (nullable) |
+| attempt_count | INTEGER | Number of extraction attempts |
+
+**Primary Key:** `(entity_type, entity_id, map_snapshot_id)`
+
+**Purpose:** Enables resumable extraction with per-entity status tracking.
+
+**Status flow:** `pending` → `in_progress` → `done` (success) or `failed` (retry)
+
+**Indexes:**
+- Primary key on `(entity_type, entity_id, map_snapshot_id)`
+- Index on `(map_snapshot_id, status)` for queue queries
+- Index on `status` for status filtering
+
+### attachment_queue_item
+
+Tracks binary download status separately from entity extraction.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| attachment_id | TEXT NOT NULL | Attachment identifier |
+| parent_type | TEXT NOT NULL | Parent entity type |
+| parent_id | TEXT NOT NULL | Parent entity ID |
+| status | TEXT NOT NULL | pending/in_progress/done/failed |
+| map_snapshot_id | TEXT NOT NULL | Foreign key to map_snapshot |
+| updated_at | TEXT NOT NULL | ISO8601 last update timestamp |
+| last_error | TEXT | Error message if failed (nullable) |
+| attempt_count | INTEGER | Number of download attempts |
+
+**Primary Key:** `(attachment_id, map_snapshot_id)`
+
+**Purpose:** Decouples attachment downloads from entity extraction for isolated retry.
+
+**Status flow:** `pending` → `in_progress` → `done` (success) or `failed` (retry)
+
+**Indexes:**
+- Primary key on `(attachment_id, map_snapshot_id)`
+- Index on `(map_snapshot_id, status)` for queue queries
+- Index on `(parent_type, parent_id)` for parent lookups
 
 ## System Tables
 
-### oauth_tokens
-
-OAuth2 token storage for Jobber API authentication.
-
-```sql
-CREATE TABLE oauth_tokens (
-    id INTEGER PRIMARY KEY,
-    access_token TEXT NOT NULL,
-    refresh_token TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    created_at TEXT NOT NULL
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | INTEGER | NO | Auto-increment primary key |
-| access_token | TEXT | NO | JWT access token |
-| refresh_token | TEXT | NO | Refresh token for renewal |
-| expires_at | TEXT | NO | Token expiration timestamp |
-| created_at | TEXT | NO | Token creation timestamp |
-
-**Notes:**
-- Typically contains single row (latest token)
-- Managed by OAuth2Manager (src/auth/oauth2_manager.py)
-- Tokens refreshed automatically before expiration
+These tables track migration state and performance monitoring.
 
 ### migration_state
 
-Cursor-based resumption state for entity migrations.
+Tracks migration execution state for resume functionality.
 
-```sql
-CREATE TABLE migration_state (
-    entity_type TEXT PRIMARY KEY,
-    last_cursor TEXT,
-    updated_at TEXT NOT NULL
-)
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| key | TEXT PRIMARY KEY | State key identifier |
+| value | TEXT | State value (JSON or scalar) |
 
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| entity_type | TEXT | NO | Entity type name (primary key) |
-| last_cursor | TEXT | YES | GraphQL cursor position |
-| updated_at | TEXT | NO | Last update timestamp |
+**Purpose:** Stores checkpoints for resumable migrations and configuration state.
 
-**Entity Types:**
-- clients
-- invoices
-- quotes
-- jobs
-- properties
-- requests
-- users
-- notes
-- attachments
-- visits
-- timesheet_entries
-- expenses
-- products_services
-- tax_rates
+**Common keys:**
+- `last_migration_timestamp` - ISO8601 timestamp of last successful migration
+- `resume_cursor_<entity_type>` - Pagination cursor for entity type
 
-**Notes:**
-- Enables `--resume` functionality
-- Stores GraphQL pagination cursor per entity type
-- Managed by Repository.save_migration_state() and Repository.get_migration_state()
+### migration_summary
 
-### note_references
+Stores detailed migration execution summaries.
 
-Temporary storage for deferred note loading during large migrations.
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER PRIMARY KEY AUTOINCREMENT | Summary record ID |
+| started_at | TEXT NOT NULL | ISO8601 migration start time |
+| completed_at | TEXT | ISO8601 completion time (nullable) |
+| entity_type | TEXT | Entity type migrated (nullable) |
+| entities_processed | INTEGER | Count of entities processed |
+| entities_failed | INTEGER | Count of failures |
+| total_errors | INTEGER | Total error count |
+| status | TEXT | Migration status |
+| error_details | TEXT | JSON array of error details (nullable) |
 
-```sql
-CREATE TABLE note_references (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    note_id TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    entity_id TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-)
-```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | INTEGER | NO | Auto-increment primary key |
-| note_id | TEXT | NO | Jobber note ID to fetch |
-| entity_type | TEXT | NO | Parent entity type |
-| entity_id | TEXT | NO | Parent entity ID |
-| created_at | TEXT | YES | Reference creation timestamp (auto) |
+**Purpose:** Provides audit trail and performance metrics for migrations.
 
 **Indexes:**
-- `idx_note_references_entity` composite index on `(entity_type, entity_id)`
+- Primary key on `id`
+- Index on `started_at` for chronological queries
+- Index on `entity_type` for per-type analysis
 
-**Notes:**
-- Used by NoteReferenceCollector during client/invoice migrations
-- Allows deferred note fetching to avoid nested query costs
-- See docs/architecture/notes-optimization.md for optimization strategy
+### graphql_cost
 
-### graphql_costs
+Tracks GraphQL query costs and rate limiting for performance analysis.
 
-GraphQL query cost tracking for monitoring and optimization.
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER PRIMARY KEY AUTOINCREMENT | Cost record ID |
+| query_name | TEXT | GraphQL operation name |
+| timestamp | TEXT NOT NULL | ISO8601 query timestamp |
+| actual_cost | INTEGER | Actual query cost |
+| requested_cost | INTEGER | Requested cost estimate |
+| throttle_status | TEXT | Throttle status returned |
+| requested_query_cost | INTEGER | Cost requested from API |
+| actual_query_cost | INTEGER | Actual cost charged |
+| current_available | INTEGER | Available cost after query |
+| maximum_available | INTEGER | Maximum bucket size |
+| restore_rate | INTEGER | Cost restore rate per second |
 
+**Purpose:** Enables performance tuning and rate limit optimization analysis.
+
+**Indexes:**
+- Primary key on `id`
+- Index on `timestamp` for time-series queries
+- Index on `query_name` for per-operation analysis
+
+## Relationships
+
+### Primary Relationships
+
+```
+clients (1) ──→ (many) properties
+clients (1) ──→ (many) jobs
+clients (1) ──→ (many) invoices
+clients (1) ──→ (many) quotes
+clients (1) ──→ (many) requests
+jobs (1) ──→ (many) visits
+jobs (1) ──→ (many) invoices (optional)
+properties (1) ──→ (many) jobs
+users (1) ──→ (many) timesheet_entries
+```
+
+### Attachment Relationships
+
+```
+* (many entities) ──→ (many) notes
+* (many entities) ──→ (many) attachments
+notes (1) ──→ (many) attachments
+```
+
+Notes and attachments use polymorphic relationships via `parent_type` and `parent_id` columns.
+
+### Multi-Pass Relationships
+
+```
+map_snapshot (1) ──→ (many) entity_inventory
+map_snapshot (1) ──→ (many) extract_queue_item
+map_snapshot (1) ──→ (many) attachment_queue_item
+```
+
+## Data Types
+
+All tables use SQLite's flexible typing with the following conventions:
+
+- **TEXT** - Strings, ISO8601 timestamps, JSON
+- **INTEGER** - Counts, flags, autoincrement IDs
+- **REAL** - Monetary amounts, percentages, hours
+
+### ISO8601 Timestamps
+
+All timestamp columns use ISO8601 format with timezone:
+```
+2025-01-20T12:34:56.789Z
+```
+
+### JSON Columns
+
+JSON data is stored as TEXT for SQLite compatibility:
+- `entities_included` in `map_snapshot`
+- `estimated_relations_json` in `entity_inventory`
+- `error_details` in `migration_summary`
+
+Query with SQLite JSON functions:
 ```sql
-CREATE TABLE graphql_costs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    query_type TEXT NOT NULL,
-    batch_size INTEGER NOT NULL,
-    requested_cost INTEGER NOT NULL,
-    actual_cost INTEGER NOT NULL,
-    cost_difference INTEGER NOT NULL,
-    timestamp REAL NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-)
+SELECT entity_id, json_extract(estimated_relations_json, '$.notes') as note_count
+FROM entity_inventory
+WHERE json_extract(estimated_relations_json, '$.notes') > 10;
 ```
-
-**Columns:**
-| Column | Type | Nullable | Description |
-|--------|------|----------|-------------|
-| id | INTEGER | NO | Auto-increment primary key |
-| query_type | TEXT | NO | Query identifier (e.g., "clients", "invoices") |
-| batch_size | INTEGER | NO | Number of entities in batch |
-| requested_cost | INTEGER | NO | Estimated cost before query |
-| actual_cost | INTEGER | NO | Actual cost from GraphQL response |
-| cost_difference | INTEGER | NO | Difference (actual - requested) |
-| timestamp | REAL | NO | Unix timestamp |
-| created_at | TEXT | YES | Creation timestamp (auto) |
-
-**Notes:**
-- Populated by MetricsCollector when cost monitoring enabled
-- Helps identify query optimization opportunities
-- Used for rate limit tuning and efficiency analysis
-
----
-
-## Entity Relationships
-
-### Relationship Diagram (ERD)
-
-```
-clients (1) ──< (N) invoices
-        │
-        ├──< (N) quotes
-        │        │
-        │        └──> (1) jobs (converted from quote)
-        │
-        ├──< (N) properties
-        │        │
-        │        └──< (N) jobs
-        │                 │
-        │                 ├──< (N) visits
-        │                 │        │
-        │                 │        └──< (N) timesheet_entries
-        │                 │
-        │                 └──< (N) expenses
-        │
-        └──< (N) requests
-                 │
-                 ├──> (1) quotes (converted to)
-                 └──> (1) jobs (converted to)
-
-users (1) ──< (N) timesheet_entries (as worker)
-      │
-      ├──< (N) timesheet_entries (as approver)
-      │
-      ├──< (N) timesheet_entries (as payer)
-      │
-      └──< (N) visits (as assigned user)
-
-notes (N) ──> (1) ANY_ENTITY (polymorphic: entity_type + entity_id)
-      │
-      └──< (N) attachments
-```
-
-### Cascade Behaviors
-
-**ON DELETE CASCADE** (child deleted when parent deleted):
-- clients → jobs
-- clients → properties
-- clients → requests
-- clients → visits
-- jobs → expenses
-- jobs → visits
-- jobs → timesheet_entries
-- users → timesheet_entries
-
-**ON DELETE SET NULL** (foreign key nulled when parent deleted):
-- properties → jobs.property_id
-- quotes → jobs.quote_id
-- quotes → requests.converted_to_quote_id
-- jobs → requests.converted_to_job_id
-- users → visits.assigned_user_id
-- visits → timesheet_entries.visit_id
-- users → timesheet_entries.approved_by_id
-- users → timesheet_entries.paid_by_id
-
----
 
 ## Indexes
 
-All indexes defined in `src/repositories/repository.py:402-447`.
+### Performance Indexes
 
-### Foreign Key Indexes
+Key indexes for query performance:
 
 ```sql
--- Core entities
-CREATE INDEX idx_invoices_client_id ON invoices(client_id);
-CREATE INDEX idx_quotes_client_id ON quotes(client_id);
-CREATE INDEX idx_properties_client_id ON properties(client_id);
-CREATE INDEX idx_jobs_client_id ON jobs(client_id);
-CREATE INDEX idx_jobs_property_id ON jobs(property_id);
-CREATE INDEX idx_jobs_quote_id ON jobs(quote_id);
+-- Multi-pass workflow queries
+CREATE INDEX idx_entity_inventory_snapshot ON entity_inventory(map_snapshot_id);
+CREATE INDEX idx_extract_queue_status ON extract_queue_item(map_snapshot_id, status);
+CREATE INDEX idx_attachment_queue_status ON attachment_queue_item(map_snapshot_id, status);
 
--- Requests
-CREATE INDEX idx_requests_client_id ON requests(client_id);
-CREATE INDEX idx_requests_property_id ON requests(property_id);
-CREATE INDEX idx_requests_converted_to_quote_id ON requests(converted_to_quote_id);
-CREATE INDEX idx_requests_converted_to_job_id ON requests(converted_to_job_id);
+-- Entity relationship queries
+CREATE INDEX idx_properties_client ON properties(client_id);
+CREATE INDEX idx_jobs_client ON jobs(client_id);
+CREATE INDEX idx_invoices_client ON invoices(client_id);
+CREATE INDEX idx_notes_parent ON notes(parent_type, parent_id);
+CREATE INDEX idx_attachments_parent ON attachments(parent_type, parent_id);
 
--- Time & expense
-CREATE INDEX idx_expenses_job_id ON expenses(job_id);
-CREATE INDEX idx_visits_job_id ON visits(job_id);
-CREATE INDEX idx_visits_client_id ON visits(client_id);
-CREATE INDEX idx_visits_property_id ON visits(property_id);
-CREATE INDEX idx_visits_assigned_user_id ON visits(assigned_user_id);
-CREATE INDEX idx_timesheet_entries_user_id ON timesheet_entries(user_id);
-CREATE INDEX idx_timesheet_entries_job_id ON timesheet_entries(job_id);
-CREATE INDEX idx_timesheet_entries_visit_id ON timesheet_entries(visit_id);
-CREATE INDEX idx_timesheet_entries_approved_by_id ON timesheet_entries(approved_by_id);
-CREATE INDEX idx_timesheet_entries_paid_by_id ON timesheet_entries(paid_by_id);
-
--- Content
-CREATE INDEX idx_notes_entity ON notes(entity_type, entity_id);
-CREATE INDEX idx_attachments_note_id ON attachments(note_id);
-CREATE INDEX idx_note_references_entity ON note_references(entity_type, entity_id);
+-- Time-series queries
+CREATE INDEX idx_migration_summary_started ON migration_summary(started_at);
+CREATE INDEX idx_graphql_cost_timestamp ON graphql_cost(timestamp);
 ```
 
-### Performance Notes
+## Schema Versioning
 
-- All foreign keys have corresponding indexes for join performance
-- Composite index on notes enables fast polymorphic lookups
-- Indexes created with `IF NOT EXISTS` for safe re-initialization
-
----
-
-## Common Queries
-
-### Get client with all related data
+The schema version is tracked in `migration_state`:
 
 ```sql
--- Client with invoices and quotes
-SELECT
-    c.*,
-    COUNT(DISTINCT i.id) as invoice_count,
-    COUNT(DISTINCT q.id) as quote_count,
-    SUM(i.total_cents) as total_invoiced
+SELECT value FROM migration_state WHERE key = 'schema_version';
+```
+
+Current schema version: **2.0** (multi-pass support added)
+
+## Migration Path
+
+### From v1.x (Single-Pass)
+
+The v2.0 schema is backward compatible with v1.x. New multi-pass tables are added without modifying existing entity tables.
+
+Existing migrations continue to work:
+```bash
+# v1.x style (still supported)
+uv run tightbeam migrate all
+
+# v2.0 style (recommended)
+uv run tightbeam migrate map
+uv run tightbeam migrate extract --snapshot-id <id>
+```
+
+### Future Schema Changes
+
+Schema changes will be versioned and migrations provided to upgrade existing databases without data loss.
+
+## Backup and Maintenance
+
+### Backing Up
+
+SQLite databases can be backed up with simple file copy:
+
+```bash
+# Backup database
+cp tightbeam.db tightbeam.db.backup
+
+# Or use SQLite backup command
+sqlite3 tightbeam.db ".backup tightbeam.db.backup"
+```
+
+### Pruning Old Snapshots
+
+Clean up old map snapshots to reduce database size:
+
+```sql
+-- List snapshots
+SELECT id, created_at, label, entities_included
+FROM map_snapshot
+ORDER BY created_at DESC;
+
+-- Delete old snapshot and related data (use with caution!)
+DELETE FROM entity_inventory WHERE map_snapshot_id = '<snapshot-id>';
+DELETE FROM extract_queue_item WHERE map_snapshot_id = '<snapshot-id>';
+DELETE FROM attachment_queue_item WHERE map_snapshot_id = '<snapshot-id>';
+DELETE FROM map_snapshot WHERE id = '<snapshot-id>';
+```
+
+**Warning:** Deleting snapshots will prevent resuming extractions from those snapshots.
+
+### Vacuum
+
+Reclaim space after deletions:
+
+```bash
+sqlite3 tightbeam.db "VACUUM;"
+```
+
+## Useful Queries
+
+### Entity Statistics
+
+```sql
+-- Count entities by type
+SELECT 'clients' as type, COUNT(*) as count FROM clients
+UNION ALL
+SELECT 'invoices', COUNT(*) FROM invoices
+UNION ALL
+SELECT 'jobs', COUNT(*) FROM jobs
+ORDER BY count DESC;
+
+-- Clients with most jobs
+SELECT c.first_name, c.last_name, COUNT(j.id) as job_count
 FROM clients c
-LEFT JOIN invoices i ON c.id = i.client_id
-LEFT JOIN quotes q ON c.id = q.client_id
-WHERE c.id = 'client_123'
-GROUP BY c.id;
+LEFT JOIN jobs j ON c.id = j.client_id
+GROUP BY c.id
+ORDER BY job_count DESC
+LIMIT 10;
 ```
 
-### Get job with all visits and expenses
+### Multi-Pass Analytics
 
 ```sql
+-- Compare map vs extracted counts
 SELECT
-    j.id,
-    j.title,
-    j.status,
-    j.total,
-    COUNT(DISTINCT v.id) as visit_count,
-    COUNT(DISTINCT e.id) as expense_count,
-    SUM(e.amount_cents) as total_expenses
-FROM jobs j
-LEFT JOIN visits v ON j.id = v.job_id
-LEFT JOIN expenses e ON j.id = e.job_id
-WHERE j.id = 'job_456'
-GROUP BY j.id;
+  ei.entity_type,
+  COUNT(DISTINCT ei.entity_id) as mapped_count,
+  SUM(CASE WHEN eq.status = 'done' THEN 1 ELSE 0 END) as extracted_count,
+  SUM(CASE WHEN eq.status = 'failed' THEN 1 ELSE 0 END) as failed_count
+FROM entity_inventory ei
+LEFT JOIN extract_queue_item eq
+  ON ei.entity_type = eq.entity_type
+  AND ei.entity_id = eq.entity_id
+  AND ei.map_snapshot_id = eq.map_snapshot_id
+WHERE ei.map_snapshot_id = '<snapshot-id>'
+GROUP BY ei.entity_type;
+
+-- Find entities with most relations
+SELECT entity_type, entity_id, estimated_relations_json
+FROM entity_inventory
+WHERE map_snapshot_id = '<snapshot-id>'
+ORDER BY LENGTH(estimated_relations_json) DESC
+LIMIT 20;
 ```
 
-### Get notes for any entity
+### Performance Analysis
 
 ```sql
--- Notes for a specific client
-SELECT n.*, a.file_name, a.local_file_path
-FROM notes n
-LEFT JOIN attachments a ON n.id = a.note_id
-WHERE n.entity_type = 'Client'
-  AND n.entity_id = 'client_123'
-ORDER BY n.created_at DESC;
-```
-
-### Migration state check
-
-```sql
--- Check migration progress for all entities
+-- GraphQL query cost summary
 SELECT
-    entity_type,
-    last_cursor,
-    updated_at,
-    CASE
-        WHEN last_cursor IS NULL THEN 'Not started'
-        ELSE 'In progress'
-    END as status
-FROM migration_state
-ORDER BY updated_at DESC;
-```
+  query_name,
+  COUNT(*) as query_count,
+  AVG(actual_cost) as avg_cost,
+  MAX(actual_cost) as max_cost,
+  SUM(CASE WHEN throttle_status = 'throttled' THEN 1 ELSE 0 END) as throttle_count
+FROM graphql_cost
+GROUP BY query_name
+ORDER BY avg_cost DESC;
 
-### Find incomplete work
-
-```sql
--- Jobs without completion date
-SELECT j.*, c.first_name, c.last_name
-FROM jobs j
-JOIN clients c ON j.client_id = c.id
-WHERE j.completed_at IS NULL
-  AND j.status != 'cancelled'
-ORDER BY j.scheduled_start_at;
-```
-
-### Time tracking summary
-
-```sql
--- Timesheet summary by user
+-- Migration performance over time
 SELECT
-    u.first_name || ' ' || u.last_name as user_name,
-    COUNT(t.id) as entry_count,
-    SUM(t.final_duration_seconds) / 3600.0 as total_hours,
-    COUNT(CASE WHEN t.approved = 'true' THEN 1 END) as approved_count
-FROM users u
-LEFT JOIN timesheet_entries t ON u.id = t.user_id
-WHERE t.created_at >= date('now', '-30 days')
-GROUP BY u.id
-ORDER BY total_hours DESC;
-```
-
-### Revenue analysis
-
-```sql
--- Monthly invoice revenue
-SELECT
-    strftime('%Y-%m', issued_at) as month,
-    COUNT(*) as invoice_count,
-    SUM(total_cents) / 100.0 as total_revenue,
-    COUNT(CASE WHEN status = 'paid' THEN 1 END) as paid_count
-FROM invoices
-GROUP BY month
-ORDER BY month DESC;
+  DATE(started_at) as date,
+  entity_type,
+  SUM(entities_processed) as total_processed,
+  SUM(entities_failed) as total_failed,
+  AVG(entities_processed * 1.0 /
+    (JULIANDAY(completed_at) - JULIANDAY(started_at)) / 86400) as avg_rate
+FROM migration_summary
+WHERE completed_at IS NOT NULL
+GROUP BY DATE(started_at), entity_type
+ORDER BY date DESC;
 ```
 
 ---
 
-## Schema Migrations
-
-### Current Version
-
-No formal versioning system yet. Schema evolves via:
-1. `Repository.init_schema()` - Creates tables if not exist
-2. `Repository._migrate_existing_tables()` - Adds columns to existing tables
-
-### Migration History
-
-**clients table:**
-- Added `additional_emails` column (TEXT, default '[]')
-- Added `additional_phones` column (TEXT, default '[]')
-
-**invoices table:**
-- Added `due_date` column (TEXT, default '')
-- Added `subtotal` column (INTEGER, default 0)
-- Added `line_items` column (TEXT, default '[]')
-
-**Source:** `src/repositories/repository.py:44-83`
-
-### Future Enhancements
-
-Planned schema changes documented in:
-- `docs/architecture/notes-optimization.md` - Optimized note extraction
-- Task system: Consider adding `entities_count` to migration_state table
-
----
-
-**Last Updated:** 2025-01-17
-**Schema Source:** `src/repositories/repository.py` (commit 4026f5c)
-**Database Version:** SQLite 3
-**Total Tables:** 18
+**Database Schema Documentation** - Complete reference for TightBeam v2 SQLite database
