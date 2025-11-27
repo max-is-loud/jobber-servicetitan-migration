@@ -139,8 +139,6 @@ class JobberClient:
                 node {{
                   description
                   quantity
-                  unitCost
-                  total
                 }}
               }}
               pageInfo {{
@@ -165,11 +163,6 @@ class JobberClient:
               edges {{
                 node {{
                   id
-                  note {{
-                    ... on InvoiceNote {{
-                      id
-                    }}
-                  }}
                   fileName
                   contentType
                   url
@@ -223,8 +216,6 @@ class JobberClient:
                   name
                   description
                   qty
-                  unitCost
-                  total
                 }}
               }}
               pageInfo {{
@@ -249,11 +240,6 @@ class JobberClient:
               edges {{
                 node {{
                   id
-                  note {{
-                    ... on QuoteNote {{
-                      id
-                    }}
-                  }}
                   fileName
                   contentType
                   url
@@ -338,11 +324,6 @@ class JobberClient:
               edges {{
                 node {{
                   id
-                  note {{
-                    ... on JobNote {{
-                      id
-                    }}
-                  }}
                   fileName
                   contentType
                   url
@@ -368,7 +349,11 @@ class JobberClient:
     """
 
     def _get_properties_query(self) -> str:
-        """Get GraphQL query for fetching properties with configurable pagination."""
+        """Get GraphQL query for fetching properties with configurable pagination.
+
+        Note: PropertyAddress field structure unknown - excluding address details for now.
+        Property type does not have: name, coordinates, createdAt, updatedAt fields.
+        """
         size = self._get_pagination_size("properties")
         return f"""
     query GetProperties($cursor: String) {{
@@ -379,21 +364,6 @@ class JobberClient:
             client {{
               id
             }}
-            name
-            address {{
-              line1
-              line2
-              city
-              stateProvince
-              postalCode
-              country
-            }}
-            coordinates {{
-              latitude
-              longitude
-            }}
-            createdAt
-            updatedAt
           }}
         }}
         pageInfo {{
@@ -454,11 +424,6 @@ class JobberClient:
               edges {{
                 node {{
                   id
-                  note {{
-                    ... on RequestNote {{
-                      id
-                    }}
-                  }}
                   fileName
                   contentType
                   url
@@ -484,6 +449,9 @@ class JobberClient:
     """
 
     # GraphQL query for fetching users with cursor pagination
+    # email: UserEmail! (object type with fields TBD - excluding for now)
+    # phone: UserPhone (object type with fields TBD - excluding for now)
+    # timezone: Timezone (could be scalar or object - excluding to avoid errors)
     USERS_QUERY = """
     query GetUsers($cursor: String) {
       users(first: 100, after: $cursor) {
@@ -494,18 +462,9 @@ class JobberClient:
               first
               last
             }
-            email {
-              email
-            }
             isAccountAdmin
             isAccountOwner
             status
-            phone {
-              number
-            }
-            timezone {
-              identifier
-            }
             createdAt
             lastLoginAt
           }
@@ -554,6 +513,7 @@ class JobberClient:
     """
 
     # GraphQL query for fetching visits with cursor pagination
+    # Note: updatedAt field does not exist on Visit type (removed from schema)
     VISITS_QUERY = """
     query GetVisits($cursor: String) {
       visits(first: 100, after: $cursor) {
@@ -585,7 +545,6 @@ class JobberClient:
             endAt
             completedAt
             createdAt
-            updatedAt
           }
         }
         pageInfo {

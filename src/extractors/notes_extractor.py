@@ -266,7 +266,7 @@ class NotesExtractor(BaseExtractor[Note]):
                 f"Saved {len(attachments)} attachment(s) for note {note.id}"
             )
 
-    def extract_all(self) -> List[Note]:
+    def extract_all(self, resume: bool = False) -> List[Note]:
         """Extract all notes using deferred loading pattern.
 
         REFACTORED: Fetches note references from repository and bulk-fetches via node(id:).
@@ -274,6 +274,9 @@ class NotesExtractor(BaseExtractor[Note]):
         (docs/notes_extraction_strategy.md - Option C: Phase 2).
 
         Strategy Reference: docs/notes_extraction_strategy.md - Phase 2: Bulk Fetch Full Notes
+
+        Args:
+            resume: Ignored for notes extraction (notes don't support checkpointing yet)
 
         Returns:
             List of all extracted Note objects

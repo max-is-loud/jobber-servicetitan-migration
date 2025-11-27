@@ -283,3 +283,58 @@ class TestServiceFactoryRateLimitedClient:
 
         # Verify config manager was queried for backoff settings
         mock_config_manager.get_backoff_config.assert_called_once()
+
+
+class TestServiceFactoryLogger:
+    """Test cases for ServiceFactory.create_logger()."""
+
+    def test_create_logger_default(self):
+        """Test that create_logger returns RichLogger with default verbose=False."""
+        logger = ServiceFactory.create_logger()
+
+        # Verify we got a RichLogger instance
+        from src.loggers.rich_logger import RichLogger
+
+        assert isinstance(logger, RichLogger)
+        assert logger.verbose is False
+
+    def test_create_logger_verbose(self):
+        """Test that create_logger returns RichLogger with verbose=True."""
+        logger = ServiceFactory.create_logger(verbose=True)
+
+        # Verify we got a RichLogger instance with verbose enabled
+        from src.loggers.rich_logger import RichLogger
+
+        assert isinstance(logger, RichLogger)
+        assert logger.verbose is True
+
+    def test_create_logger_uses_shared_console(self):
+        """Test that create_logger uses the shared console from get_console()."""
+        logger = ServiceFactory.create_logger()
+
+        # Verify logger uses same console as ServiceFactory.get_console()
+        shared_console = ServiceFactory.get_console()
+        assert logger.console is shared_console
+
+
+class TestServiceFactoryConfigManager:
+    """Test cases for ServiceFactory.create_config_manager()."""
+
+    def test_create_config_manager(self):
+        """Test that create_config_manager returns ConfigManagerImpl instance."""
+        config_manager = ServiceFactory.create_config_manager()
+
+        # Verify we got a ConfigManagerImpl instance
+        from src.config import ConfigManagerImpl
+
+        assert isinstance(config_manager, ConfigManagerImpl)
+
+    def test_create_config_manager_loads_settings(self):
+        """Test that create_config_manager creates a functional config manager."""
+        config_manager = ServiceFactory.create_config_manager()
+
+        # Verify config manager has loaded settings and can return rate limit configs
+        rate_config = config_manager.get_rate_limit_config("moderate")
+        assert rate_config is not None
+        assert "capacity" in rate_config
+        assert "refill_rate" in rate_config

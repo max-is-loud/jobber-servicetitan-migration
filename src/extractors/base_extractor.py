@@ -1297,7 +1297,7 @@ class BaseExtractor(ABC, Generic[T]):
 
             # Check if automatic downloading is enabled
             attachment_config = self._config_manager.get_attachment_config()
-            auto_download = attachment_config.get("auto_download", True)
+            auto_download = attachment_config.get("auto_download", False)
 
             if not auto_download:
                 # Metadata-only mode: save attachments without downloading files

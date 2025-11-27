@@ -28,9 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from src.cli.services.factories import ServiceFactory
-from src.config import ConfigManagerImpl
 from src.coordinators.max_extract_coordinator import MaxExtractCoordinator
-from src.loggers.rich_logger import RichLogger
 
 
 class PerformanceTestRunner:
@@ -61,8 +59,8 @@ class PerformanceTestRunner:
         print("🔧 Setting up performance test environment...")
 
         # Initialize dependencies
-        config_manager = ConfigManagerImpl()
-        logger = RichLogger(verbose=True)
+        config_manager = ServiceFactory.create_config_manager()
+        logger = ServiceFactory.create_logger(verbose=True)
         repository = ServiceFactory.create_repository(Path(self.db_path))
 
         # Initialize coordinator
