@@ -45,7 +45,7 @@ REQUIRED_OAUTH_VARS = {
 }
 
 # File Paths and Names
-DEFAULT_DB_PATH = "tightbeam.db"
+DEFAULT_DB_PATH = "tightbeam.sqlite"
 DEFAULT_ATTACHMENTS_DIR = "attachments"
 ENV_FILE_NAME = ".env"
 

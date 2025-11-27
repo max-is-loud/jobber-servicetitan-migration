@@ -83,6 +83,28 @@ uv run tightbeam migrate download-attachments
 uv run tightbeam migrate max-extract --resume
 ```
 
+### Database Configuration
+
+TightBeam uses the following precedence for database file location:
+
+1. **Explicit `--db` parameter** (highest priority)
+2. **`TIGHTBEAM_DB` environment variable**
+3. **`database.default_path` in `config/settings.yaml`**
+4. **Default**: `tightbeam.sqlite` (lowest priority)
+
+**Example:**
+```bash
+# Use environment variable for custom database location
+export TIGHTBEAM_DB=/path/to/my-database.db
+uv run tightbeam oauth init  # Uses /path/to/my-database.db
+uv run tightbeam migrate max-extract  # Uses same database
+
+# Or specify directly with --db flag (overrides everything)
+uv run tightbeam migrate max-extract --db custom.db
+```
+
+This ensures that OAuth operations and migration commands share the same database by default, preventing authentication errors.
+
 ## Migration Coordinator Architecture
 
 TightBeam v2 uses a **unified Rich-based migration coordinator** system that provides:

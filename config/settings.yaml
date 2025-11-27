@@ -19,7 +19,7 @@ pagination:
   clients: 50
   invoices: 26
   quotes: 18
-  jobs: 30
+  jobs: 32
   properties: 55
   requests: 30
   users: 30

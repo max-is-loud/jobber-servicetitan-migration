@@ -24,6 +24,24 @@ This guide walks you through the complete migration workflow, from setup to veri
 - SQLite browser (e.g., DB Browser for SQLite) for data inspection
 - Familiarity with Jobber's data model
 
+### Database Configuration
+
+TightBeam uses a consistent database path across all commands:
+
+**Resolution Order:**
+1. Explicit `--db` parameter (e.g., `--db custom.db`)
+2. `TIGHTBEAM_DB` environment variable (e.g., `export TIGHTBEAM_DB=my-data.db`)
+3. `database.default_path` in `config/settings.yaml`
+4. Default: `tightbeam.sqlite`
+
+**Best Practice:** Set `TIGHTBEAM_DB` once to ensure OAuth and migration commands share the same database:
+```bash
+export TIGHTBEAM_DB=jobber_export.db
+uv run tightbeam oauth init
+uv run tightbeam migrate max-extract
+# Both commands now use jobber_export.db
+```
+
 ## Quick Start
 
 ### Complete Migration (All Entities)

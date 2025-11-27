@@ -15,7 +15,7 @@ from src.exceptions import (
     ConfigurationError,
 )
 
-from .services import ServiceFactory
+from .services import ServiceFactory, SharedServices
 
 # Get shared console instance
 console = ServiceFactory.get_console()
@@ -127,7 +127,7 @@ def migrate_callback(
     ctx.ensure_object(dict)
     ctx.obj.update(
         {
-            "db": db or Path("tightbeam.sqlite"),
+            "db": SharedServices.resolve_db_path(db),
             "verbose": verbose,
             "optimization_level": optimization_level,
             "resume": resume,
@@ -153,7 +153,7 @@ def download_attachments(
             help="Path to SQLite database file",
             show_default=True,
         ),
-    ] = Path("jobber_export.db"),
+    ] = None,
     output_dir: Annotated[
         Path,
         typer.Option(
@@ -194,6 +194,9 @@ def download_attachments(
     """
     from src.extractors.attachment_downloader import AttachmentDownloader
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+    # Resolve database path with environment variable and config fallback
+    db = SharedServices.resolve_db_path(db)
 
     console.print(f"\n{INFO_EMOJI} Starting attachment download")
     console.print(f"   Database: {db}")
@@ -318,7 +321,7 @@ def max_extract(
             help="Path to SQLite database file",
             show_default=True,
         ),
-    ] = Path("jobber_export.db"),
+    ] = None,
     entities: Annotated[
         Optional[List[str]],
         typer.Option(
@@ -365,6 +368,9 @@ def max_extract(
         tightbeam migrate max-extract --optimization-level aggressive
     """
     from src.coordinators.max_extract_coordinator import MaxExtractCoordinator
+
+    # Resolve database path with environment variable and config fallback
+    db = SharedServices.resolve_db_path(db)
 
     console.print(f"\n{MIGRATION_EMOJI} Starting Jobber Max Extract (Pass 1: Metadata)")
     console.print(f"   Database: {db}")

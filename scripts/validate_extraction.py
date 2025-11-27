@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import os
 import sqlite3
 import sys
 from dataclasses import dataclass
@@ -382,8 +383,8 @@ def main() -> int:
     parser.add_argument(
         "--db",
         type=str,
-        default="jobber_export.db",
-        help="Path to SQLite database file (default: jobber_export.db)",
+        default=os.environ.get("TIGHTBEAM_DB", "tightbeam.sqlite"),
+        help="Path to SQLite database file (default: TIGHTBEAM_DB env var or tightbeam.sqlite)",
     )
     parser.add_argument(
         "--verbose",

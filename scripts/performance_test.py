@@ -21,6 +21,7 @@ Metrics Captured:
 """
 
 import argparse
+import os
 import time
 import tracemalloc
 from datetime import datetime
@@ -442,8 +443,8 @@ def main():
     parser.add_argument(
         "--db",
         type=str,
-        default="test_performance.db",
-        help="Test database path (default: test_performance.db)",
+        default=os.environ.get("TIGHTBEAM_DB", "test_performance.db"),
+        help="Test database path (default: TIGHTBEAM_DB env var or test_performance.db)",
     )
     parser.add_argument(
         "--report",

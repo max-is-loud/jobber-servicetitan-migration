@@ -33,7 +33,7 @@ from src.utils import (
     display_server_auth_info,
     open_browser,
 )
-from .services import CLIErrorHandler, ServiceFactory
+from .services import CLIErrorHandler, ServiceFactory, SharedServices
 
 # Get shared console instance
 console = ServiceFactory.get_console()
@@ -333,7 +333,7 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
             complete_oauth_flow(auth_result["code"], oauth_manager, repository, 3600, console)
 
         # Display success message using helper function with actual database path
-        db_path_used = str(db) if db is not None else "tightbeam.sqlite"
+        db_path_used = str(db if db is not None else SharedServices.get_default_db_path())
         display_oauth_success("server", console, db_path_used)
 
         # Explicit clean exit after successful OAuth completion
@@ -414,7 +414,7 @@ def oauth_callback(
             )
 
         # Display success message using helper function with actual database path
-        db_path_used = str(db) if db is not None else "tightbeam.sqlite"
+        db_path_used = str(db if db is not None else SharedServices.get_default_db_path())
         display_oauth_success("callback", console, db_path_used)
 
     except ConfigurationError as e:

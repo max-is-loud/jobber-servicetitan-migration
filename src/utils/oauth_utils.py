@@ -186,7 +186,8 @@ def display_oauth_success(
 
     if mode == "server":
         # Use the actual database path if provided, otherwise default to the CLI default
-        db_display = db_path if db_path else "tightbeam.sqlite"
+        from ..cli.services import SharedServices
+        db_display = db_path if db_path else str(SharedServices.get_default_db_path())
         success_content = f"""[bold green]✅ OAuth2 tokens stored successfully![/bold green]
 
 [bold cyan]🚀 You're all set! You can now run:[/bold cyan]

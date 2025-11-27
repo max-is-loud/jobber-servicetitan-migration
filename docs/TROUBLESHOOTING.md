@@ -209,6 +209,41 @@ Rate limit exceeded: 429 Too Many Requests
 
 ## Database Issues
 
+### Issue: "OAuth authentication works but migration fails to find tokens"
+
+**Error Message:**
+```
+❌ Authentication Required
+Migration commands require authentication to access the Jobber API.
+```
+
+**Cause:** OAuth and migration commands are using different database files.
+
+**Fix:**
+1. Check which database files exist:
+   ```bash
+   ls -lh *.db *.sqlite
+   ```
+
+2. Use the `TIGHTBEAM_DB` environment variable to ensure consistency:
+   ```bash
+   export TIGHTBEAM_DB=tightbeam.sqlite
+   uv run tightbeam oauth init
+   uv run tightbeam migrate max-extract
+   ```
+
+3. Or use the `--db` flag explicitly for both commands:
+   ```bash
+   uv run tightbeam oauth init --db my-database.db
+   uv run tightbeam migrate max-extract --db my-database.db
+   ```
+
+**Database Path Resolution Order:**
+1. Explicit `--db` parameter (highest priority)
+2. `TIGHTBEAM_DB` environment variable
+3. `database.default_path` in `config/settings.yaml`
+4. Default: `tightbeam.sqlite` (lowest priority)
+
 ### Issue: "Database is locked"
 
 **Error Message:**
