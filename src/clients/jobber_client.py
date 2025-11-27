@@ -1605,6 +1605,26 @@ class JobberClient:
                 if "extensions" in response_data:
                     debug_print(f"[DEBUG] Response extensions: {response_data['extensions']}")
 
+                    # Extract cost information for throttling calculation
+                    cost_info = response_data.get("extensions", {}).get("cost", {})
+                    if cost_info:
+                        throttle_status = cost_info.get("throttleStatus", {})
+                        requested_cost = cost_info.get("requestedQueryCost", 0)
+                        currently_available = throttle_status.get("currentlyAvailable", 0)
+                        restore_rate = throttle_status.get("restoreRate", 500)  # Default 500 pts/sec
+
+                        # Calculate precise wait time using leaky bucket model
+                        if requested_cost > currently_available and restore_rate > 0:
+                            points_needed = requested_cost - currently_available
+                            calculated_wait_time = points_needed / restore_rate  # seconds
+                            # Add 1 second buffer to ensure points are available
+                            self._rate_limit_reset_time = time.time() + calculated_wait_time + 1.0
+
+                            debug_print(
+                                f"[DEBUG] Cost-based cooldown: need {points_needed} points, "
+                                f"restore rate {restore_rate} pts/s, waiting {calculated_wait_time + 1.0:.1f}s"
+                            )
+
                 # Validate response structure and check for GraphQL errors
                 self._validate_graphql_response(response_data)
 
@@ -1621,15 +1641,14 @@ class JobberClient:
                         self._throttling_events += 1
                         self._last_request_was_throttled = True
 
-                        # Set account-wide cooldown for throttling errors
-                        # Use exponential backoff but store as reset time for persistence
-                        delay = base_delay * (2**attempt)  # Exponential backoff
-                        self._rate_limit_reset_time = time.time() + delay
-
-                        debug_print(
-                            f"[DEBUG] Throttling detected. Setting account-wide cooldown until "
-                            f"{time.strftime('%H:%M:%S', time.localtime(self._rate_limit_reset_time))}"
-                        )
+                        # Cooldown was already set from cost calculation (if available)
+                        # If no cooldown was set (no cost info), fall back to exponential backoff
+                        if not self._rate_limit_reset_time:
+                            delay = base_delay * (2**attempt)  # Exponential backoff fallback
+                            self._rate_limit_reset_time = time.time() + delay
+                            debug_print(
+                                f"[DEBUG] Throttling detected (no cost info). Using exponential backoff: {delay}s"
+                            )
 
                         # For throttling, don't wait here - let the cooldown check at top of loop handle it
                         print(f"🚫 GraphQL throttling detected (attempt {attempt + 1}/{max_retries + 1})")
