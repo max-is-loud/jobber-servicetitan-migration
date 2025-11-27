@@ -1486,33 +1486,33 @@ class JobberClient:
         # Reset throttling flag for this request
         self._last_request_was_throttled = False
 
-        # Check if we're in a rate limit cooldown period (account-wide)
-        if self._rate_limit_reset_time:
-            current_time = time.time()
-            if current_time < self._rate_limit_reset_time:
-                wait_time = self._rate_limit_reset_time - current_time
-                print(
-                    f"\n⏸️  Rate limit cooldown active (account-wide). "
-                    f"Waiting {wait_time:.1f}s until reset..."
-                )
-
-                # Countdown timer for cooldown period
-                remaining = wait_time
-                while remaining > 0:
-                    print(
-                        f"\r⏸️  Rate limit cooldown: {remaining:.1f}s remaining...",
-                        end="",
-                        flush=True
-                    )
-                    sleep_time = min(0.1, remaining)
-                    time.sleep(sleep_time)
-                    remaining -= sleep_time
-
-                print("\r✅ Rate limit cooldown complete, resuming requests...".ljust(80))
-                # Clear the reset time now that we've waited
-                self._rate_limit_reset_time = None
-
         for attempt in range(max_retries + 1):
+            # Check if we're in a rate limit cooldown period BEFORE each attempt
+            if self._rate_limit_reset_time:
+                current_time = time.time()
+                if current_time < self._rate_limit_reset_time:
+                    wait_time = self._rate_limit_reset_time - current_time
+                    print(
+                        f"\n⏸️  Rate limit cooldown active (account-wide). "
+                        f"Waiting {wait_time:.1f}s until reset..."
+                    )
+
+                    # Countdown timer for cooldown period
+                    remaining = wait_time
+                    while remaining > 0:
+                        print(
+                            f"\r⏸️  Rate limit cooldown: {remaining:.1f}s remaining...",
+                            end="",
+                            flush=True
+                        )
+                        sleep_time = min(0.1, remaining)
+                        time.sleep(sleep_time)
+                        remaining -= sleep_time
+
+                    print("\r✅ Rate limit cooldown complete, resuming requests...".ljust(80))
+                    # Clear the reset time now that we've waited
+                    self._rate_limit_reset_time = None
+
             try:
                 # Get authentication headers with automatic OAuth2 token refresh
                 # This may raise ConfigurationError or OAuth2Error
@@ -1630,35 +1630,38 @@ class JobberClient:
                             f"[DEBUG] Throttling detected. Setting account-wide cooldown until "
                             f"{time.strftime('%H:%M:%S', time.localtime(self._rate_limit_reset_time))}"
                         )
+
+                        # For throttling, don't wait here - let the cooldown check at top of loop handle it
+                        print(f"🚫 GraphQL throttling detected (attempt {attempt + 1}/{max_retries + 1})")
+                        continue
+
                     else:
-                        # Connection errors don't set account-wide cooldown
+                        # Connection errors: do immediate retry with countdown (no account-wide cooldown)
                         delay = base_delay * (2**attempt)
+                        error_type = "Network connection error"
 
-                    # Customize message based on error type
-                    error_type = "GraphQL throttling" if is_throttling else "Network connection error"
-
-                    debug_print(
-                        f"[DEBUG] {error_type} detected, attempt {attempt + 1}/{max_retries + 1}. "
-                        f"Retrying in {delay}s..."
-                    )
-
-                    # Display countdown timer
-                    remaining = delay
-                    while remaining > 0:
-                        print(
-                            f"\r⏳ {error_type} detected, retrying in {remaining:.1f}s... "
-                            f"(attempt {attempt + 1}/{max_retries + 1})",
-                            end="",
-                            flush=True
+                        debug_print(
+                            f"[DEBUG] {error_type} detected, attempt {attempt + 1}/{max_retries + 1}. "
+                            f"Retrying in {delay}s..."
                         )
-                        sleep_time = min(0.1, remaining)  # Update every 0.1s for smooth countdown
-                        time.sleep(sleep_time)
-                        remaining -= sleep_time
 
-                    # Clear the line and print final message
-                    print(f"\r⏳ {error_type} detected, retrying now... "
-                          f"(attempt {attempt + 1}/{max_retries + 1})".ljust(80))
-                    continue
+                        # Display countdown timer for connection errors only
+                        remaining = delay
+                        while remaining > 0:
+                            print(
+                                f"\r⏳ {error_type} detected, retrying in {remaining:.1f}s... "
+                                f"(attempt {attempt + 1}/{max_retries + 1})",
+                                end="",
+                                flush=True
+                            )
+                            sleep_time = min(0.1, remaining)  # Update every 0.1s for smooth countdown
+                            time.sleep(sleep_time)
+                            remaining -= sleep_time
+
+                        # Clear the line and print final message
+                        print(f"\r⏳ {error_type} detected, retrying now... "
+                              f"(attempt {attempt + 1}/{max_retries + 1})".ljust(80))
+                        continue
                 else:
                     # Not a retryable error or out of retries
                     raise
