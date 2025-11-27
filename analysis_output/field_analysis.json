@@ -1,0 +1,2439 @@
+{
+  "by_kind": {
+    "OBJECT": [
+      "UserEmail",
+      "UserPhone",
+      "PropertyAddress",
+      "Property",
+      "QuoteLineItem",
+      "InvoiceLineItem",
+      "Visit",
+      "Client",
+      "Email",
+      "ClientPhoneNumber",
+      "ClientAddress",
+      "Request",
+      "Quote",
+      "Job",
+      "Invoice",
+      "User",
+      "Expense",
+      "TimeSheetEntry",
+      "ProductOrService",
+      "QuoteAmounts",
+      "InvoiceAmounts"
+    ],
+    "SCALAR": [
+      "Timezone"
+    ],
+    "UNION": [
+      "RequestNoteUnion",
+      "QuoteNoteUnion",
+      "JobNoteUnion",
+      "InvoiceNoteUnion"
+    ]
+  },
+  "field_inventory": {
+    "UserEmail": {
+      "kind": "OBJECT",
+      "field_count": 2,
+      "fields": [
+        {
+          "name": "isValid",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "raw",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        }
+      ]
+    },
+    "UserPhone": {
+      "kind": "OBJECT",
+      "field_count": 5,
+      "fields": [
+        {
+          "name": "areaCode",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "countryCode",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "friendly",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "isValid",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "raw",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        }
+      ]
+    },
+    "PropertyAddress": {
+      "kind": "OBJECT",
+      "field_count": 11,
+      "fields": [
+        {
+          "name": "city",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "coordinates",
+          "type": "GeoPoint",
+          "raw_type": "GeoPoint",
+          "is_nullable": true
+        },
+        {
+          "name": "country",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "geoStatus",
+          "type": "GeoStatus",
+          "raw_type": "GeoStatus",
+          "is_nullable": true
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "postalCode",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "province",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "street",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "street1",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "street2",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        }
+      ]
+    },
+    "Property": {
+      "kind": "OBJECT",
+      "field_count": 14,
+      "fields": [
+        {
+          "name": "address",
+          "type": "PropertyAddress!",
+          "raw_type": "PropertyAddress",
+          "is_nullable": false
+        },
+        {
+          "name": "client",
+          "type": "Client",
+          "raw_type": "Client",
+          "is_nullable": true
+        },
+        {
+          "name": "contacts",
+          "type": "ContactModelConnection",
+          "raw_type": "ContactModelConnection",
+          "is_nullable": true
+        },
+        {
+          "name": "customFields",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "isBillingAddress",
+          "type": "Boolean",
+          "raw_type": "Boolean",
+          "is_nullable": true
+        },
+        {
+          "name": "jobberWebUri",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "jobs",
+          "type": "JobConnection!",
+          "raw_type": "JobConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "quotes",
+          "type": "QuoteConnection!",
+          "raw_type": "QuoteConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "recentPricing",
+          "type": "ProductOrServiceConnection",
+          "raw_type": "ProductOrServiceConnection",
+          "is_nullable": true
+        },
+        {
+          "name": "requests",
+          "type": "RequestConnection!",
+          "raw_type": "RequestConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "routingOrder",
+          "type": "Int",
+          "raw_type": "Int",
+          "is_nullable": true
+        },
+        {
+          "name": "taxRate",
+          "type": "TaxRate",
+          "raw_type": "TaxRate",
+          "is_nullable": true
+        }
+      ]
+    },
+    "QuoteLineItem": {
+      "kind": "OBJECT",
+      "field_count": 18,
+      "fields": [
+        {
+          "name": "category",
+          "type": "ProductsAndServicesCategory!",
+          "raw_type": "ProductsAndServicesCategory",
+          "is_nullable": false
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "description",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "linkedProductOrService",
+          "type": "ProductOrService",
+          "raw_type": "ProductOrService",
+          "is_nullable": true
+        },
+        {
+          "name": "markup",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "name",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "optional",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "quantity",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "recommended",
+          "type": "Boolean",
+          "raw_type": "Boolean",
+          "is_nullable": true
+        },
+        {
+          "name": "sortOrder",
+          "type": "Int",
+          "raw_type": "Int",
+          "is_nullable": true
+        },
+        {
+          "name": "taxable",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "textOnly",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "totalCost",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "totalPrice",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "unitCost",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "unitPrice",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        }
+      ]
+    },
+    "InvoiceLineItem": {
+      "kind": "OBJECT",
+      "field_count": 15,
+      "fields": [
+        {
+          "name": "category",
+          "type": "ProductsAndServicesCategory!",
+          "raw_type": "ProductsAndServicesCategory",
+          "is_nullable": false
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "date",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "description",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "jobLineItem",
+          "type": "JobLineItem",
+          "raw_type": "JobLineItem",
+          "is_nullable": true
+        },
+        {
+          "name": "linkedProductOrService",
+          "type": "ProductOrService",
+          "raw_type": "ProductOrService",
+          "is_nullable": true
+        },
+        {
+          "name": "name",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "originalCost",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "quantity",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "taxRate",
+          "type": "TaxRate!",
+          "raw_type": "TaxRate",
+          "is_nullable": false
+        },
+        {
+          "name": "taxable",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "totalPrice",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "unitPrice",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        }
+      ]
+    },
+    "Visit": {
+      "kind": "OBJECT",
+      "field_count": 30,
+      "fields": [
+        {
+          "name": "actionsUponComplete",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "allDay",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "arrivalWindow",
+          "type": "ArrivalWindow",
+          "raw_type": "ArrivalWindow",
+          "is_nullable": true
+        },
+        {
+          "name": "assignedUsers",
+          "type": "UserConnection",
+          "raw_type": "UserConnection",
+          "is_nullable": true
+        },
+        {
+          "name": "client",
+          "type": "Client!",
+          "raw_type": "Client",
+          "is_nullable": false
+        },
+        {
+          "name": "clientConfirmed",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "completedAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "completedBy",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "createdBy",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "duration",
+          "type": "Int",
+          "raw_type": "Int",
+          "is_nullable": true
+        },
+        {
+          "name": "endAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "incompleteJobFormsCount",
+          "type": "Int!",
+          "raw_type": "Int",
+          "is_nullable": false
+        },
+        {
+          "name": "instructions",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "invoice",
+          "type": "Invoice",
+          "raw_type": "Invoice",
+          "is_nullable": true
+        },
+        {
+          "name": "isComplete",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "isDefaultTitle",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "isLastScheduledVisit",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "job",
+          "type": "Job!",
+          "raw_type": "Job",
+          "is_nullable": false
+        },
+        {
+          "name": "lineItems",
+          "type": "JobLineItemConnection!",
+          "raw_type": "JobLineItemConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "JobNoteUnionConnection",
+          "raw_type": "JobNoteUnionConnection",
+          "is_nullable": true
+        },
+        {
+          "name": "overrideOrder",
+          "type": "Int",
+          "raw_type": "Int",
+          "is_nullable": true
+        },
+        {
+          "name": "property",
+          "type": "Property!",
+          "raw_type": "Property",
+          "is_nullable": false
+        },
+        {
+          "name": "routingOrder",
+          "type": "Int",
+          "raw_type": "Int",
+          "is_nullable": true
+        },
+        {
+          "name": "startAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "teamReminderOffset",
+          "type": "Minutes",
+          "raw_type": "Minutes",
+          "is_nullable": true
+        },
+        {
+          "name": "timeSheetEntries",
+          "type": "TimeSheetEntryConnection",
+          "raw_type": "TimeSheetEntryConnection",
+          "is_nullable": true
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "visitStatus",
+          "type": "VisitStatusTypeEnum!",
+          "raw_type": "VisitStatusTypeEnum",
+          "is_nullable": false
+        }
+      ]
+    },
+    "Client": {
+      "kind": "OBJECT",
+      "field_count": 42,
+      "fields": [
+        {
+          "name": "balance",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "billingAddress",
+          "type": "ClientAddress",
+          "raw_type": "ClientAddress",
+          "is_nullable": true
+        },
+        {
+          "name": "billingAddressPresent",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "clientProperties",
+          "type": "PropertyConnection!",
+          "raw_type": "PropertyConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "companyName",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "contacts",
+          "type": "ContactModelConnection!",
+          "raw_type": "ContactModelConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "customFields",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "defaultEmails",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "defaultPhones",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "emails",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "firstName",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "invoices",
+          "type": "InvoiceConnection!",
+          "raw_type": "InvoiceConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "isArchivable",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "isArchived",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "isCompany",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "isLead",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "jobberWebUri",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "jobs",
+          "type": "JobConnection!",
+          "raw_type": "JobConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "lastName",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "messages",
+          "type": "MessageInterfaceConnection!",
+          "raw_type": "MessageInterfaceConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "name",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "noteAttachments",
+          "type": "ClientNoteFileConnection!",
+          "raw_type": "ClientNoteFileConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "ClientNoteConnection!",
+          "raw_type": "ClientNoteConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "phones",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "quotes",
+          "type": "QuoteConnection!",
+          "raw_type": "QuoteConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "receivesFollowUps",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "receivesInvoiceFollowUps",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "receivesQuoteFollowUps",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "receivesReminders",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "receivesReviewRequests",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "requestedWorkObjects",
+          "type": "RequestedWorkObjectUnionConnection",
+          "raw_type": "RequestedWorkObjectUnionConnection",
+          "is_nullable": true
+        },
+        {
+          "name": "requests",
+          "type": "RequestConnection!",
+          "raw_type": "RequestConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "sampleData",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "scheduledItems",
+          "type": "ScheduledItemInterfaceConnection!",
+          "raw_type": "ScheduledItemInterfaceConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "secondaryName",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "sourceAttribution",
+          "type": "SourceAttribution",
+          "raw_type": "SourceAttribution",
+          "is_nullable": true
+        },
+        {
+          "name": "tags",
+          "type": "TagConnection!",
+          "raw_type": "TagConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "unallocatedDepositRecords",
+          "type": "PaymentRecordInterfaceConnection!",
+          "raw_type": "PaymentRecordInterfaceConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        }
+      ]
+    },
+    "Email": {
+      "kind": "OBJECT",
+      "field_count": 6,
+      "fields": [
+        {
+          "name": "address",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "client",
+          "type": "Client!",
+          "raw_type": "Client",
+          "is_nullable": false
+        },
+        {
+          "name": "contact",
+          "type": "ContactModel",
+          "raw_type": "ContactModel",
+          "is_nullable": true
+        },
+        {
+          "name": "description",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "primary",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        }
+      ]
+    },
+    "ClientPhoneNumber": {
+      "kind": "OBJECT",
+      "field_count": 9,
+      "fields": [
+        {
+          "name": "client",
+          "type": "Client!",
+          "raw_type": "Client",
+          "is_nullable": false
+        },
+        {
+          "name": "contact",
+          "type": "ContactModel",
+          "raw_type": "ContactModel",
+          "is_nullable": true
+        },
+        {
+          "name": "description",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "friendly",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "normalizedPhoneNumber",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "number",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "primary",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "smsAllowed",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        }
+      ]
+    },
+    "ClientAddress": {
+      "kind": "OBJECT",
+      "field_count": 10,
+      "fields": [
+        {
+          "name": "city",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "country",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "latitude",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "longitude",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "postalCode",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "province",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "street",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "street1",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "street2",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        }
+      ]
+    },
+    "Request": {
+      "kind": "OBJECT",
+      "field_count": 23,
+      "fields": [
+        {
+          "name": "arrivalWindow",
+          "type": "ArrivalWindow",
+          "raw_type": "ArrivalWindow",
+          "is_nullable": true
+        },
+        {
+          "name": "assessment",
+          "type": "Assessment",
+          "raw_type": "Assessment",
+          "is_nullable": true
+        },
+        {
+          "name": "client",
+          "type": "Client!",
+          "raw_type": "Client",
+          "is_nullable": false
+        },
+        {
+          "name": "companyName",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "contactName",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "email",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "isArchivable",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "isScheduled",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "jobberWebUri",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "jobs",
+          "type": "JobConnection!",
+          "raw_type": "JobConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "lineItems",
+          "type": "RequestLineItemConnection",
+          "raw_type": "RequestLineItemConnection",
+          "is_nullable": true
+        },
+        {
+          "name": "noteAttachments",
+          "type": "RequestNoteFileConnection!",
+          "raw_type": "RequestNoteFileConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "RequestNoteUnionConnection!",
+          "raw_type": "RequestNoteUnionConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "phone",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "property",
+          "type": "Property",
+          "raw_type": "Property",
+          "is_nullable": true
+        },
+        {
+          "name": "quotes",
+          "type": "QuoteConnection!",
+          "raw_type": "QuoteConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "referringClient",
+          "type": "Client",
+          "raw_type": "Client",
+          "is_nullable": true
+        },
+        {
+          "name": "requestStatus",
+          "type": "RequestStatusTypeEnum!",
+          "raw_type": "RequestStatusTypeEnum",
+          "is_nullable": false
+        },
+        {
+          "name": "source",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        }
+      ]
+    },
+    "Quote": {
+      "kind": "OBJECT",
+      "field_count": 30,
+      "fields": [
+        {
+          "name": "amounts",
+          "type": "QuoteAmounts!",
+          "raw_type": "QuoteAmounts",
+          "is_nullable": false
+        },
+        {
+          "name": "client",
+          "type": "Client",
+          "raw_type": "Client",
+          "is_nullable": true
+        },
+        {
+          "name": "clientHubUri",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "clientHubViewedAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "contractDisclaimer",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "customFields",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "depositAmountUnallocated",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "depositRecords",
+          "type": "PaymentRecordConnection!",
+          "raw_type": "PaymentRecordConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "eligibleForFinancing",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "jobberWebUri",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "jobs",
+          "type": "JobConnection",
+          "raw_type": "JobConnection",
+          "is_nullable": true
+        },
+        {
+          "name": "lastTransitioned",
+          "type": "QuoteLastTransitioned!",
+          "raw_type": "QuoteLastTransitioned",
+          "is_nullable": false
+        },
+        {
+          "name": "lineItems",
+          "type": "QuoteLineItemConnection!",
+          "raw_type": "QuoteLineItemConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "linkedCommunications",
+          "type": "MessageInterfaceConnection!",
+          "raw_type": "MessageInterfaceConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "message",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "noteAttachments",
+          "type": "QuoteNoteFileConnection!",
+          "raw_type": "QuoteNoteFileConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "QuoteNoteUnionConnection!",
+          "raw_type": "QuoteNoteUnionConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "property",
+          "type": "Property",
+          "raw_type": "Property",
+          "is_nullable": true
+        },
+        {
+          "name": "quoteNumber",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "quoteStatus",
+          "type": "QuoteStatusTypeEnum!",
+          "raw_type": "QuoteStatusTypeEnum",
+          "is_nullable": false
+        },
+        {
+          "name": "request",
+          "type": "Request",
+          "raw_type": "Request",
+          "is_nullable": true
+        },
+        {
+          "name": "salesperson",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "sentAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "taxDetails",
+          "type": "TaxDetails",
+          "raw_type": "TaxDetails",
+          "is_nullable": true
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "transitionedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "unallocatedDepositRecords",
+          "type": "PaymentRecordConnection!",
+          "raw_type": "PaymentRecordConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        }
+      ]
+    },
+    "Job": {
+      "kind": "OBJECT",
+      "field_count": 42,
+      "fields": [
+        {
+          "name": "allowReviewRequest",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "arrivalWindow",
+          "type": "ArrivalWindow",
+          "raw_type": "ArrivalWindow",
+          "is_nullable": true
+        },
+        {
+          "name": "billingType",
+          "type": "BillingStrategy!",
+          "raw_type": "BillingStrategy",
+          "is_nullable": false
+        },
+        {
+          "name": "bookingConfirmationSentAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "client",
+          "type": "Client!",
+          "raw_type": "Client",
+          "is_nullable": false
+        },
+        {
+          "name": "completedAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "customFields",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "defaultVisitTitle",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "endAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "expenses",
+          "type": "ExpenseConnection!",
+          "raw_type": "ExpenseConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "instructions",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "invoiceSchedule",
+          "type": "InvoiceSchedule!",
+          "raw_type": "InvoiceSchedule",
+          "is_nullable": false
+        },
+        {
+          "name": "invoicedTotal",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "invoices",
+          "type": "InvoiceConnection!",
+          "raw_type": "InvoiceConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "jobBalanceTotals",
+          "type": "JobBalanceTotals",
+          "raw_type": "JobBalanceTotals",
+          "is_nullable": true
+        },
+        {
+          "name": "jobCosting",
+          "type": "JobCosting",
+          "raw_type": "JobCosting",
+          "is_nullable": true
+        },
+        {
+          "name": "jobNumber",
+          "type": "Int!",
+          "raw_type": "Int",
+          "is_nullable": false
+        },
+        {
+          "name": "jobStatus",
+          "type": "JobStatusTypeEnum!",
+          "raw_type": "JobStatusTypeEnum",
+          "is_nullable": false
+        },
+        {
+          "name": "jobType",
+          "type": "JobTypeTypeEnum!",
+          "raw_type": "JobTypeTypeEnum",
+          "is_nullable": false
+        },
+        {
+          "name": "jobberWebUri",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "lineItems",
+          "type": "JobLineItemConnection!",
+          "raw_type": "JobLineItemConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "nextDateToSendReviewSms",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "noteAttachments",
+          "type": "JobNoteFileConnection!",
+          "raw_type": "JobNoteFileConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "JobNoteUnionConnection!",
+          "raw_type": "JobNoteUnionConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "paymentRecords",
+          "type": "PaymentRecordConnection!",
+          "raw_type": "PaymentRecordConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "property",
+          "type": "Property!",
+          "raw_type": "Property",
+          "is_nullable": false
+        },
+        {
+          "name": "quote",
+          "type": "Quote",
+          "raw_type": "Quote",
+          "is_nullable": true
+        },
+        {
+          "name": "request",
+          "type": "Request",
+          "raw_type": "Request",
+          "is_nullable": true
+        },
+        {
+          "name": "salesperson",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "source",
+          "type": "Source!",
+          "raw_type": "Source",
+          "is_nullable": false
+        },
+        {
+          "name": "startAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "timeSheetEntries",
+          "type": "TimeSheetEntryConnection!",
+          "raw_type": "TimeSheetEntryConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "total",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "uninvoicedTotal",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "visitSchedule",
+          "type": "VisitSchedule!",
+          "raw_type": "VisitSchedule",
+          "is_nullable": false
+        },
+        {
+          "name": "visits",
+          "type": "VisitConnection!",
+          "raw_type": "VisitConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "visitsInfo",
+          "type": "VisitsInfo!",
+          "raw_type": "VisitsInfo",
+          "is_nullable": false
+        },
+        {
+          "name": "willClientBeAutomaticallyCharged",
+          "type": "Boolean",
+          "raw_type": "Boolean",
+          "is_nullable": true
+        }
+      ]
+    },
+    "Invoice": {
+      "kind": "OBJECT",
+      "field_count": 35,
+      "fields": [
+        {
+          "name": "allowReviewRequest",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "amounts",
+          "type": "InvoiceAmounts",
+          "raw_type": "InvoiceAmounts",
+          "is_nullable": true
+        },
+        {
+          "name": "billingAddress",
+          "type": "InvoiceBillingAddress",
+          "raw_type": "InvoiceBillingAddress",
+          "is_nullable": true
+        },
+        {
+          "name": "billingIsSameAsPropertyAddress",
+          "type": "Boolean",
+          "raw_type": "Boolean",
+          "is_nullable": true
+        },
+        {
+          "name": "client",
+          "type": "Client",
+          "raw_type": "Client",
+          "is_nullable": true
+        },
+        {
+          "name": "clientHubUri",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "contractDisclaimer",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "customFields",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "dateViewedInClientHub",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "dueDate",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "hasInvoiceNumberDuplicates",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "invoiceNet",
+          "type": "Int",
+          "raw_type": "Int",
+          "is_nullable": true
+        },
+        {
+          "name": "invoiceNumber",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "invoiceStatus",
+          "type": "InvoiceStatusTypeEnum!",
+          "raw_type": "InvoiceStatusTypeEnum",
+          "is_nullable": false
+        },
+        {
+          "name": "issuedDate",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "jobberWebUri",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "jobs",
+          "type": "JobConnection!",
+          "raw_type": "JobConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "lineItems",
+          "type": "InvoiceLineItemConnection!",
+          "raw_type": "InvoiceLineItemConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "linkedCommunications",
+          "type": "MessageInterfaceConnection!",
+          "raw_type": "MessageInterfaceConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "message",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "nextDateToSendReviewSms",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "noteAttachments",
+          "type": "InvoiceNoteFileConnection!",
+          "raw_type": "InvoiceNoteFileConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "InvoiceNoteUnionConnection!",
+          "raw_type": "InvoiceNoteUnionConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "paymentRecords",
+          "type": "PaymentRecordConnection!",
+          "raw_type": "PaymentRecordConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "properties",
+          "type": "PropertyConnection!",
+          "raw_type": "PropertyConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "receivedDate",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "salesperson",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "subject",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "taxCalculationMethod",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "taxDetails",
+          "type": "TaxDetails",
+          "raw_type": "TaxDetails",
+          "is_nullable": true
+        },
+        {
+          "name": "taxRate",
+          "type": "TaxRate",
+          "raw_type": "TaxRate",
+          "is_nullable": true
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "visits",
+          "type": "VisitConnection!",
+          "raw_type": "VisitConnection",
+          "is_nullable": false
+        }
+      ]
+    },
+    "User": {
+      "kind": "OBJECT",
+      "field_count": 21,
+      "fields": [
+        {
+          "name": "account",
+          "type": "Account",
+          "raw_type": "Account",
+          "is_nullable": true
+        },
+        {
+          "name": "address",
+          "type": "UserAddress",
+          "raw_type": "UserAddress",
+          "is_nullable": true
+        },
+        {
+          "name": "apps",
+          "type": "ApplicationConnection!",
+          "raw_type": "ApplicationConnection",
+          "is_nullable": false
+        },
+        {
+          "name": "assignedColor",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "assignedVehicle",
+          "type": "Vehicle",
+          "raw_type": "Vehicle",
+          "is_nullable": true
+        },
+        {
+          "name": "availableForScheduling",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "customFields",
+          "type": "[Unknown]!",
+          "raw_type": "Unknown",
+          "is_nullable": false
+        },
+        {
+          "name": "email",
+          "type": "UserEmail!",
+          "raw_type": "UserEmail",
+          "is_nullable": false
+        },
+        {
+          "name": "firstDayOfTheWeek",
+          "type": "UserFirstDayOfTheWeekEnum!",
+          "raw_type": "UserFirstDayOfTheWeekEnum",
+          "is_nullable": false
+        },
+        {
+          "name": "franchiseTokenLastFour",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "isAccountAdmin",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "isAccountOwner",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "isCurrentUser",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "lastLoginAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "name",
+          "type": "Name!",
+          "raw_type": "Name",
+          "is_nullable": false
+        },
+        {
+          "name": "phone",
+          "type": "UserPhone",
+          "raw_type": "UserPhone",
+          "is_nullable": true
+        },
+        {
+          "name": "status",
+          "type": "UserStatusEnum!",
+          "raw_type": "UserStatusEnum",
+          "is_nullable": false
+        },
+        {
+          "name": "timezone",
+          "type": "Timezone",
+          "raw_type": "Timezone",
+          "is_nullable": true
+        },
+        {
+          "name": "uuid",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        }
+      ]
+    },
+    "Expense": {
+      "kind": "OBJECT",
+      "field_count": 11,
+      "fields": [
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "date",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "enteredBy",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "linkedJob",
+          "type": "Job",
+          "raw_type": "Job",
+          "is_nullable": true
+        },
+        {
+          "name": "paidBy",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "reimbursableTo",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "title",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "total",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        }
+      ]
+    },
+    "TimeSheetEntry": {
+      "kind": "OBJECT",
+      "field_count": 18,
+      "fields": [
+        {
+          "name": "approved",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "approvedBy",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "client",
+          "type": "Client",
+          "raw_type": "Client",
+          "is_nullable": true
+        },
+        {
+          "name": "createdAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "endAt",
+          "type": "ISO8601DateTime",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": true
+        },
+        {
+          "name": "finalDuration",
+          "type": "Seconds!",
+          "raw_type": "Seconds",
+          "is_nullable": false
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "job",
+          "type": "Job",
+          "raw_type": "Job",
+          "is_nullable": true
+        },
+        {
+          "name": "label",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "labourRate",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "note",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "paidBy",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "startAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "ticking",
+          "type": "Boolean!",
+          "raw_type": "Boolean",
+          "is_nullable": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "ISO8601DateTime!",
+          "raw_type": "ISO8601DateTime",
+          "is_nullable": false
+        },
+        {
+          "name": "user",
+          "type": "User",
+          "raw_type": "User",
+          "is_nullable": true
+        },
+        {
+          "name": "visit",
+          "type": "Visit",
+          "raw_type": "Visit",
+          "is_nullable": true
+        },
+        {
+          "name": "visitDurationTotal",
+          "type": "Int!",
+          "raw_type": "Int",
+          "is_nullable": false
+        }
+      ]
+    },
+    "ProductOrService": {
+      "kind": "OBJECT",
+      "field_count": 16,
+      "fields": [
+        {
+          "name": "bookableType",
+          "type": "SelfServeBooking",
+          "raw_type": "SelfServeBooking",
+          "is_nullable": true
+        },
+        {
+          "name": "category",
+          "type": "ProductsAndServicesCategory!",
+          "raw_type": "ProductsAndServicesCategory",
+          "is_nullable": false
+        },
+        {
+          "name": "defaultUnitCost",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "raw_type": "String",
+          "is_nullable": true
+        },
+        {
+          "name": "durationMinutes",
+          "type": "Minutes",
+          "raw_type": "Minutes",
+          "is_nullable": true
+        },
+        {
+          "name": "id",
+          "type": "EncodedId!",
+          "raw_type": "EncodedId",
+          "is_nullable": false
+        },
+        {
+          "name": "internalUnitCost",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "lastJobLineItem",
+          "type": "JobLineItem",
+          "raw_type": "JobLineItem",
+          "is_nullable": true
+        },
+        {
+          "name": "lastQuoteLineItem",
+          "type": "QuoteLineItem",
+          "raw_type": "QuoteLineItem",
+          "is_nullable": true
+        },
+        {
+          "name": "markup",
+          "type": "Float",
+          "raw_type": "Float",
+          "is_nullable": true
+        },
+        {
+          "name": "name",
+          "type": "String!",
+          "raw_type": "String",
+          "is_nullable": false
+        },
+        {
+          "name": "onlineBookingSortOrder",
+          "type": "Int",
+          "raw_type": "Int",
+          "is_nullable": true
+        },
+        {
+          "name": "onlineBookingsEnabled",
+          "type": "Boolean",
+          "raw_type": "Boolean",
+          "is_nullable": true
+        },
+        {
+          "name": "quantityRange",
+          "type": "QuantityRange",
+          "raw_type": "QuantityRange",
+          "is_nullable": true
+        },
+        {
+          "name": "taxable",
+          "type": "Boolean",
+          "raw_type": "Boolean",
+          "is_nullable": true
+        },
+        {
+          "name": "visible",
+          "type": "Boolean",
+          "raw_type": "Boolean",
+          "is_nullable": true
+        }
+      ]
+    },
+    "QuoteAmounts": {
+      "kind": "OBJECT",
+      "field_count": 7,
+      "fields": [
+        {
+          "name": "depositAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "discountAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "nonTaxAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "outstandingDepositAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "subtotal",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "taxAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "total",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        }
+      ]
+    },
+    "InvoiceAmounts": {
+      "kind": "OBJECT",
+      "field_count": 10,
+      "fields": [
+        {
+          "name": "depositAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "discountAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "invoiceBalance",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "legacyDiscountAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "nonTaxAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "paymentsTotal",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "subtotal",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "taxAmount",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "tipsTotal",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        },
+        {
+          "name": "total",
+          "type": "Float!",
+          "raw_type": "Float",
+          "is_nullable": false
+        }
+      ]
+    }
+  },
+  "nested_structures": [
+    "PropertyAddress",
+    "Property",
+    "QuoteLineItem",
+    "InvoiceLineItem",
+    "Visit",
+    "Client",
+    "Email",
+    "ClientPhoneNumber",
+    "Request",
+    "Quote",
+    "Job",
+    "Invoice",
+    "User",
+    "Expense",
+    "TimeSheetEntry",
+    "ProductOrService"
+  ],
+  "statistics": {
+    "total_types": 26,
+    "object_types": 21,
+    "scalar_types": 1,
+    "union_types": 4,
+    "enum_types": 0
+  }
+}

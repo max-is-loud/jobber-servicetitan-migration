@@ -31,3 +31,9 @@ class Invoice:
     due_date: str = ""  # dueDate: ISO8601DateTime - Payment due date
     subtotal: int = 0  # amounts.subtotal converted to cents for precision
     line_items: str = "[]"  # lineItems: InvoiceLineItemConnection! as JSON array string
+    subject: str = ""  # subject: String! - Invoice subject/title
+    message: str = ""  # message: String - Invoice message/description
+    tax_cents: int = 0  # amounts.taxAmount converted to cents
+    discount_cents: int = 0  # amounts.discountAmount converted to cents
+    deposit_cents: int = 0  # amounts.depositAmount converted to cents
+    invoice_net: int = 0  # invoiceNet: Int - Net amount

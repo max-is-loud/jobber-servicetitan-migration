@@ -126,6 +126,7 @@ class BaseExtractor(ABC, Generic[T]):
         self._logger = logger
         self._entity_type = entity_type
         self._entity_name = entity_name
+        self._entity_name_plural = self._pluralize(entity_name)
         self._config_manager = config_manager or ConfigManagerImpl()
         self._skip_existing_entities = skip_existing_entities
 
@@ -168,6 +169,24 @@ class BaseExtractor(ABC, Generic[T]):
         # Note reference collector for deferred note loading (Phase 2)
         # Optional - only provided for extractors that collect note IDs
         self._note_reference_collector = kwargs.get("note_reference_collector")
+
+    @staticmethod
+    def _pluralize(word: str) -> str:
+        """Simple pluralization for entity names.
+
+        Args:
+            word: Singular word to pluralize
+
+        Returns:
+            Pluralized form of the word
+        """
+        # Handle special cases
+        if word.endswith('y'):
+            return word[:-1] + 'ies'  # property -> properties
+        elif word.endswith(('s', 'x', 'z', 'ch', 'sh')):
+            return word + 'es'
+        else:
+            return word + 's'
 
     def _should_skip_entity(self, entity_id: str) -> bool:
         """Check if an entity should be skipped based on existence in database.
@@ -557,20 +576,20 @@ class BaseExtractor(ABC, Generic[T]):
                     # Log with processed vs skipped counts
                     if self._skip_existing_entities and page_skipped > 0:
                         self._logger.info(
-                            f"Processed {len(entities_to_save)} {self._entity_name}s, "
+                            f"Processed {len(entities_to_save)} {self._entity_name_plural}, "
                             f"skipped {page_skipped} (total: {entities_processed} processed, "
                             f"{entities_skipped} skipped)"
                         )
                     else:
                         self._logger.info(
-                            f"Processed {len(entities_to_save)} {self._entity_name}s " f"(total: {entities_processed})"
+                            f"Processed {len(entities_to_save)} {self._entity_name_plural} " f"(total: {entities_processed})"
                         )
 
                 # Save related entities if any
                 if all_related_entities:
                     self._save_related_entities(all_related_entities)
                     for entity_type, related_list in all_related_entities.items():
-                        self._logger.info(f"Saved {len(related_list)} {entity_type} " f"for {self._entity_name}s")
+                        self._logger.info(f"Saved {len(related_list)} {entity_type} " f"for {self._entity_name_plural}")
 
                 pages_processed += 1
 
@@ -583,7 +602,7 @@ class BaseExtractor(ABC, Generic[T]):
                     self._save_cursor_progress(entity_type_name, end_cursor)
 
                 if not has_next_page:
-                    self._logger.debug(f"Reached last page of {self._entity_name}s")
+                    self._logger.debug(f"Reached last page of {self._entity_name_plural}")
                     break
 
                 # Update cursor for next iteration
@@ -725,7 +744,7 @@ class BaseExtractor(ABC, Generic[T]):
         )
 
         self._logger.info(
-            f"Completed full extraction: {len(all_entities)} {self._entity_name}s " f"from {total_pages} pages"
+            f"Completed full extraction: {len(all_entities)} {self._entity_name_plural} " f"from {total_pages} pages"
         )
 
         return all_entities

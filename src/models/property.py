@@ -28,3 +28,8 @@ class Property:
     longitude: str  # coordinates.longitude: Float - GPS longitude
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string
     updated_at: str  # updatedAt: ISO8601DateTime! - ISO format string
+    tax_rate_id: str = ""  # taxRate.id - Tax rate relationship ID
+    tax_rate_name: str = ""  # taxRate.name - Tax rate name
+    tax_rate: str = ""  # taxRate.rate - Tax rate percentage
+    is_billing_address: int = 0  # isBillingAddress: Boolean! - Billing address flag (0/1)
+    routing_order: int = 0  # routingOrder: Int - Order for route optimization

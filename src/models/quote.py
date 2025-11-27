@@ -25,3 +25,7 @@ class Quote:
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string
     transitioned_at: str  # transitionedAt: ISO8601DateTime! - ISO format string
     updated_at: str  # updatedAt: ISO8601DateTime! - ISO format string
+    quote_status: str = ""  # quoteStatus: QuoteStatusTypeEnum! - Quote status
+    sent_at: str = ""  # sentAt: ISO8601DateTime - When quote was sent to client
+    tax_cents: int = 0  # amounts.taxAmount converted to cents for precision
+    discount_cents: int = 0  # amounts.discountAmount converted to cents for precision

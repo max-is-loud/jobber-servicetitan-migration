@@ -16,15 +16,15 @@ rate_limits:
     safety_margin: 0.04
 max_retries: 15
 pagination:
-  clients: 40
-  invoices: 40
-  quotes: 40
+  clients: 50
+  invoices: 50
+  quotes: 50
   jobs: 30
-  properties: 30
+  properties: 55
   requests: 30
   users: 30
   expenses: 30
-  visits: 30
+  visits: 20
   timesheet_entries: 30
   product_services: 30
   tax_rates: 30
@@ -32,7 +32,7 @@ pagination:
   nested_notes: 10
   default: 30
 delays:
-  page_delay: 1.2
+  page_delay: 2
   request_timeout: 60.0
   retry_base_delay: 2.0
 backoff:
@@ -45,7 +45,7 @@ logging:
   performance_logging: true
   level: DEBUG
 database:
-  default_path: tightbeam.db
+  default_path: tightbeam.sqlite
   timeout: 30.0
   wal_mode: true
 attachments:

@@ -34,3 +34,5 @@ class User:
     timezone: str  # timezone: Timezone (scalar) - User's timezone
     created_at: str  # createdAt: ISO8601DateTime! - When user was created
     last_login_at: str  # lastLoginAt: ISO8601DateTime - Last login timestamp
+    available_for_scheduling: int = 0  # availableForScheduling: Boolean! - Scheduling availability (0/1)
+    assigned_color: str = ""  # assignedColor: String - Calendar color for this user

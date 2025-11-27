@@ -63,6 +63,17 @@ class JobberClient:
             id
             firstName
             lastName
+            companyName
+            balance
+            isArchivable
+            isCompany
+            billingAddress {{
+              street
+              city
+              province
+              postalCode
+              country
+            }}
             emails {{
               address
             }}
@@ -130,10 +141,16 @@ class JobberClient:
             amounts {{
               total
               subtotal
+              taxAmount
+              discountAmount
+              depositAmount
             }}
+            invoiceNet
             invoiceStatus
             issuedDate
             dueDate
+            subject
+            message
             lineItems(first: 50) {{
               edges {{
                 node {{
@@ -151,7 +168,12 @@ class JobberClient:
               totalCount
               edges {{
                 node {{
-                  id
+                  ... on InvoiceNote {{
+                    id
+                  }}
+                  ... on ClientNote {{
+                    id
+                  }}
                 }}
               }}
               pageInfo {{
@@ -205,12 +227,16 @@ class JobberClient:
               id
             }}
             quoteNumber
+            quoteStatus
             title
             amounts {{
               total
               subtotal
+              taxAmount
+              discountAmount
             }}
             message
+            sentAt
             lineItems(first: 50) {{
               edges {{
                 node {{
@@ -230,7 +256,12 @@ class JobberClient:
               totalCount
               edges {{
                 node {{
-                  id
+                  ... on QuoteNote {{
+                    id
+                  }}
+                  ... on ClientNote {{
+                    id
+                  }}
                 }}
               }}
               pageInfo {{
@@ -303,18 +334,26 @@ class JobberClient:
               id
             }}
             jobNumber
+            jobType
             title
             instructions
             jobStatus
+            billingType
             startAt
             endAt
             completedAt
             total
+            invoicedTotal
             notes(first: {nested_notes_limit}) {{
               totalCount
               edges {{
                 node {{
-                  id
+                  ... on JobNote {{
+                    id
+                  }}
+                  ... on ClientNote {{
+                    id
+                  }}
                 }}
               }}
               pageInfo {{
@@ -364,9 +403,16 @@ class JobberClient:
         edges {{
           node {{
             id
+            name
             client {{
               id
             }}
+            taxRate {{
+              id
+              name
+            }}
+            isBillingAddress
+            routingOrder
             address {{
               street
               street1
@@ -427,7 +473,12 @@ class JobberClient:
               totalCount
               edges {{
                 node {{
-                  id
+                  ... on RequestNote {{
+                    id
+                  }}
+                  ... on ClientNote {{
+                    id
+                  }}
                 }}
               }}
               pageInfo {{
@@ -487,6 +538,8 @@ class JobberClient:
             timezone
             isAccountAdmin
             isAccountOwner
+            availableForScheduling
+            assignedColor
             status
             createdAt
             lastLoginAt
@@ -563,10 +616,12 @@ class JobberClient:
             instructions
             visitStatus
             allDay
+            clientConfirmed
             duration
             startAt
             endAt
             completedAt
+            completedBy
             createdAt
           }
         }
@@ -2628,6 +2683,11 @@ class JobberClient:
                     message
                     createdAt
                   }}
+                  ... on ClientNote {{
+                    id
+                    message
+                    createdAt
+                  }}
                 }}
               }}
               pageInfo {{
@@ -2665,6 +2725,17 @@ class JobberClient:
         Raises:
             JobberApiError: If API communication fails
         """
+        note_type_map = {
+            "client": "ClientNote",
+            "invoice": "InvoiceNote",
+            "job": "JobNote",
+            "quote": "QuoteNote",
+            "request": "RequestNote",
+        }
+        note_type = note_type_map.get(entity_type)
+        if not note_type:
+            raise ValueError(f"Unsupported entity type for notes: {entity_type}")
+
         query = f"""
         query GetAdditionalNoteIds($id: EncodedId!, $cursor: String!) {{
           {entity_type}(id: $id) {{
@@ -2672,7 +2743,12 @@ class JobberClient:
               totalCount
               edges {{
                 node {{
-                  id
+                  ... on {note_type} {{
+                    id
+                  }}
+                  ... on ClientNote {{
+                    id
+                  }}
                 }}
               }}
               pageInfo {{

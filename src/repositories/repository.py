@@ -67,6 +67,8 @@ class Repository:
         and due_date, subtotal, and line_items columns to invoices table.
         Extends migration_state table for entity sync tracking.
         Adds download tracking fields to attachments table.
+        Phase 4: Adds enhanced fields from Jobber schema alignment (balance_cents,
+        company_name, billing_address, tax/discount fields, completion tracking, etc.)
         Uses conditional ALTER TABLE statements to only add columns if they don't exist.
 
         Raises:
@@ -75,7 +77,7 @@ class Repository:
         try:
             cursor = self._connection.cursor()
 
-            # Check and add additional_emails column to clients table
+            # ===== CLIENTS TABLE =====
             cursor.execute("PRAGMA table_info(clients)")
             clients_columns = {row[1] for row in cursor.fetchall()}
 
@@ -85,7 +87,35 @@ class Repository:
             if "additional_phones" not in clients_columns:
                 cursor.execute("ALTER TABLE clients ADD COLUMN additional_phones TEXT DEFAULT '[]'")
 
-            # Check and add new columns to invoices table
+            # Phase 4: Enhanced client fields
+            if "balance_cents" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN balance_cents INTEGER DEFAULT 0")
+
+            if "company_name" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN company_name TEXT DEFAULT ''")
+
+            if "billing_street" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN billing_street TEXT DEFAULT ''")
+
+            if "billing_city" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN billing_city TEXT DEFAULT ''")
+
+            if "billing_province" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN billing_province TEXT DEFAULT ''")
+
+            if "billing_postal_code" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN billing_postal_code TEXT DEFAULT ''")
+
+            if "billing_country" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN billing_country TEXT DEFAULT ''")
+
+            if "is_archivable" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN is_archivable INTEGER DEFAULT 0")
+
+            if "is_company" not in clients_columns:
+                cursor.execute("ALTER TABLE clients ADD COLUMN is_company INTEGER DEFAULT 0")
+
+            # ===== INVOICES TABLE =====
             cursor.execute("PRAGMA table_info(invoices)")
             invoices_columns = {row[1] for row in cursor.fetchall()}
 
@@ -98,7 +128,99 @@ class Repository:
             if "line_items" not in invoices_columns:
                 cursor.execute("ALTER TABLE invoices ADD COLUMN line_items TEXT DEFAULT '[]'")
 
-            # Extend migration_state table for entity sync state tracking
+            # Phase 4: Enhanced invoice fields
+            if "tax_cents" not in invoices_columns:
+                cursor.execute("ALTER TABLE invoices ADD COLUMN tax_cents INTEGER DEFAULT 0")
+
+            if "discount_cents" not in invoices_columns:
+                cursor.execute("ALTER TABLE invoices ADD COLUMN discount_cents INTEGER DEFAULT 0")
+
+            if "deposit_cents" not in invoices_columns:
+                cursor.execute("ALTER TABLE invoices ADD COLUMN deposit_cents INTEGER DEFAULT 0")
+
+            if "invoice_net" not in invoices_columns:
+                cursor.execute("ALTER TABLE invoices ADD COLUMN invoice_net INTEGER DEFAULT 0")
+
+            if "subject" not in invoices_columns:
+                cursor.execute("ALTER TABLE invoices ADD COLUMN subject TEXT DEFAULT ''")
+
+            if "message" not in invoices_columns:
+                cursor.execute("ALTER TABLE invoices ADD COLUMN message TEXT DEFAULT ''")
+
+            # ===== QUOTES TABLE =====
+            cursor.execute("PRAGMA table_info(quotes)")
+            quotes_columns = {row[1] for row in cursor.fetchall()}
+
+            # Phase 4: Enhanced quote fields
+            if "tax_cents" not in quotes_columns:
+                cursor.execute("ALTER TABLE quotes ADD COLUMN tax_cents INTEGER DEFAULT 0")
+
+            if "discount_cents" not in quotes_columns:
+                cursor.execute("ALTER TABLE quotes ADD COLUMN discount_cents INTEGER DEFAULT 0")
+
+            if "quote_status" not in quotes_columns:
+                cursor.execute("ALTER TABLE quotes ADD COLUMN quote_status TEXT DEFAULT ''")
+
+            if "sent_at" not in quotes_columns:
+                cursor.execute("ALTER TABLE quotes ADD COLUMN sent_at TEXT DEFAULT ''")
+
+            # ===== JOBS TABLE =====
+            cursor.execute("PRAGMA table_info(jobs)")
+            jobs_columns = {row[1] for row in cursor.fetchall()}
+
+            # Phase 4: Enhanced job fields
+            if "job_type" not in jobs_columns:
+                cursor.execute("ALTER TABLE jobs ADD COLUMN job_type TEXT DEFAULT ''")
+
+            if "billing_type" not in jobs_columns:
+                cursor.execute("ALTER TABLE jobs ADD COLUMN billing_type TEXT DEFAULT ''")
+
+            if "invoiced_total" not in jobs_columns:
+                cursor.execute("ALTER TABLE jobs ADD COLUMN invoiced_total INTEGER DEFAULT 0")
+
+            # ===== PROPERTIES TABLE =====
+            cursor.execute("PRAGMA table_info(properties)")
+            properties_columns = {row[1] for row in cursor.fetchall()}
+
+            # Phase 4: Enhanced property fields
+            if "tax_rate_id" not in properties_columns:
+                cursor.execute("ALTER TABLE properties ADD COLUMN tax_rate_id TEXT DEFAULT ''")
+
+            if "tax_rate_name" not in properties_columns:
+                cursor.execute("ALTER TABLE properties ADD COLUMN tax_rate_name TEXT DEFAULT ''")
+
+            if "tax_rate" not in properties_columns:
+                cursor.execute("ALTER TABLE properties ADD COLUMN tax_rate TEXT DEFAULT ''")
+
+            if "is_billing_address" not in properties_columns:
+                cursor.execute("ALTER TABLE properties ADD COLUMN is_billing_address INTEGER DEFAULT 0")
+
+            if "routing_order" not in properties_columns:
+                cursor.execute("ALTER TABLE properties ADD COLUMN routing_order INTEGER DEFAULT 0")
+
+            # ===== VISITS TABLE =====
+            cursor.execute("PRAGMA table_info(visits)")
+            visits_columns = {row[1] for row in cursor.fetchall()}
+
+            # Phase 4: Enhanced visit fields (client_confirmed, completed_by_id)
+            if "client_confirmed" not in visits_columns:
+                cursor.execute("ALTER TABLE visits ADD COLUMN client_confirmed INTEGER DEFAULT 0")
+
+            if "completed_by_id" not in visits_columns:
+                cursor.execute("ALTER TABLE visits ADD COLUMN completed_by_id TEXT DEFAULT ''")
+
+            # ===== USERS TABLE =====
+            cursor.execute("PRAGMA table_info(users)")
+            users_columns = {row[1] for row in cursor.fetchall()}
+
+            # Phase 4: Enhanced user fields
+            if "available_for_scheduling" not in users_columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN available_for_scheduling INTEGER DEFAULT 0")
+
+            if "assigned_color" not in users_columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN assigned_color TEXT DEFAULT ''")
+
+            # ===== MIGRATION_STATE TABLE =====
             cursor.execute("PRAGMA table_info(migration_state)")
             migration_state_columns = {row[1] for row in cursor.fetchall()}
 
@@ -111,7 +233,7 @@ class Repository:
             if "last_sync_at" not in migration_state_columns:
                 cursor.execute("ALTER TABLE migration_state ADD COLUMN last_sync_at TEXT")
 
-            # Add download tracking fields to attachments table
+            # ===== ATTACHMENTS TABLE =====
             cursor.execute("PRAGMA table_info(attachments)")
             attachments_columns = {row[1] for row in cursor.fetchall()}
 
@@ -1083,14 +1205,25 @@ class Repository:
                     client.created_at,
                     client.additional_emails,
                     client.additional_phones,
+                    client.company_name,
+                    client.balance_cents,
+                    client.is_archivable,
+                    client.is_company,
+                    client.billing_street,
+                    client.billing_city,
+                    client.billing_province,
+                    client.billing_postal_code,
+                    client.billing_country,
                 )
                 for client in clients
             ]
 
             cursor.executemany(
                 """INSERT OR REPLACE INTO clients
-                   (id, first_name, last_name, email, phone, created_at, additional_emails, additional_phones)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                   (id, first_name, last_name, email, phone, created_at, additional_emails, additional_phones,
+                    company_name, balance_cents, is_archivable, is_company,
+                    billing_street, billing_city, billing_province, billing_postal_code, billing_country)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
                 client_data,
             )
 

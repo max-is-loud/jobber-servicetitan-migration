@@ -78,6 +78,21 @@ class EntityMapper:
             # Format ISO datetime
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
 
+            # Map new fields
+            company_name = data.get("companyName") or ""
+            balance = data.get("balance", 0.0)
+            balance_cents = MapperUtils.convert_to_cents(balance)
+            is_archivable = 1 if data.get("isArchivable") else 0
+            is_company = 1 if data.get("isCompany") else 0
+
+            # Flatten billing address
+            billing_address = data.get("billingAddress") or {}
+            billing_street = billing_address.get("street") or ""
+            billing_city = billing_address.get("city") or ""
+            billing_province = billing_address.get("province") or ""
+            billing_postal_code = billing_address.get("postalCode") or ""
+            billing_country = billing_address.get("country") or ""
+
             return Client(
                 id=client_id,
                 first_name=first_name,
@@ -87,6 +102,15 @@ class EntityMapper:
                 created_at=created_at,
                 additional_emails=additional_emails_json,
                 additional_phones=additional_phones_json,
+                company_name=company_name,
+                balance_cents=balance_cents,
+                is_archivable=is_archivable,
+                is_company=is_company,
+                billing_street=billing_street,
+                billing_city=billing_city,
+                billing_province=billing_province,
+                billing_postal_code=billing_postal_code,
+                billing_country=billing_country,
             )
 
         except Exception as e:
@@ -126,15 +150,31 @@ class EntityMapper:
             amounts = data.get("amounts", {})
             total_amount = None
             subtotal_amount = None
+            tax_amount = None
+            discount_amount = None
+            deposit_amount = None
             if isinstance(amounts, dict):
                 total_amount = amounts.get("total")
                 subtotal_amount = amounts.get("subtotal")
+                tax_amount = amounts.get("taxAmount")
+                discount_amount = amounts.get("discountAmount")
+                deposit_amount = amounts.get("depositAmount")
 
             total_cents = MapperUtils.convert_to_cents(total_amount)
             subtotal = MapperUtils.convert_to_cents(subtotal_amount)
+            tax_cents = MapperUtils.convert_to_cents(tax_amount)
+            discount_cents = MapperUtils.convert_to_cents(discount_amount)
+            deposit_cents = MapperUtils.convert_to_cents(deposit_amount)
+
+            # Extract invoice net (already in cents according to schema)
+            invoice_net = data.get("invoiceNet") or 0
 
             # Extract invoice status
             status = data.get("invoiceStatus", "")
+
+            # Extract subject and message
+            subject = data.get("subject") or ""
+            message = data.get("message") or ""
 
             # Format dates
             issued_at = self._format_iso_datetime(data.get("issuedDate"))
@@ -154,6 +194,12 @@ class EntityMapper:
                 due_date=due_date,
                 subtotal=subtotal,
                 line_items=line_items,
+                subject=subject,
+                message=message,
+                tax_cents=tax_cents,
+                discount_cents=discount_cents,
+                deposit_cents=deposit_cents,
+                invoice_net=invoice_net,
             )
 
         except Exception as e:
@@ -202,15 +248,25 @@ class EntityMapper:
             amounts = data.get("amounts", {})
             total_amount = None
             subtotal_amount = None
+            tax_amount = None
+            discount_amount = None
             if isinstance(amounts, dict):
                 total_amount = amounts.get("total")
                 subtotal_amount = amounts.get("subtotal")
+                tax_amount = amounts.get("taxAmount")
+                discount_amount = amounts.get("discountAmount")
 
             total = self._convert_to_cents(total_amount)
             subtotal = self._convert_to_cents(subtotal_amount)
+            tax_cents = self._convert_to_cents(tax_amount)
+            discount_cents = self._convert_to_cents(discount_amount)
 
             # Extract disclaimer/message
             disclaimer = data.get("message", "")
+
+            # Extract quote status and sent timestamp
+            quote_status = data.get("quoteStatus") or ""
+            sent_at = self._format_iso_datetime(data.get("sentAt"))
 
             # Extract and serialize line items to JSON string
             line_items_data = data.get("lineItems", {})
@@ -234,6 +290,10 @@ class EntityMapper:
                 created_at=created_at,
                 transitioned_at=transitioned_at,
                 updated_at=updated_at,
+                quote_status=quote_status,
+                sent_at=sent_at,
+                tax_cents=tax_cents,
+                discount_cents=discount_cents,
             )
 
         except Exception as e:
@@ -457,6 +517,14 @@ class EntityMapper:
             total_amount = data.get("total")
             total = MapperUtils.convert_to_cents(total_amount)
 
+            # Extract job type and billing type
+            job_type = data.get("jobType") or ""
+            billing_type = data.get("billingType") or ""
+
+            # Extract and convert invoiced total to cents
+            invoiced_total_amount = data.get("invoicedTotal")
+            invoiced_total = MapperUtils.convert_to_cents(invoiced_total_amount)
+
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
             updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
@@ -476,6 +544,9 @@ class EntityMapper:
                 total=total,
                 created_at=created_at,
                 updated_at=updated_at,
+                job_type=job_type,
+                billing_type=billing_type,
+                invoiced_total=invoiced_total,
             )
 
         except Exception as e:
@@ -510,17 +581,34 @@ class EntityMapper:
 
             # Extract address information
             address = data.get("address", {})
-            address_line1 = MapperUtils.safe_get_nested(address, "line1", default="")
-            address_line2 = MapperUtils.safe_get_nested(address, "line2", default="")
+            address_line1 = MapperUtils.safe_get_nested(address, "street1", default="")
+            address_line2 = MapperUtils.safe_get_nested(address, "street2", default="")
             city = MapperUtils.safe_get_nested(address, "city", default="")
-            state_province = MapperUtils.safe_get_nested(address, "stateProvince", default="")
+            state_province = MapperUtils.safe_get_nested(address, "province", default="")
             postal_code = MapperUtils.safe_get_nested(address, "postalCode", default="")
             country = MapperUtils.safe_get_nested(address, "country", default="")
 
-            # Extract GPS coordinates
-            coordinates = data.get("coordinates", {})
+            # Extract GPS coordinates (nested under address in GraphQL response)
+            coordinates = address.get("coordinates", {}) if address else {}
             latitude = str(MapperUtils.safe_get_nested(coordinates, "latitude", default=""))
             longitude = str(MapperUtils.safe_get_nested(coordinates, "longitude", default=""))
+
+            # Extract tax rate relationship
+            tax_rate_obj = data.get("taxRate", {})
+            tax_rate_id = ""
+            tax_rate_name = ""
+            tax_rate = ""
+            if isinstance(tax_rate_obj, dict):
+                tax_rate_id = tax_rate_obj.get("id") or ""
+                tax_rate_name = tax_rate_obj.get("name") or ""
+                rate_value = tax_rate_obj.get("rate")
+                tax_rate = str(rate_value) if rate_value is not None else ""
+
+            # Extract billing address flag and routing order
+            is_billing_address = 1 if data.get("isBillingAddress") else 0
+            routing_order = data.get("routingOrder") or 0
+            if not isinstance(routing_order, int):
+                routing_order = 0
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -540,6 +628,11 @@ class EntityMapper:
                 longitude=longitude,
                 created_at=created_at,
                 updated_at=updated_at,
+                tax_rate_id=tax_rate_id,
+                tax_rate_name=tax_rate_name,
+                tax_rate=tax_rate,
+                is_billing_address=is_billing_address,
+                routing_order=routing_order,
             )
 
         except Exception as e:
@@ -668,6 +761,10 @@ class EntityMapper:
             # Extract timezone (Timezone is SCALAR, query directly)
             timezone = data.get("timezone", "")
 
+            # Extract scheduling and display fields
+            available_for_scheduling = 1 if data.get("availableForScheduling") else 0
+            assigned_color = data.get("assignedColor") or ""
+
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
             last_login_at = MapperUtils.format_iso_datetime(data.get("lastLoginAt"))
@@ -685,6 +782,8 @@ class EntityMapper:
                 timezone=timezone,
                 created_at=created_at,
                 last_login_at=last_login_at,
+                available_for_scheduling=available_for_scheduling,
+                assigned_color=assigned_color,
             )
 
         except Exception as e:
@@ -798,11 +897,17 @@ class EntityMapper:
             title = data.get("title", "")
             instructions = data.get("instructions", "")
             status = data.get("visitStatus", "")
-            all_day = str(data.get("allDay", False)).lower()
+            all_day = 1 if data.get("allDay") else 0
 
             # Extract duration
             duration = data.get("duration", 0)
             duration_minutes = int(duration) if isinstance(duration, (int, float)) else 0
+
+            # Extract client confirmation flag
+            client_confirmed = 1 if data.get("clientConfirmed") else 0
+
+            # Extract completed by user ID
+            completed_by_id = MapperUtils.extract_id_from_relationship(data.get("completedBy"))
 
             # Format ISO datetimes
             start_at = MapperUtils.format_iso_datetime(data.get("startAt"))
@@ -827,6 +932,8 @@ class EntityMapper:
                 completed_at=completed_at,
                 created_at=created_at,
                 updated_at=updated_at,
+                client_confirmed=client_confirmed,
+                completed_by_id=completed_by_id,
             )
 
         except Exception as e:

@@ -32,10 +32,12 @@ class Visit:
     title: str  # title: String - Visit title/description
     instructions: str  # instructions: String - Specific visit instructions
     status: str  # visitStatus: VisitStatusTypeEnum! - Visit status
-    all_day: str  # allDay: Boolean! - Full day visit flag
+    all_day: int  # allDay: Boolean! - Full day visit flag (0/1)
     duration_minutes: int  # duration: Int - Duration in minutes
     start_at: str  # startAt: ISO8601DateTime - Scheduled start time
     end_at: str  # endAt: ISO8601DateTime - Scheduled end time
     completed_at: str  # completedAt: ISO8601DateTime - When visit was completed
     created_at: str  # createdAt: ISO8601DateTime! - When visit was created
     updated_at: str  # updatedAt: ISO8601DateTime! - Last modification timestamp
+    client_confirmed: int = 0  # clientConfirmed: Boolean! - Client confirmation flag (0/1)
+    completed_by_id: str = ""  # completedBy.id - User who completed the visit
