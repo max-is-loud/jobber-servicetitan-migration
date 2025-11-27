@@ -976,9 +976,9 @@ class EntityMapper:
             if not user_id:
                 raise MappingError("TimeSheetEntry user ID is required but missing")
 
+            # job_id is optional - some timesheet entries may not be associated with a job
+            # (e.g., general admin time, PTO, or other non-job-specific time tracking)
             job_id = MapperUtils.extract_id_from_relationship(data.get("job"))
-            if not job_id:
-                raise MappingError("TimeSheetEntry job ID is required but missing")
 
             # Extract optional relationship IDs
             visit_id = MapperUtils.extract_id_from_relationship(data.get("visit"))

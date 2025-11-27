@@ -556,7 +556,7 @@ class Repository:
                 CREATE TABLE IF NOT EXISTS timesheet_entries (
                     id TEXT PRIMARY KEY,
                     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+                    job_id TEXT REFERENCES jobs(id) ON DELETE CASCADE,
                     visit_id TEXT REFERENCES visits(id) ON DELETE SET NULL,
                     approved_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
                     paid_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,

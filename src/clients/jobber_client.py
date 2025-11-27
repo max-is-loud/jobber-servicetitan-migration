@@ -634,28 +634,30 @@ class JobberClient:
     }}
     """
 
-    # GraphQL query for fetching timesheet entries with cursor pagination
-    TIMESHEET_ENTRIES_QUERY = """
-    query GetTimesheetEntries($cursor: String) {
-      timeSheetEntries(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_timesheet_entries_query(self) -> str:
+        """Get GraphQL query for fetching timesheet entries with configurable pagination."""
+        page_size = self._get_pagination_size("timesheet_entries")
+        return f"""
+    query GetTimesheetEntries($cursor: String) {{
+      timeSheetEntries(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
-            user {
+            user {{
               id
-            }
-            job {
+            }}
+            job {{
               id
-            }
-            visit {
+            }}
+            visit {{
               id
-            }
-            approvedBy {
+            }}
+            approvedBy {{
               id
-            }
-            paidBy {
+            }}
+            paidBy {{
               id
-            }
+            }}
             label
             note
             labourRate
@@ -667,22 +669,24 @@ class JobberClient:
             endAt
             createdAt
             updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
-    # GraphQL query for fetching products or services with cursor pagination
-    PRODUCTS_SERVICES_QUERY = """
-    query GetProductsServices($cursor: String) {
-      productOrServices(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_products_services_query(self) -> str:
+        """Get GraphQL query for fetching products/services with configurable pagination."""
+        page_size = self._get_pagination_size("product_services")
+        return f"""
+    query GetProductsServices($cursor: String) {{
+      productOrServices(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
             name
             description
@@ -695,22 +699,24 @@ class JobberClient:
             visible
             onlineBookingsEnabled
             onlineBookingSortOrder
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
-    # GraphQL query for fetching tax rates with cursor pagination
-    TAX_RATES_QUERY = """
-    query GetTaxRates($cursor: String) {
-      taxRates(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_tax_rates_query(self) -> str:
+        """Get GraphQL query for fetching tax rates with configurable pagination."""
+        page_size = self._get_pagination_size("tax_rates")
+        return f"""
+    query GetTaxRates($cursor: String) {{
+      taxRates(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
             name
             description
@@ -723,14 +729,14 @@ class JobberClient:
             defaultForRegion
             createdAt
             updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
     # GraphQL query for fetching individual note by ID
@@ -2122,7 +2128,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.TIMESHEET_ENTRIES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_timesheet_entries_query(), cursor)
 
             # Validate that timesheet entries data exists in response
             if response_data.get("data") is not None and "timeSheetEntries" not in response_data["data"]:
@@ -2160,7 +2166,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.PRODUCTS_SERVICES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_products_services_query(), cursor)
 
             # Validate that products and services data exists in response
             if response_data.get("data") is not None and "productOrServices" not in response_data["data"]:
@@ -2197,7 +2203,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.TAX_RATES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_tax_rates_query(), cursor)
 
             # Validate that tax rates data exists in response
             if response_data.get("data") is not None and "taxRates" not in response_data["data"]:

@@ -21,18 +21,18 @@ pagination:
   quotes: 18
   jobs: 32
   properties: 55
-  requests: 30
+  requests: 54
   users: 30
-  expenses: 30
-  visits: 20
-  timesheet_entries: 30
+  expenses: 10
+  visits: 42
+  timesheet_entries: 50
   product_services: 30
   tax_rates: 30
   notes: 50
   nested_notes: 10
   default: 30
 delays:
-  page_delay: 2
+  page_delay: 2.0
   request_timeout: 60.0
   retry_base_delay: 2.0
 backoff:
