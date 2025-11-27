@@ -588,30 +588,31 @@ class JobberClient:
     }
     """
 
-    # GraphQL query for fetching visits with cursor pagination
-    # Note: updatedAt field does not exist on Visit type (removed from schema)
-    VISITS_QUERY = """
-    query GetVisits($cursor: String) {
-      visits(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_visits_query(self) -> str:
+        """Get GraphQL query for fetching visits with configurable pagination."""
+        page_size = self._get_pagination_size("visits")
+        return f"""
+    query GetVisits($cursor: String) {{
+      visits(first: {page_size}, after: $cursor) {{
+        edges {{
+          node {{
             id
-            job {
+            job {{
               id
-            }
-            client {
+            }}
+            client {{
               id
-            }
-            property {
+            }}
+            property {{
               id
-            }
-            assignedUsers {
-              edges {
-                node {
+            }}
+            assignedUsers {{
+              edges {{
+                node {{
                   id
-                }
-              }
-            }
+                }}
+              }}
+            }}
             title
             instructions
             visitStatus
@@ -623,14 +624,14 @@ class JobberClient:
             completedAt
             completedBy
             createdAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
     # GraphQL query for fetching timesheet entries with cursor pagination
@@ -2085,7 +2086,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.VISITS_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_visits_query(), cursor)
 
             # Validate that visits data exists in response
             if response_data.get("data") is not None and "visits" not in response_data["data"]:

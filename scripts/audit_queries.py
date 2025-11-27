@@ -186,7 +186,7 @@ def main():
         'Job': ['JOBS_QUERY', '_get_jobs_query', '_get_jobs_map_query'],
         'Property': ['PROPERTIES_QUERY', '_get_properties_query', '_get_properties_map_query'],
         'Request': ['REQUESTS_QUERY', '_get_requests_query', '_get_requests_map_query'],
-        'Visit': ['VISITS_QUERY', '_get_visits_query', '_get_visits_map_query'],
+        'Visit': ['_get_visits_query', '_get_visits_map_query'],
         'User': ['USERS_QUERY'],
         'Expense': ['EXPENSES_QUERY', '_get_expenses_query'],
         'TimeSheetEntry': ['TIMESHEET_ENTRIES_QUERY', '_get_timesheet_entries_query'],
