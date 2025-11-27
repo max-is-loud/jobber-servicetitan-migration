@@ -1296,6 +1296,9 @@ class JobberClient:
         self._throttling_events = 0
         self._last_request_was_throttled = False
 
+        # Track rate limit cooldown (account-wide, persists across requests)
+        self._rate_limit_reset_time: Optional[float] = None  # Unix timestamp when rate limit resets
+
         # Track throttle status for adaptive page sizing
         self._last_requested_cost: Optional[int] = None
         self._last_currently_available: Optional[int] = None
@@ -1483,6 +1486,32 @@ class JobberClient:
         # Reset throttling flag for this request
         self._last_request_was_throttled = False
 
+        # Check if we're in a rate limit cooldown period (account-wide)
+        if self._rate_limit_reset_time:
+            current_time = time.time()
+            if current_time < self._rate_limit_reset_time:
+                wait_time = self._rate_limit_reset_time - current_time
+                print(
+                    f"\n⏸️  Rate limit cooldown active (account-wide). "
+                    f"Waiting {wait_time:.1f}s until reset..."
+                )
+
+                # Countdown timer for cooldown period
+                remaining = wait_time
+                while remaining > 0:
+                    print(
+                        f"\r⏸️  Rate limit cooldown: {remaining:.1f}s remaining...",
+                        end="",
+                        flush=True
+                    )
+                    sleep_time = min(0.1, remaining)
+                    time.sleep(sleep_time)
+                    remaining -= sleep_time
+
+                print("\r✅ Rate limit cooldown complete, resuming requests...".ljust(80))
+                # Clear the reset time now that we've waited
+                self._rate_limit_reset_time = None
+
         for attempt in range(max_retries + 1):
             try:
                 # Get authentication headers with automatic OAuth2 token refresh
@@ -1548,6 +1577,10 @@ class JobberClient:
                             remaining_int = int(remaining)
                             reset_int = int(reset_time) if reset_time else None
                             self.metrics_collector.record_rate_limit_headers(remaining_int, reset_int)
+
+                            # Store reset time for account-wide rate limit tracking
+                            if reset_int:
+                                self._rate_limit_reset_time = float(reset_int)
                         except (ValueError, TypeError):
                             # Gracefully handle invalid header values
                             pass
@@ -1588,7 +1621,18 @@ class JobberClient:
                         self._throttling_events += 1
                         self._last_request_was_throttled = True
 
-                    delay = base_delay * (2**attempt)  # Exponential backoff
+                        # Set account-wide cooldown for throttling errors
+                        # Use exponential backoff but store as reset time for persistence
+                        delay = base_delay * (2**attempt)  # Exponential backoff
+                        self._rate_limit_reset_time = time.time() + delay
+
+                        debug_print(
+                            f"[DEBUG] Throttling detected. Setting account-wide cooldown until "
+                            f"{time.strftime('%H:%M:%S', time.localtime(self._rate_limit_reset_time))}"
+                        )
+                    else:
+                        # Connection errors don't set account-wide cooldown
+                        delay = base_delay * (2**attempt)
 
                     # Customize message based on error type
                     error_type = "GraphQL throttling" if is_throttling else "Network connection error"
