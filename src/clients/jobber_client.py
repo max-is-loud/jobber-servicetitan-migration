@@ -1597,11 +1597,23 @@ class JobberClient:
                         f"[DEBUG] {error_type} detected, attempt {attempt + 1}/{max_retries + 1}. "
                         f"Retrying in {delay}s..."
                     )
-                    print(
-                        f"⏳ {error_type} detected, retrying in {delay:.1f}s... "
-                        f"(attempt {attempt + 1}/{max_retries + 1})"
-                    )
-                    time.sleep(delay)
+
+                    # Display countdown timer
+                    remaining = delay
+                    while remaining > 0:
+                        print(
+                            f"\r⏳ {error_type} detected, retrying in {remaining:.1f}s... "
+                            f"(attempt {attempt + 1}/{max_retries + 1})",
+                            end="",
+                            flush=True
+                        )
+                        sleep_time = min(0.1, remaining)  # Update every 0.1s for smooth countdown
+                        time.sleep(sleep_time)
+                        remaining -= sleep_time
+
+                    # Clear the line and print final message
+                    print(f"\r⏳ {error_type} detected, retrying now... "
+                          f"(attempt {attempt + 1}/{max_retries + 1})".ljust(80))
                     continue
                 else:
                     # Not a retryable error or out of retries
