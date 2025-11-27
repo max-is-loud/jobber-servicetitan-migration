@@ -704,6 +704,10 @@ class EntityMapper:
                 assigned_to=assigned_to,
                 converted_to_quote_id=converted_to_quote_id,
                 converted_to_job_id=converted_to_job_id,
+                company_name=company_name,
+                contact_name=contact_name,
+                email=email,
+                phone=phone,
                 created_at=created_at,
                 updated_at=updated_at,
             )
@@ -831,6 +835,11 @@ class EntityMapper:
             # Extract expense date
             expense_date = MapperUtils.format_iso_datetime(data.get("date"))
 
+            # Extract tracking fields
+            entered_by_id = MapperUtils.extract_id_from_relationship(data.get("enteredBy"))
+            paid_by_id = MapperUtils.extract_id_from_relationship(data.get("paidBy"))
+            reimbursable_to_id = MapperUtils.extract_id_from_relationship(data.get("reimbursableTo"))
+
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
             updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
@@ -844,6 +853,9 @@ class EntityMapper:
                 receipt_url=receipt_url,
                 vendor=vendor,
                 expense_date=expense_date,
+                entered_by_id=entered_by_id,
+                paid_by_id=paid_by_id,
+                reimbursable_to_id=reimbursable_to_id,
                 created_at=created_at,
                 updated_at=updated_at,
             )
@@ -906,15 +918,16 @@ class EntityMapper:
             # Extract client confirmation flag
             client_confirmed = 1 if data.get("clientConfirmed") else 0
 
-            # Extract completed by user ID
-            completed_by_id = MapperUtils.extract_id_from_relationship(data.get("completedBy"))
+            # Extract completed by user ID (handle as scalar string, not relationship)
+            completed_by = data.get("completedBy", "")
+            completed_by_id = completed_by if isinstance(completed_by, str) else ""
 
             # Format ISO datetimes
             start_at = MapperUtils.format_iso_datetime(data.get("startAt"))
             end_at = MapperUtils.format_iso_datetime(data.get("endAt"))
             completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
-            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
+            updated_at = None  # Field not available in Jobber Visit schema
 
             return Visit(
                 id=visit_id,
@@ -1042,9 +1055,10 @@ class EntityMapper:
             name = data.get("name", "")
             description = data.get("description", "")
 
-            # Extract category
-            category_obj = data.get("category", {})
-            category = MapperUtils.safe_get_nested(category_obj, "name", default="")
+            # Extract category (handle both scalar string and object)
+            category = data.get("category", "")
+            if isinstance(category, dict):
+                category = category.get("name", "")
 
             # Extract and convert pricing to cents
             default_unit_cost = data.get("defaultUnitCost", 0)
@@ -1064,7 +1078,7 @@ class EntityMapper:
             # Extract flags
             taxable = str(data.get("taxable", False)).lower()
             visible = str(data.get("visible", True)).lower()
-            online_booking_enabled = str(data.get("onlineBookingEnabled", False)).lower()
+            online_booking_enabled = str(data.get("onlineBookingsEnabled", False)).lower()
 
             # Extract ordering
             online_booking_sort_order = data.get("onlineBookingSortOrder", 0)

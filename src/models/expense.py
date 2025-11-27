@@ -30,5 +30,8 @@ class Expense:
     receipt_url: str  # receiptUrl: String - URL to receipt image/document
     vendor: str  # vendor: String - Vendor or supplier name
     expense_date: str  # expenseDate: ISO8601DateTime! - When expense occurred
+    entered_by_id: str  # enteredBy.id - User who entered the expense
+    paid_by_id: str  # paidBy.id - User or entity who paid
+    reimbursable_to_id: str  # reimbursableTo.id - User to be reimbursed
     created_at: str  # createdAt: ISO8601DateTime! - When expense was recorded
     updated_at: str  # updatedAt: ISO8601DateTime! - Last modification timestamp

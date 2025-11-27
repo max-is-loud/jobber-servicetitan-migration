@@ -209,6 +209,37 @@ class Repository:
             if "completed_by_id" not in visits_columns:
                 cursor.execute("ALTER TABLE visits ADD COLUMN completed_by_id TEXT DEFAULT ''")
 
+            # ===== REQUESTS TABLE =====
+            cursor.execute("PRAGMA table_info(requests)")
+            requests_columns = {row[1] for row in cursor.fetchall()}
+
+            # Phase 5: Enhanced request fields (contact information)
+            if "company_name" not in requests_columns:
+                cursor.execute("ALTER TABLE requests ADD COLUMN company_name TEXT DEFAULT ''")
+
+            if "contact_name" not in requests_columns:
+                cursor.execute("ALTER TABLE requests ADD COLUMN contact_name TEXT DEFAULT ''")
+
+            if "email" not in requests_columns:
+                cursor.execute("ALTER TABLE requests ADD COLUMN email TEXT DEFAULT ''")
+
+            if "phone" not in requests_columns:
+                cursor.execute("ALTER TABLE requests ADD COLUMN phone TEXT DEFAULT ''")
+
+            # ===== EXPENSES TABLE =====
+            cursor.execute("PRAGMA table_info(expenses)")
+            expenses_columns = {row[1] for row in cursor.fetchall()}
+
+            # Phase 5: Enhanced expense fields (tracking metadata)
+            if "entered_by_id" not in expenses_columns:
+                cursor.execute("ALTER TABLE expenses ADD COLUMN entered_by_id TEXT DEFAULT ''")
+
+            if "paid_by_id" not in expenses_columns:
+                cursor.execute("ALTER TABLE expenses ADD COLUMN paid_by_id TEXT DEFAULT ''")
+
+            if "reimbursable_to_id" not in expenses_columns:
+                cursor.execute("ALTER TABLE expenses ADD COLUMN reimbursable_to_id TEXT DEFAULT ''")
+
             # ===== USERS TABLE =====
             cursor.execute("PRAGMA table_info(users)")
             users_columns = {row[1] for row in cursor.fetchall()}
@@ -444,6 +475,10 @@ class Repository:
                     assigned_to TEXT,
                     converted_to_quote_id TEXT REFERENCES quotes(id) ON DELETE SET NULL,
                     converted_to_job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+                    company_name TEXT DEFAULT '',
+                    contact_name TEXT DEFAULT '',
+                    email TEXT DEFAULT '',
+                    phone TEXT DEFAULT '',
                     created_at TEXT,
                     updated_at TEXT
                 )
@@ -480,6 +515,9 @@ class Repository:
                     receipt_url TEXT,
                     vendor TEXT,
                     expense_date TEXT,
+                    entered_by_id TEXT DEFAULT '',
+                    paid_by_id TEXT DEFAULT '',
+                    reimbursable_to_id TEXT DEFAULT '',
                     created_at TEXT,
                     updated_at TEXT
                 )

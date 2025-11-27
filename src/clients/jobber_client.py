@@ -713,6 +713,15 @@ class JobberClient:
             id
             name
             description
+            rate
+            region
+            compound
+            active
+            taxNumber
+            displayOrder
+            defaultForRegion
+            createdAt
+            updatedAt
           }
         }
         pageInfo {

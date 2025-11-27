@@ -1255,9 +1255,10 @@ class BaseExtractor(ABC, Generic[T]):
             # Auto-paginate to fetch all remaining attachments
             if attachments_page_info.get("hasNextPage", False):
                 total_count = attachments_data.get("totalCount", "unknown")
+                remaining = total_count - len(attachments) if isinstance(total_count, int) else "unknown"
                 self._logger.debug(
-                    f"Fetching additional attachments for {self._entity_name} {primary_entity.id} "
-                    f"(total: {total_count}, fetched so far: {len(attachments)})"
+                    f"Fetching remaining attachments for {self._entity_name} {primary_entity.id} "
+                    f"(total: {total_count}, initial batch: {len(attachments)}, remaining: {remaining})"
                 )
                 attachments.extend(self._fetch_all_remaining_attachments(primary_entity.id, attachments_page_info.get("endCursor")))
 
