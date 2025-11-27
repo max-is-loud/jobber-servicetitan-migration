@@ -52,7 +52,20 @@ class ConfigManagerImpl:
     Provides centralized configuration management with environment-specific overrides
     and comprehensive validation using dataclasses. Follows the project's Protocol-based
     dependency injection architecture.
+
+    Singleton pattern ensures only one watchdog observer is created across all instances.
     """
+
+    _instance: Optional["ConfigManagerImpl"] = None
+    _instance_lock = threading.Lock()
+
+    def __new__(cls, config_dir: str = "config", environment: str | None = None, enable_hot_reload: bool = True):
+        """Ensure only one instance exists (singleton pattern)."""
+        with cls._instance_lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
 
     def __init__(self, config_dir: str = "config", environment: str | None = None, enable_hot_reload: bool = True):
         """Initialize ConfigManager with configuration directory and environment.
@@ -65,6 +78,10 @@ class ConfigManagerImpl:
         Raises:
             ConfigurationError: If config files cannot be loaded or are invalid
         """
+        # Only initialize once (singleton pattern)
+        if self._initialized:
+            return
+
         self.config_dir = Path(config_dir)
         self.environment = environment
         self.config: AppConfig | None = None
@@ -77,6 +94,8 @@ class ConfigManagerImpl:
         # Start file watcher if hot reload is enabled
         if self.enable_hot_reload:
             self._start_file_watcher()
+
+        self._initialized = True
 
     def _load_config(self) -> None:
         """Load and validate configuration from YAML files.
