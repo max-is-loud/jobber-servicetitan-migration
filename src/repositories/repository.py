@@ -151,6 +151,10 @@ class Repository:
             cursor.execute("PRAGMA table_info(quotes)")
             quotes_columns = {row[1] for row in cursor.fetchall()}
 
+            # Add property_id if missing
+            if "property_id" not in quotes_columns:
+                cursor.execute("ALTER TABLE quotes ADD COLUMN property_id TEXT DEFAULT ''")
+
             # Phase 4: Enhanced quote fields
             if "tax_cents" not in quotes_columns:
                 cursor.execute("ALTER TABLE quotes ADD COLUMN tax_cents INTEGER DEFAULT 0")
@@ -340,6 +344,7 @@ class Repository:
                 CREATE TABLE IF NOT EXISTS quotes (
                     id TEXT PRIMARY KEY,
                     client_id TEXT NOT NULL REFERENCES clients(id),
+                    property_id TEXT DEFAULT '',
                     quote_number TEXT,
                     title TEXT,
                     total INTEGER,
