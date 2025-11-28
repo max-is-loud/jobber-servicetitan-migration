@@ -82,21 +82,9 @@ class AttachmentDownloader:
         Path(self._base_download_path).mkdir(parents=True, exist_ok=True)
 
         # Configure allowed domains for SSRF protection
-        # NOTE: These domains should be verified against actual Jobber attachment URLs
-        # and narrowed to specific S3 buckets/CloudFront distributions if possible.
-        # Current configuration allows known Jobber domains and their specific CDN endpoints.
+        # Attachments are served exclusively from Jobber's S3 bucket
         self._allowed_domains = {
-            # Jobber main domains
-            "getjobber.com",
-            "cdn.getjobber.com",
-            "assets.getjobber.com",
-            # Jobber-specific S3 buckets (narrowed from broad s3.amazonaws.com)
-            "jobber.s3.amazonaws.com",  # Generic Jobber S3 bucket
-            "jobber-attachments.s3.amazonaws.com",
-            "jobber-assets.s3.amazonaws.com",
-            # Jobber-specific CloudFront distributions (narrowed from broad cloudfront.net)
-            # TODO: Replace with actual CloudFront distribution IDs once identified
-            "d123456abcdef.cloudfront.net",  # Example - replace with actual distribution
+            "jobber.s3.amazonaws.com",
         }
 
     def _validate_url(self, url: str) -> tuple[bool, str]:
