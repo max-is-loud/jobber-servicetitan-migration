@@ -2855,49 +2855,76 @@ class JobberClient:
         if not note_type:
             raise ValueError(f"Unsupported entity type for notes: {entity_type}")
 
-        query = f"""
-        query GetAdditionalNotes($id: EncodedId!, $cursor: String!) {{
-          {entity_type}(id: $id) {{
-            notes(first: {page_size}, after: $cursor) {{
-              totalCount
-              edges {{
-                node {{
-                  ... on {note_type} {{
-                    id
-                    message
-                    createdAt
-                    updatedAt
-                    {entity_type} {{
-                      id
-                    }}
-                    attachments {{
-                      edges {{
-                        node {{
-                          id
-                          fileName
-                          contentType
-                          url
-                          fileSize
-                          createdAt
-                        }}
+        # Build the query based on whether entity-specific note type is ClientNote or not
+        if note_type == "ClientNote":
+            # For client entities, only ClientNote fragment needed (no nested fields)
+            query = f"""
+            query GetAdditionalNotes($id: EncodedId!, $cursor: String!) {{
+              {entity_type}(id: $id) {{
+                notes(first: {page_size}, after: $cursor) {{
+                  totalCount
+                  edges {{
+                    node {{
+                      ... on ClientNote {{
+                        id
+                        message
+                        createdAt
                       }}
                     }}
                   }}
-                  ... on ClientNote {{
-                    id
-                    message
-                    createdAt
+                  pageInfo {{
+                    hasNextPage
+                    endCursor
                   }}
                 }}
               }}
-              pageInfo {{
-                hasNextPage
-                endCursor
+            }}
+            """
+        else:
+            # For other entities, include both entity-specific and ClientNote fragments
+            query = f"""
+            query GetAdditionalNotes($id: EncodedId!, $cursor: String!) {{
+              {entity_type}(id: $id) {{
+                notes(first: {page_size}, after: $cursor) {{
+                  totalCount
+                  edges {{
+                    node {{
+                      ... on {note_type} {{
+                        id
+                        message
+                        createdAt
+                        updatedAt
+                        {entity_type} {{
+                          id
+                        }}
+                        attachments {{
+                          edges {{
+                            node {{
+                              id
+                              fileName
+                              contentType
+                              url
+                              fileSize
+                              createdAt
+                            }}
+                          }}
+                        }}
+                      }}
+                      ... on ClientNote {{
+                        id
+                        message
+                        createdAt
+                      }}
+                    }}
+                  }}
+                  pageInfo {{
+                    hasNextPage
+                    endCursor
+                  }}
+                }}
               }}
             }}
-          }}
-        }}
-        """
+            """
 
         variables = {"id": entity_id, "cursor": cursor}
         response = self._execute_graphql_request(query, variables=variables)
