@@ -778,29 +778,11 @@ class BaseExtractor(ABC, Generic[T]):
                 f"total count unknown"
             )
 
-        while True:
-            result = self.extract(cursor=cursor)
+        # Extract all pages - note that extract() processes ALL pages in one call
+        result = self.extract(cursor=cursor)
 
-            # Get entities from this batch
-            entities = self._get_entities_from_last_batch()
-            all_entities.extend(entities)
-
-            total_pages += result["pages_processed"]
-            total_fetched += len(entities)
-            cursor = result["end_cursor"]
-
-            # Checkpoint progress after each page (enables resume)
-            self._repository.save_migration_state(
-                entity_type=self._entity_name,
-                last_cursor=cursor,
-                total_fetched=total_fetched,
-                sync_status="in_progress",
-            )
-
-            if not result["has_next_page"]:
-                break
-
-            self._logger.info(f"Continuing extraction from cursor: {cursor} " f"(total pages: {total_pages})")
+        total_pages = result["pages_processed"]
+        total_fetched = result["entities_processed"]
 
         # Mark extraction as completed
         self._repository.save_migration_state(
@@ -810,16 +792,18 @@ class BaseExtractor(ABC, Generic[T]):
             sync_status="completed",
         )
 
-        completion_msg = f"Completed full extraction: {len(all_entities):,} {self._entity_name_plural} from {total_pages} pages"
+        completion_msg = f"Completed full extraction: {total_fetched:,} {self._entity_name_plural} from {total_pages} pages"
 
         # Add percentage if total count is available
         if hasattr(self, '_total_count') and self._total_count:
-            percentage = (len(all_entities) / self._total_count) * 100
+            percentage = (total_fetched / self._total_count) * 100
             completion_msg += f" ({percentage:.1f}% of {self._total_count:,})"
 
         self._logger.info(completion_msg)
 
-        return all_entities
+        # Return empty list since extract() already saved all entities to repository
+        # Coordinator can use total_fetched from migration_state if needed
+        return []
 
     @abstractmethod
     def _get_entities_from_last_batch(self) -> List[T]:

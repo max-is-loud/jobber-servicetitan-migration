@@ -217,9 +217,14 @@ class MaxExtractCoordinator:
                 self._logger.info(f"📦 Extracting: {entity_type}")
 
                 extractor = self._extractors[entity_type]
-                entities_extracted = extractor.extract_all(resume=resume)
+                extractor.extract_all(resume=resume)
 
-                count = len(entities_extracted)
+                # Get count from migration_state using extractor's entity_name
+                # (entity_type is plural key like "product_services",
+                # entity_name is singular like "product service")
+                entity_name = extractor._entity_name
+                state = self._repository.get_migration_state(entity_name)
+                count = state.total_fetched if state else 0
                 results[entity_type] = count
                 total_entities += count
 
