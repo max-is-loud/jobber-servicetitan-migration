@@ -43,6 +43,13 @@ class JobberClient:
     # Jobber API version - required for all requests
     API_VERSION = "2023-11-15"
 
+    # Default timeout values (seconds)
+    DEFAULT_CONNECT_TIMEOUT = 10.0  # Connection establishment timeout
+    DEFAULT_REQUEST_TIMEOUT = 30.0  # Read timeout for API requests
+
+    # Default batch size for metrics collection
+    DEFAULT_METRICS_BATCH_SIZE = 30
+
     def _get_clients_query(self) -> str:
         """Get GraphQL query for fetching clients with configurable pagination.
 
@@ -1319,10 +1326,15 @@ class JobberClient:
             try:
                 request_timeout = self.config_manager.get_delay_config("request_timeout")
             except ConfigurationError:
-                request_timeout = 30.0
+                request_timeout = self.DEFAULT_REQUEST_TIMEOUT
 
-            # Use default connect timeout (10s) and configured read timeout
-            timeout = (10, request_timeout)
+            # Get connect timeout from config or use default
+            try:
+                connect_timeout = self.config_manager.get_delay_config("connect_timeout")
+            except ConfigurationError:
+                connect_timeout = self.DEFAULT_CONNECT_TIMEOUT
+
+            timeout = (connect_timeout, request_timeout)
             self.http_client = HttpClient(timeout=timeout)
 
         # Track throttling events for performance optimization
@@ -1427,7 +1439,7 @@ class JobberClient:
                 # Extract batch size from GraphQL query using regex
                 import re
 
-                batch_size = 30  # Default batch size
+                batch_size = self.DEFAULT_METRICS_BATCH_SIZE
                 batch_match = re.search(r"first:\s*(\d+)", query)
                 if batch_match:
                     batch_size = int(batch_match.group(1))

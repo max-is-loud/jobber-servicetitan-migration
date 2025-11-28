@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Generic, List, Optional, Type, TypeVar
 
 from ..clients import JobberClient
@@ -58,6 +59,16 @@ T = TypeVar(
 # Maps entity type names to lists of related entities (e.g., {"notes": [Note, Note, ...]})
 # Using Note union for extensibility as more related entity types are added
 RelatedEntities = dict[str, List[Note]]
+
+# Constants for pagination and data fetching
+# Default limit for nested notes field when fetching parent entities via node(id:) interface
+# Note: Jobber doesn't support node(id:) for notes directly - notes are fetched as nested
+# fields on parent entities (clients, jobs, etc.) or via entity-specific note queries
+DEFAULT_NESTED_NOTES_LIMIT = 10
+
+# Default page size for paginating notes/attachments via entity-specific queries
+# Used when fetching additional pages beyond the initial nested notes limit
+DEFAULT_NOTES_PAGE_SIZE = 100
 
 
 class BaseExtractor(ABC, Generic[T]):
@@ -189,30 +200,10 @@ class BaseExtractor(ABC, Generic[T]):
         else:
             return word + 's'
 
-    def _should_skip_entity(self, entity_id: str) -> bool:
-        """Check if an entity should be skipped based on existence in database.
-
-        Uses Repository.entity_exists() for fast primary key lookups when
-        skip_existing_entities is enabled.
-
-        Args:
-            entity_id: ID of the entity to check
-
-        Returns:
-            True if entity should be skipped, False otherwise
-        """
-        if not self._skip_existing_entities or not self._table_name:
-            return False
-
-        try:
-            return self._repository.entity_exists(self._table_name, entity_id)
-        except RepositoryError as e:
-            self._logger.debug(f"Failed to check entity existence for {entity_id}: {e}")
-            # Err on the side of processing if check fails
-            return False
-
     def _filter_new_entities(self, entities: List[T]) -> tuple[List[T], int]:
         """Filter out existing entities if skip logic is enabled.
+
+        Uses batch existence checking to avoid N+1 query pattern.
 
         Args:
             entities: List of entities to filter
@@ -220,14 +211,24 @@ class BaseExtractor(ABC, Generic[T]):
         Returns:
             Tuple of (filtered_entities, skipped_count)
         """
-        if not self._skip_existing_entities:
+        if not self._skip_existing_entities or not self._table_name:
+            return entities, 0
+
+        # Batch check existing entity IDs to avoid N+1 queries
+        entity_ids = [entity.id for entity in entities if hasattr(entity, "id")]
+
+        try:
+            existing_ids = self._repository.get_existing_entity_ids(self._table_name, entity_ids)
+        except RepositoryError as e:
+            self._logger.debug(f"Failed to batch check entity existence: {e}")
+            # Fall back to processing all entities if batch check fails
             return entities, 0
 
         new_entities = []
         skipped_count = 0
 
         for entity in entities:
-            if hasattr(entity, "id") and self._should_skip_entity(entity.id):
+            if hasattr(entity, "id") and entity.id in existing_ids:
                 skipped_count += 1
             else:
                 new_entities.append(entity)
@@ -317,7 +318,7 @@ class BaseExtractor(ABC, Generic[T]):
         # This is much more efficient than pagination-based search
         try:
             # Get nested notes limit from config
-            nested_notes_limit = 10
+            nested_notes_limit = DEFAULT_NESTED_NOTES_LIMIT
             if self._config_manager:
                 try:
                     nested_notes_limit = self._config_manager.get_pagination_config("nested_notes")
@@ -1019,7 +1020,7 @@ class BaseExtractor(ABC, Generic[T]):
                     entity_id=entity_id,
                     entity_type=self._entity_name,
                     cursor=current_cursor,
-                    page_size=100  # Fetch in larger batches for efficiency
+                    page_size=DEFAULT_NOTES_PAGE_SIZE
                 )
 
                 edges = response.get("edges", [])
@@ -1092,7 +1093,7 @@ class BaseExtractor(ABC, Generic[T]):
                     entity_id=entity_id,
                     entity_type=self._entity_name,
                     cursor=current_cursor,
-                    page_size=100  # Fetch in larger batches for efficiency
+                    page_size=DEFAULT_NOTES_PAGE_SIZE
                 )
 
                 edges = response.get("edges", [])
@@ -1231,7 +1232,7 @@ class BaseExtractor(ABC, Generic[T]):
                     entity_id=entity_id,
                     entity_type=self._entity_name,
                     cursor=current_cursor,
-                    page_size=100,
+                    page_size=DEFAULT_NOTES_PAGE_SIZE,
                 )
 
                 edges = response.get("edges", [])
@@ -1401,13 +1402,15 @@ class BaseExtractor(ABC, Generic[T]):
                     f"(review in ./attachments/ORPHANED/)"
                 )
                 # Track detailed information for reporting
+                # Sanitize entity ID to prevent path traversal
+                safe_entity_id = Path(primary_entity.id).name
                 self._data_quality_issues.append({
                     "entity_type": self._entity_name,
                     "entity_id": primary_entity.id,
                     "display_id": display_id,
                     "attachments_saved_orphaned": orphaned_attachments_saved,
                     "issue_type": "orphaned_data_preserved",
-                    "review_path": f"./attachments/ORPHANED/{primary_entity.id}/"
+                    "review_path": f"./attachments/ORPHANED/{safe_entity_id}/"
                 })
 
             if attachments:

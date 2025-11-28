@@ -2802,6 +2802,41 @@ class Repository:
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to check entity existence in {table_name}: {e}") from e
 
+    def get_existing_entity_ids(self, table_name: str, entity_ids: list[str]) -> set[str]:
+        """Batch check which entity IDs exist in the specified table.
+
+        Uses a single query with IN clause for efficient batch checking.
+        This eliminates N+1 query patterns when filtering large entity lists.
+
+        Args:
+            table_name: Name of the table to check (e.g., 'clients', 'invoices')
+            entity_ids: List of entity IDs to check
+
+        Returns:
+            Set of entity IDs that exist in the table
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        if not entity_ids:
+            return set()
+
+        try:
+            cursor = self._connection.cursor()
+
+            # Build parameterized query with IN clause
+            placeholders = ",".join("?" * len(entity_ids))
+            query = f"SELECT id FROM {table_name} WHERE id IN ({placeholders})"
+
+            cursor.execute(query, entity_ids)
+            existing_ids = {row[0] for row in cursor.fetchall()}
+            cursor.close()
+
+            return existing_ids
+
+        except sqlite3.Error as e:
+            raise RepositoryError(f"Failed to batch check entity existence in {table_name}: {e}") from e
+
     def save_migration_state(
         self,
         entity_type: str,

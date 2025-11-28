@@ -1,0 +1,78 @@
+# Tightbeam Configuration Example
+# Copy this file to settings.yaml and customize for your environment
+
+# Rate limiting profiles for API requests
+# Choose based on your needs: conservative (safest), moderate (balanced), aggressive (fastest)
+rate_limits:
+  conservative:
+    capacity: 250           # Maximum tokens in bucket
+    refill_rate: 240        # Tokens added per minute
+    initial_tokens: 40      # Starting tokens
+    safety_margin: 0.52     # Reserve 52% capacity as buffer
+  moderate:
+    capacity: 600
+    refill_rate: 600
+    initial_tokens: 150
+    safety_margin: 0.1      # Reserve 10% capacity as buffer
+  aggressive:
+    capacity: 500
+    refill_rate: 480
+    initial_tokens: 100
+    safety_margin: 0.04     # Reserve 4% capacity as buffer
+
+# Maximum retry attempts for failed API requests
+max_retries: 15
+
+# Pagination sizes for different entity types
+# Smaller values = more API calls but lower query costs
+# Larger values = fewer API calls but higher query costs (max 100)
+pagination:
+  clients: 20                 # Client records per page
+  invoices: 14                # Invoice records per page
+  quotes: 10                  # Quote records per page
+  jobs: 20                    # Job records per page
+  properties: 40              # Property records per page
+  requests: 30                # Request records per page
+  users: 30                   # User records per page
+  expenses: 10                # Expense records per page
+  visits: 30                  # Visit records per page
+  timesheet_entries: 50       # Timesheet entry records per page
+  product_services: 100       # Product/service records per page
+  tax_rates: 30               # Tax rate records per page
+  notes: 50                   # Notes per page when paginating
+  nested_notes: 10            # Notes included in parent entity queries (affects query cost)
+  default: 30                 # Default pagination size for unlisted entities
+
+# API request delays and timeouts (in seconds)
+delays:
+  page_delay: 1               # Delay between paginated requests
+  request_timeout: 60.0       # Maximum time to wait for API response
+  retry_base_delay: 2.0       # Base delay before retrying failed requests
+  connect_timeout: 10.0       # Maximum time to establish connection
+
+# Exponential backoff configuration for rate limit handling
+backoff:
+  initial_delay: 5.0          # Starting delay when rate limited (seconds)
+  max_delay: 300.0            # Maximum delay cap (5 minutes)
+  multiplier: 2.0             # Exponential backoff multiplier
+  jitter_factor: 0.2          # Random jitter (20%) to prevent thundering herd
+
+# Logging configuration
+logging:
+  verbose_cost_monitoring: true   # Log detailed GraphQL cost metrics
+  performance_logging: true       # Log performance metrics
+  level: DEBUG                    # Log level: DEBUG, INFO, WARNING, ERROR
+
+# Database configuration
+database:
+  default_path: tightbeam.sqlite  # SQLite database file path
+  timeout: 30.0                   # Database operation timeout (seconds)
+  wal_mode: true                  # Enable Write-Ahead Logging for better concurrency
+
+# Attachment handling
+attachments:
+  auto_download: false        # Automatically download attachments during extraction
+
+# Metrics collection configuration
+metrics:
+  default_batch_size: 30      # Default batch size for metrics aggregation
