@@ -321,7 +321,7 @@ class BaseExtractor(ABC, Generic[T]):
             if self._config_manager:
                 try:
                     nested_notes_limit = self._config_manager.get_pagination_config("nested_notes")
-                except:
+                except (ConfigurationError, KeyError, AttributeError):
                     pass  # Use default if not configured
 
             # Fetch entity using node interface

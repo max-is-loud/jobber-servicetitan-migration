@@ -6,6 +6,7 @@ OAuth2 authorization code flow, including authorization URL generation,
 code exchange for tokens, and token refresh operations.
 """
 
+import logging
 import secrets
 from typing import Any, Optional
 from urllib.parse import urlencode
@@ -13,6 +14,8 @@ from urllib.parse import urlencode
 from ..clients.http_client import HttpClient
 from ..exceptions import ConfigurationError, OAuth2Error
 from ..interfaces import IHttpClient
+
+logger = logging.getLogger(__name__)
 
 
 class OAuth2Manager:
@@ -207,11 +210,9 @@ class OAuth2Manager:
                 return_headers=False,
             )
 
-            # DEBUG: Log the full response for diagnosing token rotation issues
-            import json
-
-            print(f"[DEBUG] Token refresh response keys: {list(response_data.keys())}")
-            print(f"[DEBUG] Token refresh response: {json.dumps(response_data, indent=2)}")
+            # Log the response for diagnosing token rotation issues (debug level)
+            logger.debug("Token refresh response keys: %s", list(response_data.keys()))
+            # Don't log the full response as it may contain sensitive token data
 
         except Exception as e:
             if "Invalid or expired" in str(e) or "Access forbidden" in str(e):
@@ -228,14 +229,16 @@ class OAuth2Manager:
         # However, Jobber has Refresh Token Rotation ON by default (required for App Marketplace),
         # which means each refresh SHOULD return a new refresh token.
         if "refresh_token" not in response_data:
-            print("[WARNING] Jobber did not return a new refresh_token in refresh response")
-            print("[WARNING] This is unexpected - Jobber has Refresh Token Rotation enabled by default")
-            print("[WARNING] Preserving existing refresh_token - this may fail on next refresh")
+            logger.warning(
+                "Jobber did not return a new refresh_token in refresh response. "
+                "This is unexpected - Jobber has Refresh Token Rotation enabled by default. "
+                "Preserving existing refresh_token - this may fail on next refresh."
+            )
             response_data["refresh_token"] = refresh_token
         elif response_data["refresh_token"] != refresh_token:
-            print("[INFO] Refresh token rotated successfully (old token is now invalid)")
+            logger.info("Refresh token rotated successfully (old token is now invalid)")
         else:
-            print("[INFO] Refresh token unchanged (rotation may be disabled for this app)")
+            logger.info("Refresh token unchanged (rotation may be disabled for this app)")
 
         return response_data
 
@@ -276,7 +279,7 @@ class OAuth2Manager:
         if "refresh_token" not in response_data:
             # Don't raise error - per OAuth 2.0 spec this is optional
             # But log warning since Jobber rotation requires it
-            print("[WARNING] Token response missing 'refresh_token' field")
+            logger.warning("Token response missing 'refresh_token' field")
 
         if "expires_in" not in response_data:
-            print("[WARNING] Token response missing 'expires_in' field, will use default (3600s)")
+            logger.warning("Token response missing 'expires_in' field, will use default (3600s)")
