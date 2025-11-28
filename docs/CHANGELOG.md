@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-01-21
+
+### Added
+- Multi-pass extraction system for comprehensive data migration
+- Map mode query validation for all entity types
+- Relation tracking for expenses and visits map extractors
+- Multi-pass migration documentation
+
+### Changed
+- Project name updated to "Project Tightbeam"
+- Disabled adaptive config persistence for map mode
+- Updated migration CLI with multi-pass support
+
+## [0.1.3] - 2024-11-17
+
 ### Added
 - Comprehensive release process documentation (RELEASING.md)
 - Pre-release checklists and troubleshooting guide
@@ -15,8 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Version management now uses single source of truth (pyproject.toml)
 - `src/constants.py` reads version from package metadata via `importlib.metadata`
-
-## [0.1.3] - 2024-11-17
 
 ### Added
 - ServiceFactory pattern for centralized rate limiting setup

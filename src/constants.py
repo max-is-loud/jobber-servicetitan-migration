@@ -1,5 +1,5 @@
 """
-TightBeam v2 Application Constants
+Project Tightbeam Application Constants
 
 Centralized location for all application metadata, version information,
 and configuration constants. Update these values in one place to ensure
@@ -9,11 +9,11 @@ consistency across the entire application.
 from importlib.metadata import version, PackageNotFoundError
 
 # Application Metadata
-APP_NAME = "TightBeam"
+APP_NAME = "Project Tightbeam"
 
 # Read version from package metadata (pyproject.toml is the single source of truth)
 try:
-    APP_VERSION = version("tightbeam-v2")
+    APP_VERSION = version("project-tightbeam")
 except PackageNotFoundError:
     # Fallback for development/editable installs where package metadata isn't available
     APP_VERSION = "0.0.0-dev"
@@ -45,7 +45,7 @@ REQUIRED_OAUTH_VARS = {
 }
 
 # File Paths and Names
-DEFAULT_DB_PATH = "tightbeam.db"
+DEFAULT_DB_PATH = "tightbeam.sqlite"
 DEFAULT_ATTACHMENTS_DIR = "attachments"
 ENV_FILE_NAME = ".env"
 

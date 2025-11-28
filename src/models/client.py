@@ -28,3 +28,12 @@ class Client:
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string
     additional_emails: str = "[]"  # Additional emails as JSON array string
     additional_phones: str = "[]"  # Additional phones as JSON array string
+    company_name: str = ""  # companyName: String - Company name for business clients
+    balance_cents: int = 0  # balance: Float! - Outstanding balance in cents
+    is_archivable: int = 0  # isArchivable: Boolean! - Archive status (0/1)
+    is_company: int = 0  # isCompany: Boolean! - Company vs individual flag (0/1)
+    billing_street: str = ""  # billingAddress.street
+    billing_city: str = ""  # billingAddress.city
+    billing_province: str = ""  # billingAddress.province
+    billing_postal_code: str = ""  # billingAddress.postalCode
+    billing_country: str = ""  # billingAddress.country

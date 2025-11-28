@@ -1,7 +1,6 @@
 """Rich-enhanced logger implementation with beautiful terminal formatting."""
 
-from typing import Any
-
+from typing import Any, Optional
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -17,14 +16,15 @@ class RichLogger(Logger):
     maintaining full compatibility with the Logger protocol.
     """
 
-    def __init__(self, verbose: bool = False) -> None:
+    def __init__(self, verbose: bool = False, console: Optional[Console] = None) -> None:
         """Initialize Rich logger.
 
         Args:
             verbose: Whether to enable debug message output
+            console: Optional Rich console instance to use
         """
         self.verbose = verbose
-        self.console = Console()
+        self.console = console or Console()
         self.error_console = Console(stderr=True)
 
     def info(self, message: str) -> None:
@@ -33,7 +33,7 @@ class RichLogger(Logger):
         Args:
             message: The message to log
         """
-        self.console.print(f"[green]INFO[/green]: {message}")
+        self.console.print(f"[yellow]INFO[/yellow]: {message}")
 
     def debug(self, message: str) -> None:
         """Print debug message if verbose mode is enabled.
@@ -62,6 +62,10 @@ class RichLogger(Logger):
         """
         self.console.print(f"[yellow]WARNING[/yellow]: {message}")
 
+    def success(self, message: str) -> None:
+        """Print success message using Rich formatting."""
+        self.console.print(f"[bold green]SUCCESS[/bold green]: {message}")
+
     def log_summary(self, summary: dict[str, Any]) -> None:
         """Format and display structured summary data using Rich table.
 
@@ -69,9 +73,7 @@ class RichLogger(Logger):
             summary: Dictionary containing summary information
         """
         # Create a beautiful table for the migration summary
-        table = Table(
-            title="Migration Summary", show_header=True, header_style="bold magenta"
-        )
+        table = Table(title="Migration Summary", show_header=True, header_style="bold magenta")
         table.add_column("Metric", style="dim", width=25)
         table.add_column("Value", justify="left")
 

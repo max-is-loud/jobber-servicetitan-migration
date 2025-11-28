@@ -36,9 +36,7 @@ class TestRepositoryInitialization:
         cursor = conn.cursor()
 
         # Verify all tables exist
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = {row[0] for row in cursor.fetchall()}
 
         expected_tables = {
@@ -906,6 +904,7 @@ class TestRepositoryErrorHandling:
 
     def test_delete_unsupported_entity_type_raises_error(self):
         """Test deleting unsupported entity type raises RepositoryError."""
+
         # Use a type that's not supported
         class UnsupportedEntity:
             pass

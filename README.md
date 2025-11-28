@@ -1,4 +1,4 @@
-# TightBeam v2 - Jobber Data Migration Tool
+# Project Tightbeam - Jobber Data Migration Tool
 
 A powerful, user-friendly command-line tool for migrating data from Jobber to other systems, featuring a modern Rich-based interface with real-time progress tracking and enhanced error reporting.
 
@@ -14,11 +14,14 @@ A powerful, user-friendly command-line tool for migrating data from Jobber to ot
 
 ### 🚀 Advanced Migration Capabilities
 
+- **Multi-pass migration** strategy (Map → Extract → Reconcile)
 - **Incremental migration** with resume support
 - **Adaptive optimization** for performance tuning
 - **OAuth2 authentication** with automatic token refresh
 - **Rate limiting** and throttling protection
 - **Comprehensive error handling** and recovery
+- **Predictable effort estimation** before extraction
+- **Targeted retries** for failed entities
 
 ### 🛠 Developer-Friendly Architecture
 
@@ -35,7 +38,7 @@ A powerful, user-friendly command-line tool for migrating data from Jobber to ot
 
 ```bash
 git clone <repository-url>
-cd tightbeam-v2
+cd project-tightbeam
 ```
 
 2. Install dependencies using UV:
@@ -66,18 +69,45 @@ uv run tightbeam oauth init
 2. **Run a migration:**
 
 ```bash
-uv run tightbeam migrate start
+# Extract all Jobber data (Pass 1: metadata extraction)
+uv run tightbeam migrate max-extract
+
+# Download binary attachment files (Pass 2: file downloads)
+uv run tightbeam migrate download-attachments
 ```
 
 3. **Resume a migration:**
 
 ```bash
-uv run tightbeam migrate start --resume
+# Resume from last checkpoint if interrupted
+uv run tightbeam migrate max-extract --resume
 ```
+
+### Database Configuration
+
+TightBeam uses the following precedence for database file location:
+
+1. **Explicit `--db` parameter** (highest priority)
+2. **`TIGHTBEAM_DB` environment variable**
+3. **`database.default_path` in `config/settings.yaml`**
+4. **Default**: `tightbeam.sqlite` (lowest priority)
+
+**Example:**
+```bash
+# Use environment variable for custom database location
+export TIGHTBEAM_DB=/path/to/my-database.db
+uv run tightbeam oauth init  # Uses /path/to/my-database.db
+uv run tightbeam migrate max-extract  # Uses same database
+
+# Or specify directly with --db flag (overrides everything)
+uv run tightbeam migrate max-extract --db custom.db
+```
+
+This ensures that OAuth operations and migration commands share the same database by default, preventing authentication errors.
 
 ## Migration Coordinator Architecture
 
-TightBeam v2 uses a **unified Rich-based migration coordinator** system that provides:
+Project Tightbeam uses a **unified Rich-based migration coordinator** system that provides:
 
 ### `BaseMigrationCoordinator`
 
@@ -148,23 +178,55 @@ uv run tightbeam oauth init
 uv run tightbeam oauth status
 ```
 
-### Migration Operations
+### Phase 1: Metadata Extraction
+
+Extract all entity metadata including attachment URLs:
 
 ```bash
-# Start a new migration
-uv run tightbeam migrate start
+# Extract all entities (default)
+uv run tightbeam migrate max-extract
 
-# Resume an interrupted migration
-uv run tightbeam migrate start --resume
+# Extract specific entity types only
+uv run tightbeam migrate max-extract --entities clients --entities invoices
 
-# Dry run mode (preview only)
-uv run tightbeam migrate start --dry-run
+# Resume interrupted extraction
+uv run tightbeam migrate max-extract --resume
 
-# Advanced options
-uv run tightbeam migrate start \
-    --resume \
-    --adaptive-optimization \
-    --optimization-level 3
+# Use aggressive rate limiting for faster extraction
+uv run tightbeam migrate max-extract --optimization-level aggressive
+```
+
+**Features:**
+- Resumable extraction with checkpoints
+- Processes entities in dependency order
+- Captures all metadata including attachment URLs
+- Configurable rate limiting (conservative/moderate/aggressive)
+
+### Phase 2: Binary File Downloads
+
+Download attachment files after metadata extraction:
+
+```bash
+# Download all pending attachments
+uv run tightbeam migrate download-attachments
+
+# Resume interrupted downloads
+uv run tightbeam migrate download-attachments --resume
+```
+
+### Advanced Options
+
+Available for all migration commands:
+
+```bash
+# Set rate limiting level
+uv run tightbeam migrate --optimization-level conservative max-extract
+
+# Verbose logging
+uv run tightbeam migrate --verbose max-extract
+
+# Custom database path
+uv run tightbeam migrate --db custom_export.db max-extract
 ```
 
 ## Configuration
@@ -194,7 +256,7 @@ JOBBER_REDIRECT_URI=http://localhost:8080/callback
 
 ## Migration from Legacy System
 
-If you're upgrading from an older version of TightBeam:
+If you're upgrading from an older version of Project Tightbeam:
 
 ### Code Updates
 
@@ -261,9 +323,10 @@ uv run black src/
 
 For detailed technical documentation:
 
-- **[Migration Coordinator Documentation](MIGRATION_COORDINATOR_DOCUMENTATION.md)**: Complete usage guide
-- **[Architecture Updates](ARCHITECTURE_UPDATES.md)**: Technical architecture changes
-- **[Rich Testing Results](RICH_TESTING_RESULTS.md)**: Environment compatibility testing
+- **[Database Schema](docs/DATABASE_SCHEMA.md)**: Complete database schema reference
+- **[Migration Coordinator Documentation](docs/MIGRATION_COORDINATOR_DOCUMENTATION.md)**: Coordinator usage guide
+- **[Configuration Guide](docs/CONFIGURATION.md)**: Configuration and settings reference
+- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)**: Common issues and solutions
 
 ## Contributing
 

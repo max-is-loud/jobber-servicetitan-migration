@@ -34,7 +34,7 @@ def version_callback(value: bool) -> None:
     """Display application version and exit."""
     # Handle case where Typer passes string "False" instead of bool False
     if isinstance(value, str):
-        value = value.lower() in ('true', '1', 'yes')
+        value = value.lower() in ("true", "1", "yes")
 
     if value:
         console.print(f"[bold blue]{VERSION_DISPLAY}[/bold blue]")

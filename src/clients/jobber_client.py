@@ -43,6 +43,13 @@ class JobberClient:
     # Jobber API version - required for all requests
     API_VERSION = "2023-11-15"
 
+    # Default timeout values (seconds)
+    DEFAULT_CONNECT_TIMEOUT = 10.0  # Connection establishment timeout
+    DEFAULT_REQUEST_TIMEOUT = 30.0  # Read timeout for API requests
+
+    # Default batch size for metrics collection
+    DEFAULT_METRICS_BATCH_SIZE = 30
+
     def _get_clients_query(self) -> str:
         """Get GraphQL query for fetching clients with configurable pagination.
 
@@ -58,11 +65,23 @@ class JobberClient:
         return f"""
     query GetClients($cursor: String) {{
       clients(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
             firstName
             lastName
+            companyName
+            balance
+            isArchivable
+            isCompany
+            billingAddress {{
+              street
+              city
+              province
+              postalCode
+              country
+            }}
             emails {{
               address
             }}
@@ -70,6 +89,7 @@ class JobberClient:
               number
             }}
             notes(first: {nested_notes_size}) {{
+              totalCount
               edges {{
                 node {{
                   ... on ClientNote {{
@@ -85,6 +105,7 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_size}) {{
+              totalCount
               edges {{
                 node {{
                   id
@@ -122,6 +143,7 @@ class JobberClient:
         return f"""
     query GetInvoices($cursor: String) {{
       invoices(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -131,13 +153,40 @@ class JobberClient:
             invoiceNumber
             amounts {{
               total
+              subtotal
+              taxAmount
+              discountAmount
+              depositAmount
             }}
+            invoiceNet
             invoiceStatus
             issuedDate
+            dueDate
+            subject
+            message
+            lineItems(first: 50) {{
+              edges {{
+                node {{
+                  description
+                  quantity
+                  unitPrice
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
             notes(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   ... on InvoiceNote {{
+                    id
+                    message
+                    createdAt
+                  }}
+                  ... on ClientNote {{
                     id
                     message
                     createdAt
@@ -150,14 +199,10 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   id
-                  note {{
-                    ... on InvoiceNote {{
-                      id
-                    }}
-                  }}
                   fileName
                   contentType
                   url
@@ -170,6 +215,8 @@ class JobberClient:
                 endCursor
               }}
             }}
+            createdAt
+            updatedAt
           }}
         }}
         pageInfo {{
@@ -187,26 +234,52 @@ class JobberClient:
         return f"""
     query GetQuotes($cursor: String) {{
       quotes(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
             client {{
               id
             }}
+            property {{
+              id
+            }}
             quoteNumber
+            quoteStatus
             title
             amounts {{
               total
               subtotal
+              taxAmount
+              discountAmount
             }}
             message
-            lineItems {{
-              totalCount
+            sentAt
+            lineItems(first: 50) {{
+              edges {{
+                node {{
+                  name
+                  description
+                  qty
+                  unitCost
+                  unitPrice
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
             }}
             notes(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   ... on QuoteNote {{
+                    id
+                    message
+                    createdAt
+                  }}
+                  ... on ClientNote {{
                     id
                     message
                     createdAt
@@ -219,14 +292,10 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   id
-                  note {{
-                    ... on QuoteNote {{
-                      id
-                    }}
-                  }}
                   fileName
                   contentType
                   url
@@ -274,6 +343,7 @@ class JobberClient:
         return f"""
     query GetJobs($cursor: String) {{
       jobs(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -287,19 +357,26 @@ class JobberClient:
               id
             }}
             jobNumber
+            jobType
             title
-            description
-            status
-            scheduledStartAt
-            scheduledEndAt
+            instructions
+            jobStatus
+            billingType
+            startAt
+            endAt
             completedAt
-            amounts {{
-              total
-            }}
+            total
+            invoicedTotal
             notes(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   ... on JobNote {{
+                    id
+                    message
+                    createdAt
+                  }}
+                  ... on ClientNote {{
                     id
                     message
                     createdAt
@@ -312,14 +389,10 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   id
-                  note {{
-                    ... on JobNote {{
-                      id
-                    }}
-                  }}
                   fileName
                   contentType
                   url
@@ -344,48 +417,71 @@ class JobberClient:
     }}
     """
 
-    # GraphQL query for fetching properties with cursor pagination
-    PROPERTIES_QUERY = """
-    query GetProperties($cursor: String) {
-      properties(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_properties_query(self) -> str:
+        """Get GraphQL query for fetching properties with configurable pagination.
+
+        PropertyAddress has: street, street1, street2, city, province, postalCode, country, coordinates
+        Property has 'name' field but NOT coordinates, createdAt, updatedAt (those are on address)
+        """
+        size = self._get_pagination_size("properties")
+        return f"""
+    query GetProperties($cursor: String) {{
+      properties(first: {size}, after: $cursor) {{
+        totalCount
+        edges {{
+          node {{
             id
-            client {
-              id
-            }
             name
-            address {
-              line1
-              line2
+            client {{
+              id
+            }}
+            taxRate {{
+              id
+              name
+            }}
+            isBillingAddress
+            routingOrder
+            address {{
+              street
+              street1
+              street2
               city
-              stateProvince
+              province
               postalCode
               country
-            }
-            coordinates {
-              latitude
-              longitude
-            }
-            createdAt
-            updatedAt
-          }
-        }
-        pageInfo {
+              coordinates {{
+                latitude
+                longitude
+              }}
+            }}
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
     def _get_requests_query(self) -> str:
-        """Get GraphQL query for fetching requests with configurable pagination and optimized nested notes."""
+        """
+        Get GraphQL query for fetching requests with configurable pagination and optimized nested notes.
+
+        Based on Jobber API schema: https://developer.getjobber.com/docs/
+        Request type includes: id, client, property, title, source, requestStatus,
+        companyName, contactName, email, phone, notes, noteAttachments, jobs, quotes,
+        assessment, referringClient, jobberWebUri, createdAt, updatedAt
+
+        Fields NOT in schema: description, status (use requestStatus), priority,
+        assignedTo, convertedToQuote (use quotes connection), convertedToJob (use jobs connection)
+        """
         page_size = self._get_pagination_size("requests")
         nested_notes_limit = self._get_pagination_size("nested_notes")
         return f"""
     query GetRequests($cursor: String) {{
       requests(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -396,21 +492,22 @@ class JobberClient:
               id
             }}
             title
-            description
-            status
-            priority
             source
-            assignedTo
-            convertedToQuote {{
-              id
-            }}
-            convertedToJob {{
-              id
-            }}
+            requestStatus
+            companyName
+            contactName
+            email
+            phone
             notes(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   ... on RequestNote {{
+                    id
+                    message
+                    createdAt
+                  }}
+                  ... on ClientNote {{
                     id
                     message
                     createdAt
@@ -423,14 +520,10 @@ class JobberClient:
               }}
             }}
             noteAttachments(first: {nested_notes_limit}) {{
+              totalCount
               edges {{
                 node {{
                   id
-                  note {{
-                    ... on RequestNote {{
-                      id
-                    }}
-                  }}
                   fileName
                   contentType
                   url
@@ -456,9 +549,13 @@ class JobberClient:
     """
 
     # GraphQL query for fetching users with cursor pagination
+    # UserEmail has 'raw' field (not 'email')
+    # UserPhone has 'raw' field (not 'number')
+    # Timezone is SCALAR (query directly)
     USERS_QUERY = """
     query GetUsers($cursor: String) {
       users(first: 100, after: $cursor) {
+        totalCount
         edges {
           node {
             id
@@ -467,17 +564,17 @@ class JobberClient:
               last
             }
             email {
-              email
+              raw
             }
+            phone {
+              raw
+            }
+            timezone
             isAccountAdmin
             isAccountOwner
+            availableForScheduling
+            assignedColor
             status
-            phone {
-              number
-            }
-            timezone {
-              identifier
-            }
             createdAt
             lastLoginAt
           }
@@ -494,6 +591,7 @@ class JobberClient:
     EXPENSES_QUERY = """
     query GetExpenses($cursor: String) {
       expenses(first: 100, after: $cursor) {
+        totalCount
         edges {
           node {
             id
@@ -525,70 +623,78 @@ class JobberClient:
     }
     """
 
-    # GraphQL query for fetching visits with cursor pagination
-    VISITS_QUERY = """
-    query GetVisits($cursor: String) {
-      visits(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_visits_query(self) -> str:
+        """Get GraphQL query for fetching visits with configurable pagination."""
+        page_size = self._get_pagination_size("visits")
+        return f"""
+    query GetVisits($cursor: String) {{
+      visits(first: {page_size}, after: $cursor) {{
+        totalCount
+        edges {{
+          node {{
             id
-            job {
+            job {{
               id
-            }
-            client {
+            }}
+            client {{
               id
-            }
-            property {
+            }}
+            property {{
               id
-            }
-            assignedUsers {
-              edges {
-                node {
+            }}
+            assignedUsers {{
+              edges {{
+                node {{
                   id
-                }
-              }
-            }
+                }}
+              }}
+            }}
             title
             instructions
             visitStatus
             allDay
+            clientConfirmed
             duration
             startAt
             endAt
             completedAt
+            completedBy
             createdAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
-    # GraphQL query for fetching timesheet entries with cursor pagination
-    TIMESHEET_ENTRIES_QUERY = """
-    query GetTimesheetEntries($cursor: String) {
-      timesheetEntries(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_timesheet_entries_query(self) -> str:
+        """Get GraphQL query for fetching timesheet entries with configurable pagination."""
+        page_size = self._get_pagination_size("timesheet_entries")
+        return f"""
+    query GetTimesheetEntries($cursor: String) {{
+      timeSheetEntries(first: {page_size}, after: $cursor) {{
+        totalCount
+        edges {{
+          node {{
             id
-            user {
+            user {{
               id
-            }
-            job {
+            }}
+            job {{
               id
-            }
-            visit {
+            }}
+            visit {{
               id
-            }
-            approvedBy {
+            }}
+            approvedBy {{
               id
-            }
-            paidBy {
+            }}
+            paidBy {{
               id
-            }
+            }}
             label
             note
             labourRate
@@ -600,72 +706,70 @@ class JobberClient:
             endAt
             createdAt
             updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
-    # GraphQL query for fetching products or services with cursor pagination
-    PRODUCTS_SERVICES_QUERY = """
-    query GetProductsServices($cursor: String) {
-      productsAndServices(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_products_services_query(self) -> str:
+        """Get GraphQL query for fetching products/services with configurable pagination."""
+        page_size = self._get_pagination_size("product_services")
+        return f"""
+    query GetProductsServices($cursor: String) {{
+      productOrServices(first: {page_size}, after: $cursor) {{
+        totalCount
+        edges {{
+          node {{
             id
             name
             description
-            category {
-              name
-            }
+            category
             defaultUnitCost
             internalUnitCost
             markup
             durationMinutes
             taxable
             visible
-            onlineBookingEnabled
+            onlineBookingsEnabled
             onlineBookingSortOrder
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
-    # GraphQL query for fetching tax rates with cursor pagination
-    TAX_RATES_QUERY = """
-    query GetTaxRates($cursor: String) {
-      taxRates(first: 100, after: $cursor) {
-        edges {
-          node {
+    def _get_tax_rates_query(self) -> str:
+        """Get GraphQL query for fetching tax rates with configurable pagination.
+
+        Note: TaxRate type only has 'id' and 'name' fields in Jobber GraphQL API.
+        Fields like 'rate', 'region', 'compound', 'active', etc. do not exist on this type.
+        """
+        page_size = self._get_pagination_size("tax_rates")
+        return f"""
+    query GetTaxRates($cursor: String) {{
+      taxRates(first: {page_size}, after: $cursor) {{
+        totalCount
+        edges {{
+          node {{
             id
             name
-            rate
-            region
-            compound
-            active
-            description
-            taxNumber
-            displayOrder
-            defaultForRegion
-            createdAt
-            updatedAt
-          }
-        }
-        pageInfo {
+          }}
+        }}
+        pageInfo {{
           hasNextPage
           endCursor
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
 
     # GraphQL query for fetching individual note by ID
@@ -679,6 +783,18 @@ class JobberClient:
           client {
             id
           }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+          }
         }
         ... on JobNote {
           id
@@ -686,6 +802,18 @@ class JobberClient:
           createdAt
           job {
             id
+          }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
           }
         }
         ... on QuoteNote {
@@ -695,6 +823,18 @@ class JobberClient:
           quote {
             id
           }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+          }
         }
         ... on InvoiceNote {
           id
@@ -702,6 +842,18 @@ class JobberClient:
           createdAt
           invoice {
             id
+          }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
           }
         }
         ... on RequestNote {
@@ -711,6 +863,429 @@ class JobberClient:
           request {
             id
           }
+          attachments {
+            edges {
+              node {
+                id
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+
+    # GraphQL query for fetching any entity by ID using node interface
+    # Used for single entity extraction in extract mode
+    ENTITY_BY_ID_QUERY = """
+    query GetEntityById($id: ID!) {
+      node(id: $id) {
+        ... on Client {
+          id
+          firstName
+          lastName
+          emails {
+            address
+          }
+          phones {
+            number
+          }
+          notes(first: 100) {
+            totalCount
+            edges {
+              node {
+                id
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  id
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          createdAt
+          updatedAt
+        }
+        ... on Invoice {
+          id
+          client {
+            id
+          }
+          invoiceNumber
+          amounts {
+            total
+          }
+          invoiceStatus
+          issuedDate
+          notes(first: 100) {
+            totalCount
+            edges {
+              node {
+                id
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  ... on InvoiceNote {
+                    id
+                  }
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        ... on Quote {
+          id
+          client {
+            id
+          }
+          quoteNumber
+          title
+          amounts {
+            total
+            subtotal
+          }
+          message
+          lineItems {
+            totalCount
+          }
+          notes(first: 100) {
+            totalCount
+            edges {
+              node {
+                id
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  ... on QuoteNote {
+                    id
+                  }
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          createdAt
+          transitionedAt
+          updatedAt
+        }
+        ... on Job {
+          id
+          client {
+            id
+          }
+          property {
+            id
+          }
+          quote {
+            id
+          }
+          jobNumber
+          title
+          description
+          status
+          scheduledStartAt
+          scheduledEndAt
+          completedAt
+          amounts {
+            total
+          }
+          notes(first: 100) {
+            totalCount
+            edges {
+              node {
+                id
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  ... on JobNote {
+                    id
+                  }
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          createdAt
+          updatedAt
+        }
+        ... on Property {
+          id
+          client {
+            id
+          }
+          name
+          address {
+            line1
+            line2
+            city
+            stateProvince
+            postalCode
+            country
+          }
+          coordinates {
+            latitude
+            longitude
+          }
+          createdAt
+          updatedAt
+        }
+        ... on Request {
+          id
+          client {
+            id
+          }
+          property {
+            id
+          }
+          title
+          description
+          status
+          priority
+          source
+          assignedTo
+          convertedToQuote {
+            id
+          }
+          convertedToJob {
+            id
+          }
+          notes(first: 100) {
+            totalCount
+            edges {
+              node {
+                id
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          noteAttachments(first: 10) {
+            edges {
+              node {
+                id
+                note {
+                  ... on RequestNote {
+                    id
+                  }
+                }
+                fileName
+                contentType
+                url
+                fileSize
+                createdAt
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+          createdAt
+          updatedAt
+        }
+        ... on User {
+          id
+          name {
+            first
+            last
+          }
+          email {
+            email
+          }
+          isAccountAdmin
+          isAccountOwner
+          status
+          phone {
+            number
+          }
+          timezone {
+            identifier
+          }
+          createdAt
+          lastLoginAt
+        }
+        ... on Expense {
+          id
+          linkedJob {
+            id
+          }
+          title
+          description
+          total
+          date
+          enteredBy {
+            id
+          }
+          paidBy {
+            id
+          }
+          reimbursableTo {
+            id
+          }
+          createdAt
+          updatedAt
+        }
+        ... on Visit {
+          id
+          job {
+            id
+          }
+          client {
+            id
+          }
+          property {
+            id
+          }
+          assignedUsers {
+            edges {
+              node {
+                id
+              }
+            }
+          }
+          title
+          instructions
+          visitStatus
+          allDay
+          duration
+          startAt
+          endAt
+          completedAt
+          createdAt
+        }
+        ... on TimesheetEntry {
+          id
+          user {
+            id
+          }
+          job {
+            id
+          }
+          visit {
+            id
+          }
+          approvedBy {
+            id
+          }
+          paidBy {
+            id
+          }
+          label
+          note
+          labourRate
+          finalDuration
+          visitDurationTotal
+          approved
+          ticking
+          startAt
+          endAt
+          createdAt
+          updatedAt
+        }
+        ... on ProductOrService {
+          id
+          name
+          description
+          category
+          defaultUnitCost
+          internalUnitCost
+          markup
+          durationMinutes
+          taxable
+          visible
+          onlineBookingsEnabled
+          onlineBookingSortOrder
+        }
+        ... on TaxRate {
+          id
+          name
+          rate
+          region
+          compound
+          active
+          description
+          taxNumber
+          displayOrder
+          defaultForRegion
+          createdAt
+          updatedAt
         }
       }
     }
@@ -739,28 +1314,76 @@ class JobberClient:
                           If not provided, a new instance will be created.
         """
         self.auth_provider = auth_provider
-        self.http_client = http_client or HttpClient()
+
         self.metrics_collector = metrics_collector
         self.config_manager = config_manager or ConfigManagerImpl()
+
+        # Configure HTTP client with timeout settings
+        if http_client:
+            self.http_client = http_client
+        else:
+            # Get timeout from config (default to 30s if not set)
+            try:
+                request_timeout = self.config_manager.get_delay_config("request_timeout")
+            except ConfigurationError:
+                request_timeout = self.DEFAULT_REQUEST_TIMEOUT
+
+            # Get connect timeout from config or use default
+            try:
+                connect_timeout = self.config_manager.get_delay_config("connect_timeout")
+            except ConfigurationError:
+                connect_timeout = self.DEFAULT_CONNECT_TIMEOUT
+
+            timeout = (connect_timeout, request_timeout)
+            self.http_client = HttpClient(timeout=timeout)
 
         # Track throttling events for performance optimization
         self._throttling_events = 0
         self._last_request_was_throttled = False
 
+        # Track rate limit cooldown (account-wide, persists across requests)
+        self._rate_limit_reset_time: Optional[float] = None  # Unix timestamp when rate limit resets
+
+        # Track throttle status for adaptive page sizing
+        self._last_requested_cost: Optional[int] = None
+        self._last_currently_available: Optional[int] = None
+        self._last_maximum_available: Optional[int] = None
+
     def _get_pagination_size(self, entity_type: str) -> int:
-        """Get pagination size for the specified entity type from configuration.
+        """Get pagination size for the specified entity type with adaptive sizing.
+
+        Uses cost-aware pagination to automatically reduce page size when:
+        - Requested query cost exceeds 8000 points
+        - Currently available points drop below 2000
 
         Args:
             entity_type: The entity type (clients, invoices, quotes, etc.)
 
         Returns:
-            Pagination size for the entity type
+            Pagination size for the entity type (may be reduced from base size)
         """
         try:
-            return self.config_manager.get_pagination_config(entity_type)
-        except ConfigurationError:
-            # Fallback to default if entity type not found
-            return self.config_manager.get_pagination_config()
+            # Use adaptive page sizing based on last known throttle status
+            page_size, adjustment_reason = self.config_manager.get_adaptive_page_size(
+                entity_type=entity_type,
+                requested_cost=self._last_requested_cost,
+                currently_available=self._last_currently_available,
+                maximum_available=self._last_maximum_available,
+            )
+
+            # Track adjustments when page size is reduced
+            if adjustment_reason is not None:
+                debug_print(f"📉 Adaptive sizing: {entity_type} page size → {page_size} ({adjustment_reason})")
+                # TODO: Add metrics tracking for adjustments
+
+            return page_size
+
+        except (ConfigurationError, AttributeError):
+            # Fallback to default if entity type not found or adaptive sizing fails
+            try:
+                return self.config_manager.get_pagination_config(entity_type)
+            except ConfigurationError:
+                return self.config_manager.get_pagination_config()
 
     def set_http_client(self, http_client: IHttpClient) -> None:
         """
@@ -798,11 +1421,25 @@ class JobberClient:
             requested_cost = cost_info.get("requestedQueryCost")
             actual_cost = cost_info.get("actualQueryCost")
 
+            # Extract throttle status from Jobber API response
+            throttle_status = cost_info.get("throttleStatus", {})
+            maximum_available = throttle_status.get("maximumAvailable")
+            currently_available = throttle_status.get("currentlyAvailable")
+            restore_rate = throttle_status.get("restoreRate")
+
+            # Store throttle status for adaptive page sizing
+            if requested_cost is not None:
+                self._last_requested_cost = int(requested_cost)
+            if currently_available is not None:
+                self._last_currently_available = int(currently_available)
+            if maximum_available is not None:
+                self._last_maximum_available = int(maximum_available)
+
             if requested_cost is not None and actual_cost is not None:
                 # Extract batch size from GraphQL query using regex
                 import re
 
-                batch_size = 30  # Default batch size
+                batch_size = self.DEFAULT_METRICS_BATCH_SIZE
                 batch_match = re.search(r"first:\s*(\d+)", query)
                 if batch_match:
                     batch_size = int(batch_match.group(1))
@@ -812,6 +1449,9 @@ class JobberClient:
                     int(actual_cost),
                     query_type=query_type,
                     batch_size=batch_size,
+                    maximum_available=maximum_available,
+                    currently_available=currently_available,
+                    restore_rate=restore_rate,
                 )
         except (KeyError, ValueError, TypeError):
             # Gracefully handle missing or invalid cost data
@@ -869,7 +1509,8 @@ class JobberClient:
         refresh when needed. For OAuth2 users, expired tokens are automatically
         refreshed transparently. Environment token users see no changes in behavior.
 
-        Includes automatic retry logic for GraphQL throttling errors with exponential backoff.
+        Includes automatic retry logic for GraphQL throttling errors and network
+        connection errors with exponential backoff.
 
         Args:
             query: GraphQL query string to execute
@@ -891,6 +1532,32 @@ class JobberClient:
         self._last_request_was_throttled = False
 
         for attempt in range(max_retries + 1):
+            # Check if we're in a rate limit cooldown period BEFORE each attempt
+            if self._rate_limit_reset_time:
+                current_time = time.time()
+                if current_time < self._rate_limit_reset_time:
+                    wait_time = self._rate_limit_reset_time - current_time
+                    print(
+                        f"\n⏸️  Rate limit cooldown active (account-wide). "
+                        f"Waiting {wait_time:.1f}s until reset..."
+                    )
+
+                    # Countdown timer for cooldown period
+                    remaining = wait_time
+                    while remaining > 0:
+                        print(
+                            f"\r⏸️  Rate limit cooldown: {remaining:.1f}s remaining...",
+                            end="",
+                            flush=True
+                        )
+                        sleep_time = min(0.1, remaining)
+                        time.sleep(sleep_time)
+                        remaining -= sleep_time
+
+                    print("\r✅ Rate limit cooldown complete, resuming requests...".ljust(80))
+                    # Clear the reset time now that we've waited
+                    self._rate_limit_reset_time = None
+
             try:
                 # Get authentication headers with automatic OAuth2 token refresh
                 # This may raise ConfigurationError or OAuth2Error
@@ -910,7 +1577,7 @@ class JobberClient:
             except Exception as e:
                 # Catch any other unexpected authentication errors
                 raise ConfigurationError(
-                    f"Authentication failed: {e}. " "Please verify your authentication configuration."
+                    f"Authentication failed: {e}. Please verify your authentication configuration."
                 ) from e
 
             # Add required API version header - this is mandatory for all
@@ -955,6 +1622,10 @@ class JobberClient:
                             remaining_int = int(remaining)
                             reset_int = int(reset_time) if reset_time else None
                             self.metrics_collector.record_rate_limit_headers(remaining_int, reset_int)
+
+                            # Store reset time for account-wide rate limit tracking
+                            if reset_int:
+                                self._rate_limit_reset_time = float(reset_int)
                         except (ValueError, TypeError):
                             # Gracefully handle invalid header values
                             pass
@@ -979,29 +1650,84 @@ class JobberClient:
                 if "extensions" in response_data:
                     debug_print(f"[DEBUG] Response extensions: {response_data['extensions']}")
 
+                    # Extract cost information for throttling calculation
+                    cost_info = response_data.get("extensions", {}).get("cost", {})
+                    if cost_info:
+                        throttle_status = cost_info.get("throttleStatus", {})
+                        requested_cost = cost_info.get("requestedQueryCost", 0)
+                        currently_available = throttle_status.get("currentlyAvailable", 0)
+                        restore_rate = throttle_status.get("restoreRate", 500)  # Default 500 pts/sec
+
+                        # Calculate precise wait time using leaky bucket model
+                        if requested_cost > currently_available and restore_rate > 0:
+                            points_needed = requested_cost - currently_available
+                            calculated_wait_time = points_needed / restore_rate  # seconds
+                            # Add 1 second buffer to ensure points are available
+                            self._rate_limit_reset_time = time.time() + calculated_wait_time + 1.0
+
+                            debug_print(
+                                f"[DEBUG] Cost-based cooldown: need {points_needed} points, "
+                                f"restore rate {restore_rate} pts/s, waiting {calculated_wait_time + 1.0:.1f}s"
+                            )
+
                 # Validate response structure and check for GraphQL errors
                 self._validate_graphql_response(response_data)
 
                 return response_data
 
             except JobberApiError as e:
-                # Check if this is a throttling error and we have retries left
-                if self._is_throttling_error(e) and attempt < max_retries:
-                    # Track throttling event
-                    self._throttling_events += 1
-                    self._last_request_was_throttled = True
+                # Check if this is a retryable error and we have retries left
+                is_throttling = self._is_throttling_error(e)
+                is_connection_error = self._is_connection_error(e)
 
-                    delay = base_delay * (2**attempt)  # Exponential backoff
-                    debug_print(
-                        f"[DEBUG] GraphQL throttling detected, attempt {attempt + 1}/{max_retries + 1}. Retrying in {delay}s..."
-                    )
-                    print(
-                        f"⏳ GraphQL throttling detected, retrying in {delay:.1f}s... (attempt {attempt + 1}/{max_retries + 1})"
-                    )
-                    time.sleep(delay)
-                    continue
+                if (is_throttling or is_connection_error) and attempt < max_retries:
+                    # Track throttling event if applicable
+                    if is_throttling:
+                        self._throttling_events += 1
+                        self._last_request_was_throttled = True
+
+                        # Cooldown was already set from cost calculation (if available)
+                        # If no cooldown was set (no cost info), fall back to exponential backoff
+                        if not self._rate_limit_reset_time:
+                            delay = base_delay * (2**attempt)  # Exponential backoff fallback
+                            self._rate_limit_reset_time = time.time() + delay
+                            debug_print(
+                                f"[DEBUG] Throttling detected (no cost info). Using exponential backoff: {delay}s"
+                            )
+
+                        # For throttling, don't wait here - let the cooldown check at top of loop handle it
+                        print(f"🚫 GraphQL throttling detected (attempt {attempt + 1}/{max_retries + 1})")
+                        continue
+
+                    else:
+                        # Connection errors: do immediate retry with countdown (no account-wide cooldown)
+                        delay = base_delay * (2**attempt)
+                        error_type = "Network connection error"
+
+                        debug_print(
+                            f"[DEBUG] {error_type} detected, attempt {attempt + 1}/{max_retries + 1}. "
+                            f"Retrying in {delay}s..."
+                        )
+
+                        # Display countdown timer for connection errors only
+                        remaining = delay
+                        while remaining > 0:
+                            print(
+                                f"\r⏳ {error_type} detected, retrying in {remaining:.1f}s... "
+                                f"(attempt {attempt + 1}/{max_retries + 1})",
+                                end="",
+                                flush=True
+                            )
+                            sleep_time = min(0.1, remaining)  # Update every 0.1s for smooth countdown
+                            time.sleep(sleep_time)
+                            remaining -= sleep_time
+
+                        # Clear the line and print final message
+                        print(f"\r⏳ {error_type} detected, retrying now... "
+                              f"(attempt {attempt + 1}/{max_retries + 1})".ljust(80))
+                        continue
                 else:
-                    # Not a throttling error or out of retries
+                    # Not a retryable error or out of retries
                     raise
 
         # This should never be reached due to the raise in the except block
@@ -1071,6 +1797,28 @@ class JobberClient:
         error_message = str(error).lower()
         throttling_patterns = ["throttled", "throttle", "rate limit", "too many requests"]
         return any(pattern in error_message for pattern in throttling_patterns)
+
+    def _is_connection_error(self, error: JobberApiError) -> bool:
+        """
+        Check if a JobberApiError is caused by a network connection issue.
+
+        Args:
+            error: JobberApiError to check
+
+        Returns:
+            bool: True if the error is caused by a connection issue
+        """
+        error_message = str(error).lower()
+        connection_patterns = [
+            "failed to connect",
+            "connection error",
+            "connection refused",
+            "network error",
+            "request timed out",
+            "timed out",
+            "timeout",
+        ]
+        return any(pattern in error_message for pattern in connection_patterns)
 
     def fetch_clients(self, cursor: Optional[str] = None) -> dict[str, Any]:
         """
@@ -1241,7 +1989,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.PROPERTIES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_properties_query(), cursor)
 
             # Validate that properties data exists in response
             if response_data.get("data") is not None and "properties" not in response_data["data"]:
@@ -1382,7 +2130,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.VISITS_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_visits_query(), cursor)
 
             # Validate that visits data exists in response
             if response_data.get("data") is not None and "visits" not in response_data["data"]:
@@ -1418,12 +2166,12 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.TIMESHEET_ENTRIES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_timesheet_entries_query(), cursor)
 
             # Validate that timesheet entries data exists in response
-            if response_data.get("data") is not None and "timesheetEntries" not in response_data["data"]:
+            if response_data.get("data") is not None and "timeSheetEntries" not in response_data["data"]:
                 raise JobberApiError(
-                    "Invalid response structure: missing 'timesheetEntries' field in data"  # noqa: E501
+                    "Invalid response structure: missing 'timeSheetEntries' field in data"  # noqa: E501
                 )
 
             return response_data
@@ -1456,12 +2204,12 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.PRODUCTS_SERVICES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_products_services_query(), cursor)
 
             # Validate that products and services data exists in response
-            if response_data.get("data") is not None and "productsAndServices" not in response_data["data"]:
+            if response_data.get("data") is not None and "productOrServices" not in response_data["data"]:
                 raise JobberApiError(
-                    "Invalid response structure: missing 'productsAndServices' field in data"  # noqa: E501
+                    "Invalid response structure: missing 'productOrServices' field in data"  # noqa: E501
                 )
 
             return response_data
@@ -1493,7 +2241,7 @@ class JobberClient:
                                or OAuth2 token refresh fails
         """
         try:
-            response_data = self._execute_graphql_request(self.TAX_RATES_QUERY, cursor)
+            response_data = self._execute_graphql_request(self._get_tax_rates_query(), cursor)
 
             # Validate that tax rates data exists in response
             if response_data.get("data") is not None and "taxRates" not in response_data["data"]:
@@ -1548,3 +2296,1135 @@ class JobberClient:
         except Exception as e:
             # Catch any unexpected errors and wrap them
             raise JobberApiError(f"Unexpected error while fetching note {note_id}: {e}") from e
+
+    def fetch_notes_bulk(self, note_ids: list[str]) -> list[dict[str, Any]]:
+        """
+        Fetch multiple notes by their IDs using the deferred loading pattern.
+
+        This method implements bulk note fetching by iterating through note IDs
+        and fetching each individually via the node(id:) interface. This is the
+        recommended approach for complete note extraction as Jobber does not
+        provide a top-level paginated notes query.
+
+        Args:
+            note_ids: List of note IDs to fetch
+
+        Returns:
+            List of note data dictionaries with polymorphic type information
+
+        Raises:
+            JobberApiError: If API communication fails for any note
+            ConfigurationError: If authentication configuration is invalid
+
+        Example:
+            >>> note_ids = ["note_123", "note_456", "note_789"]
+            >>> notes = client.fetch_notes_bulk(note_ids)
+            >>> print(f"Fetched {len(notes)} notes")
+        """
+        notes = []
+        for note_id in note_ids:
+            try:
+                response = self.fetch_note_by_id(note_id)
+                node_data = response.get("data", {}).get("node")
+                if node_data:
+                    notes.append(node_data)
+            except JobberApiError as e:
+                # Log warning but continue with other notes
+                debug_print(f"Warning: Failed to fetch note {note_id}: {e}")
+                continue
+
+        return notes
+
+    def _build_single_entity_query(self, entity_type: str, nested_notes_limit: int = 10) -> str:
+        """
+        Build a GraphQL query for fetching a single entity by ID.
+
+        Jobber's API uses entity-specific queries (client, invoice, job, etc.)
+        instead of a generic node interface.
+
+        Args:
+            entity_type: The entity type (e.g., "client", "invoice", "job")
+            nested_notes_limit: Number of nested notes to fetch
+
+        Returns:
+            GraphQL query string for fetching single entity
+        """
+        # Entity-specific query templates based on existing pagination queries
+        if entity_type == "client":
+            return f"""
+    query GetClient($id: EncodedId!) {{
+      client(id: $id) {{
+        id
+        firstName
+        lastName
+        emails {{
+          address
+        }}
+        phones {{
+          number
+        }}
+        notes(first: 100) {{
+          totalCount
+          edges {{
+            node {{
+              id
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
+          edges {{
+            node {{
+              id
+              note {{
+                id
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+        elif entity_type == "invoice":
+            return f"""
+    query GetInvoice($id: EncodedId!) {{
+      invoice(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        invoiceNumber
+        amounts {{
+          total
+        }}
+        invoiceStatus
+        issuedDate
+        notes(first: 100) {{
+          totalCount
+          edges {{
+            node {{
+              id
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
+          edges {{
+            node {{
+              id
+              note {{
+                ... on InvoiceNote {{
+                  id
+                }}
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+      }}
+    }}
+    """
+        elif entity_type == "quote":
+            return f"""
+    query GetQuote($id: EncodedId!) {{
+      quote(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        quoteNumber
+        title
+        amounts {{
+          total
+          subtotal
+        }}
+        message
+        lineItems {{
+          totalCount
+        }}
+        notes(first: 100) {{
+          totalCount
+          edges {{
+            node {{
+              id
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
+          edges {{
+            node {{
+              id
+              note {{
+                ... on QuoteNote {{
+                  id
+                }}
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        createdAt
+        transitionedAt
+        updatedAt
+      }}
+    }}
+    """
+        elif entity_type == "job":
+            return f"""
+    query GetJob($id: EncodedId!) {{
+      job(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        property {{
+          id
+        }}
+        quote {{
+          id
+        }}
+        jobNumber
+        title
+        instructions
+        jobStatus
+        startAt
+        endAt
+        completedAt
+        total
+        notes(first: 100) {{
+          totalCount
+          edges {{
+            node {{
+              id
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
+          edges {{
+            node {{
+              id
+              note {{
+                ... on JobNote {{
+                  id
+                }}
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+        elif entity_type == "expense":
+            return f"""
+    query GetExpense($id: EncodedId!) {{
+      expense(id: $id) {{
+        id
+        linkedJob {{
+          id
+        }}
+        title
+        description
+        total
+        date
+        enteredBy {{
+          id
+        }}
+        paidBy {{
+          id
+        }}
+        reimbursableTo {{
+          id
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+        elif entity_type == "productOrService":
+            return f"""
+    query GetProductService($id: EncodedId!) {{
+      productOrService(id: $id) {{
+        id
+        name
+        description
+        category
+        defaultUnitCost
+        internalUnitCost
+        markup
+        durationMinutes
+        taxable
+        visible
+        onlineBookingsEnabled
+        onlineBookingSortOrder
+      }}
+    }}
+    """
+        elif entity_type == "property":
+            return f"""
+    query GetProperty($id: EncodedId!) {{
+      property(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        name
+        address {{
+          street1
+          street2
+          city
+          province
+          postalCode
+          country
+        }}
+      }}
+    }}
+    """
+        elif entity_type == "request":
+            # Query for Request using correct field names from Jobber API schema
+            # See: https://developer.getjobber.com/docs/
+            return f"""
+    query GetRequest($id: EncodedId!) {{
+      request(id: $id) {{
+        id
+        client {{
+          id
+        }}
+        property {{
+          id
+        }}
+        title
+        source
+        requestStatus
+        companyName
+        contactName
+        email
+        phone
+        notes(first: {nested_notes_limit}) {{
+          totalCount
+          edges {{
+            node {{
+              id
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        noteAttachments(first: {nested_notes_limit}) {{
+          totalCount
+          edges {{
+            node {{
+              id
+              note {{
+                ... on RequestNote {{
+                  id
+                }}
+              }}
+              fileName
+              contentType
+              url
+              fileSize
+              createdAt
+            }}
+          }}
+          pageInfo {{
+            hasNextPage
+            endCursor
+          }}
+        }}
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+        else:
+            # For other entity types, use a minimal query
+            # This can be expanded as needed for specific entity types
+            return f"""
+    query GetEntity($id: EncodedId!) {{
+      {entity_type}(id: $id) {{
+        id
+        createdAt
+        updatedAt
+      }}
+    }}
+    """
+
+    def fetch_entity_by_id(self, entity_id: str, nested_notes_limit: int = 10) -> dict[str, Any]:
+        """
+        Fetch any entity by ID from Jobber GraphQL API using entity-specific queries.
+
+        Jobber's API doesn't support the generic node(id:) interface. Instead,
+        it uses entity-specific queries like client(id:), invoice(id:), etc.
+        This method decodes the base64 ID to determine the entity type and
+        uses the appropriate query.
+
+        Args:
+            entity_id: The base64-encoded unique identifier (e.g., "Z2lkOi8vSm9iYmVyL0NsaWVudC80...")
+            nested_notes_limit: Number of nested notes to fetch (default: 10)
+
+        Returns:
+            Dictionary containing GraphQL response with entity data
+
+        Raises:
+            JobberApiError: If API communication fails or entity not found
+            ConfigurationError: If authentication configuration is invalid
+                               or OAuth2 token refresh fails
+        """
+        try:
+            import base64
+
+            # Decode the base64 ID to extract entity type
+            # Format: gid://Jobber/Client/12345
+            decoded_id = base64.b64decode(entity_id).decode("utf-8")
+            entity_type = decoded_id.split("/")[3]  # Extract "Client" from gid://Jobber/Client/12345
+
+            # Map entity type to query field name
+            # Some entity types use plural forms or different casing in GraphQL queries
+            entity_type_to_query_field = {
+                "TaxRate": "taxRates",  # Plural form
+                "TimeSheetEntry": "timeSheetEntries",  # Plural with capital 'S'
+                "ProductOrService": "productOrService",  # Singular, but with 'Or' capitalized
+            }
+
+            # Use mapping if available, otherwise convert to camelCase
+            query_field = entity_type_to_query_field.get(
+                entity_type,
+                entity_type[0].lower() + entity_type[1:]  # Default: Client -> client
+            )
+
+            # Build entity-specific query based on type
+            query = self._build_single_entity_query(query_field, nested_notes_limit)
+
+            # Execute GraphQL request
+            response_data = self._execute_graphql_request(query=query, variables={"id": entity_id})
+
+            # Extract entity data from response
+            entity_data = response_data.get("data", {}).get(query_field)
+
+            if entity_data is None:
+                raise JobberApiError(f"Entity with ID '{entity_id}' not found")
+
+            # Wrap in same structure as pagination queries for consistency
+            # This allows extractors to process single entities the same way as batch entities
+            response_data["data"]["node"] = entity_data
+            return response_data
+
+        except (ConfigurationError, JobberApiError):
+            # Re-raise our domain exceptions as-is
+            raise
+        except Exception as e:
+            # Catch any unexpected errors and wrap them
+            raise JobberApiError(f"Unexpected error while fetching entity {entity_id}: {e}") from e
+
+    def fetch_additional_notes(
+        self, entity_id: str, entity_type: str, cursor: str, page_size: int = 100
+    ) -> dict[str, Any]:
+        """
+        Fetch additional page of notes for an entity using cursor pagination.
+
+        Args:
+            entity_id: The entity's ID (e.g., client ID, invoice ID)
+            entity_type: Type of entity ("client", "invoice", "job", "quote", "request")
+            cursor: The endCursor from previous page's pageInfo
+            page_size: Number of notes to fetch (default: 100)
+
+        Returns:
+            Dictionary with 'edges' and 'pageInfo' for the notes page
+
+        Raises:
+            JobberApiError: If API communication fails
+        """
+        note_type_map = {
+            "client": "ClientNote",
+            "invoice": "InvoiceNote",
+            "job": "JobNote",
+            "quote": "QuoteNote",
+            "request": "RequestNote",
+        }
+        note_type = note_type_map.get(entity_type)
+        if not note_type:
+            raise ValueError(f"Unsupported entity type for notes: {entity_type}")
+
+        # Build the query based on whether entity-specific note type is ClientNote or not
+        if note_type == "ClientNote":
+            # For client entities, only ClientNote fragment needed (no nested fields)
+            query = f"""
+            query GetAdditionalNotes($id: EncodedId!, $cursor: String!) {{
+              {entity_type}(id: $id) {{
+                notes(first: {page_size}, after: $cursor) {{
+                  totalCount
+                  edges {{
+                    node {{
+                      ... on ClientNote {{
+                        id
+                        message
+                        createdAt
+                      }}
+                    }}
+                  }}
+                  pageInfo {{
+                    hasNextPage
+                    endCursor
+                  }}
+                }}
+              }}
+            }}
+            """
+        else:
+            # For other entities, include both entity-specific and ClientNote fragments
+            # All note types only support: id, message, createdAt (no updatedAt, parent, or attachments)
+            query = f"""
+            query GetAdditionalNotes($id: EncodedId!, $cursor: String!) {{
+              {entity_type}(id: $id) {{
+                notes(first: {page_size}, after: $cursor) {{
+                  totalCount
+                  edges {{
+                    node {{
+                      ... on {note_type} {{
+                        id
+                        message
+                        createdAt
+                      }}
+                      ... on ClientNote {{
+                        id
+                        message
+                        createdAt
+                      }}
+                    }}
+                  }}
+                  pageInfo {{
+                    hasNextPage
+                    endCursor
+                  }}
+                }}
+              }}
+            }}
+            """
+
+        variables = {"id": entity_id, "cursor": cursor}
+        response = self._execute_graphql_request(query, variables=variables)
+        entity_data = response.get("data", {}).get(entity_type, {})
+        return entity_data.get("notes", {})
+
+    def fetch_additional_note_ids(
+        self, entity_id: str, entity_type: str, cursor: str, page_size: int = 100
+    ) -> dict[str, Any]:
+        """
+        Fetch additional page of note IDs for an entity using cursor pagination.
+
+        Used for deferred loading pattern - fetches only note IDs, not full content.
+        Full note content is fetched later via fetch_note_by_id().
+
+        Args:
+            entity_id: The entity's ID (e.g., client ID, invoice ID)
+            entity_type: Type of entity ("client", "invoice", "job", "quote", "request")
+            cursor: The endCursor from previous page's pageInfo
+            page_size: Number of note IDs to fetch (default: 100)
+
+        Returns:
+            Dictionary with 'edges' and 'pageInfo' for the note IDs page
+
+        Raises:
+            JobberApiError: If API communication fails
+        """
+        note_type_map = {
+            "client": "ClientNote",
+            "invoice": "InvoiceNote",
+            "job": "JobNote",
+            "quote": "QuoteNote",
+            "request": "RequestNote",
+        }
+        note_type = note_type_map.get(entity_type)
+        if not note_type:
+            raise ValueError(f"Unsupported entity type for notes: {entity_type}")
+
+        query = f"""
+        query GetAdditionalNoteIds($id: EncodedId!, $cursor: String!) {{
+          {entity_type}(id: $id) {{
+            notes(first: {page_size}, after: $cursor) {{
+              totalCount
+              edges {{
+                node {{
+                  ... on {note_type} {{
+                    id
+                  }}
+                  ... on ClientNote {{
+                    id
+                  }}
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+          }}
+        }}
+        """
+
+        variables = {"id": entity_id, "cursor": cursor}
+
+        response = self._execute_graphql_request(query=query, variables=variables)
+
+        # Extract notes data from response
+        entity_data = response.get("data", {}).get(entity_type, {})
+        return entity_data.get("notes", {})
+
+    def fetch_additional_attachments(
+        self, entity_id: str, entity_type: str, cursor: str, page_size: int = 100
+    ) -> dict[str, Any]:
+        """
+        Fetch additional page of attachments for an entity using cursor pagination.
+
+        Args:
+            entity_id: The entity's ID (e.g., client ID, invoice ID)
+            entity_type: Type of entity ("client", "invoice", "job", "quote", "request")
+            cursor: The endCursor from previous page's pageInfo
+            page_size: Number of attachments to fetch (default: 100)
+
+        Returns:
+            Dictionary with 'edges' and 'pageInfo' for the attachments page
+
+        Raises:
+            JobberApiError: If API communication fails
+        """
+        note_type_map = {
+            "client": "ClientNote",
+            "invoice": "InvoiceNote",
+            "job": "JobNote",
+            "quote": "QuoteNote",
+            "request": "RequestNote",
+        }
+        note_type = note_type_map.get(entity_type)
+        if not note_type:
+            raise ValueError(f"Unsupported entity type for attachments: {entity_type}")
+
+        query = f"""
+        query GetAdditionalAttachments($id: EncodedId!, $cursor: String!) {{
+          {entity_type}(id: $id) {{
+            noteAttachments(first: {page_size}, after: $cursor) {{
+              totalCount
+              edges {{
+                node {{
+                  id
+                  note {{
+                    ... on {note_type} {{
+                      id
+                    }}
+                  }}
+                  fileName
+                  contentType
+                  url
+                  fileSize
+                  createdAt
+                }}
+              }}
+              pageInfo {{
+                hasNextPage
+                endCursor
+              }}
+            }}
+          }}
+        }}
+        """
+
+        variables = {"id": entity_id, "cursor": cursor}
+        response = self._execute_graphql_request(query, variables=variables)
+        entity_data = response.get("data", {}).get(entity_type, {})
+        return entity_data.get("noteAttachments", {})
+
+    # ========================================================================
+    # Map Mode Query Variants - Lightweight queries for discovery pass
+    # ========================================================================
+    # These queries fetch minimal fields (id, updatedAt, totalCount) to enable
+    # fast entity discovery and relation counting. Used in multi-pass migration
+    # strategy to estimate extraction effort before full data retrieval.
+    # Cost: ~5-10 points per query vs ~100-500 for full queries
+
+    def _get_clients_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for clients map mode."""
+        size = page_size or self._get_pagination_size("clients")
+        return """
+    query GetClientsMap($cursor: String) {{
+      clients(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            updatedAt
+            notes {{
+              totalCount
+            }}
+            noteAttachments {{
+              totalCount
+            }}
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_invoices_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for invoices map mode."""
+        size = page_size or self._get_pagination_size("invoices")
+        return """
+    query GetInvoicesMap($cursor: String) {{
+      invoices(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            updatedAt
+            notes {{
+              totalCount
+            }}
+            noteAttachments {{
+              totalCount
+            }}
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_quotes_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for quotes map mode."""
+        size = page_size or self._get_pagination_size("quotes")
+        return """
+    query GetQuotesMap($cursor: String) {{
+      quotes(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            updatedAt
+            lineItems {{
+              totalCount
+            }}
+            notes {{
+              totalCount
+            }}
+            noteAttachments {{
+              totalCount
+            }}
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_jobs_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for jobs map mode."""
+        size = page_size or self._get_pagination_size("jobs")
+        return """
+    query GetJobsMap($cursor: String) {{
+      jobs(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            updatedAt
+            notes {{
+              totalCount
+            }}
+            noteAttachments {{
+              totalCount
+            }}
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_properties_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for properties map mode."""
+        size = page_size or self._get_pagination_size("properties")
+        return """
+    query GetPropertiesMap($cursor: String) {{
+      properties(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_requests_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for requests map mode."""
+        size = page_size or self._get_pagination_size("requests")
+        return """
+    query GetRequestsMap($cursor: String) {{
+      requests(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            updatedAt
+            notes {{
+              totalCount
+            }}
+            noteAttachments {{
+              totalCount
+            }}
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_users_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for users map mode."""
+        size = page_size or self._get_pagination_size("users")
+        return """
+    query GetUsersMap($cursor: String) {{
+      users(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            lastLoginAt
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_expenses_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for expenses map mode."""
+        size = page_size or self._get_pagination_size("expenses")
+        return """
+    query GetExpensesMap($cursor: String) {{
+      expenses(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            updatedAt
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_visits_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for visits map mode."""
+        size = page_size or self._get_pagination_size("visits")
+        return """
+    query GetVisitsMap($cursor: String) {{
+      visits(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            createdAt
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_timesheet_entries_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for timesheet entries map mode."""
+        size = page_size or self._get_pagination_size("timesheetEntries")
+        return """
+    query GetTimesheetEntriesMap($cursor: String) {{
+      timeSheetEntries(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+            updatedAt
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_products_services_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for products/services map mode."""
+        size = page_size or self._get_pagination_size("productsAndServices")
+        return """
+    query GetProductsServicesMap($cursor: String) {{
+      productOrServices(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def _get_tax_rates_map_query(self, page_size: Optional[int] = None) -> str:
+        """Get lightweight GraphQL query for tax rates map mode."""
+        size = page_size or self._get_pagination_size("taxRates")
+        return """
+    query GetTaxRatesMap($cursor: String) {{
+      taxRates(first: {size}, after: $cursor) {{
+        totalCount
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+        edges {{
+          node {{
+            id
+          }}
+        }}
+      }}
+    }}
+    """.format(size=size)
+
+    def fetch_clients_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch clients with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_clients_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "clients" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'clients' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching clients map: {e}") from e
+
+    def fetch_invoices_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch invoices with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_invoices_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "invoices" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'invoices' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching invoices map: {e}") from e
+
+    def fetch_quotes_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch quotes with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_quotes_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "quotes" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'quotes' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching quotes map: {e}") from e
+
+    def fetch_jobs_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch jobs with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_jobs_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "jobs" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'jobs' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching jobs map: {e}") from e
+
+    def fetch_properties_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch properties with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_properties_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "properties" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'properties' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching properties map: {e}") from e
+
+    def fetch_requests_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch requests with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_requests_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "requests" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'requests' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching requests map: {e}") from e
+
+    def fetch_users_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch users with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_users_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "users" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'users' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching users map: {e}") from e
+
+    def fetch_expenses_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch expenses with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_expenses_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "expenses" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'expenses' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching expenses map: {e}") from e
+
+    def fetch_visits_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch visits with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_visits_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "visits" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'visits' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching visits map: {e}") from e
+
+    def fetch_timesheet_entries_map(
+        self, cursor: Optional[str] = None, page_size: Optional[int] = None
+    ) -> dict[str, Any]:
+        """Fetch timesheet entries with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_timesheet_entries_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "timeSheetEntries" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'timeSheetEntries' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching timesheet entries map: {e}") from e
+
+    def fetch_products_services_map(
+        self, cursor: Optional[str] = None, page_size: Optional[int] = None
+    ) -> dict[str, Any]:
+        """Fetch products/services with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_products_services_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "productOrServices" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'productOrServices' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching products/services map: {e}") from e
+
+    def fetch_tax_rates_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
+        """Fetch tax rates with minimal fields for map mode (discovery pass)."""
+        try:
+            response_data = self._execute_graphql_request(self._get_tax_rates_map_query(page_size), cursor)
+            if response_data.get("data") is not None and "taxRates" not in response_data["data"]:
+                raise JobberApiError("Invalid response structure: missing 'taxRates' field in data")
+            return response_data
+        except (ConfigurationError, JobberApiError):
+            raise
+        except Exception as e:
+            raise JobberApiError(f"Unexpected error while fetching tax rates map: {e}") from e

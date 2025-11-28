@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """ClientsExtractor for extracting Client entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
@@ -38,6 +39,7 @@ class ClientsExtractor(BaseExtractor[Client]):
         logger: Logger,
         config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize ClientsExtractor with required dependencies.
 
@@ -48,6 +50,7 @@ class ClientsExtractor(BaseExtractor[Client]):
             logger: Logger for structured output and progress tracking
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
+            **kwargs: Additional parameters (e.g., queue_attachments, map_snapshot_id)
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -58,6 +61,7 @@ class ClientsExtractor(BaseExtractor[Client]):
             entity_name="client",
             config_manager=config_manager,
             skip_existing_entities=skip_existing_entities,
+            **kwargs,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Client] = []
@@ -73,9 +77,7 @@ class ClientsExtractor(BaseExtractor[Client]):
         """
         return self._jobber_client.fetch_clients(cursor)
 
-    def _extract_edges_and_page_info(
-        self, response: dict[str, Any]
-    ) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -110,9 +112,11 @@ class ClientsExtractor(BaseExtractor[Client]):
         # Track for extract_all
         self._last_batch_entities = entities
 
-    def _extract_related_entities(
-        self, node: dict[str, Any], primary_entity: Client
-    ) -> dict[str, Any]:
+    def _extract_entity_data(self, response: dict[str, Any]) -> dict[str, Any]:
+        """Extract clients data from GraphQL response."""
+        return response.get("data", {}).get("clients", {})
+
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Client) -> dict[str, Any]:
         """Extract notes and attachments related to the client.
 
         Delegates to base implementation for common extraction logic.
@@ -144,43 +148,3 @@ class ClientsExtractor(BaseExtractor[Client]):
         """
         return self._last_batch_entities
 
-
-    def get_entity_count(self) -> int:
-        """Get total count of clients available for extraction.
-
-        Performs a lightweight API call to determine the total number of clients
-        available for extraction without actually extracting data.
-
-        Returns:
-            Total number of clients available for extraction
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-        """
-        self._logger.debug("Fetching total client count from API")
-
-        # Use minimal query to get just the count
-        response = self._jobber_client.fetch_clients(cursor=None)
-        clients_data = response.get("data", {}).get("clients", {})
-        page_info = clients_data.get("pageInfo", {})
-
-        # If API provides totalCount, use it
-        total_count = clients_data.get("totalCount")
-        if total_count is not None:
-            self._logger.debug(f"API reported total client count: {total_count}")
-            return int(total_count)
-
-        # Otherwise estimate from first page
-        edges = clients_data.get("edges", [])
-        if not edges:
-            return 0
-
-        # Rough estimate based on first page size and hasNextPage
-        page_size = len(edges)
-        if not page_info.get("hasNextPage", False):
-            return page_size
-
-        # Can't determine exact count without pagination
-        self._logger.info("Cannot determine exact client count without full pagination")
-        return -1  # Indicate unknown count

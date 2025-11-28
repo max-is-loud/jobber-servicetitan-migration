@@ -34,9 +34,7 @@ class TestMigrationOAuthFailureSimulation:
         self.mock_rate_limiter.get_capacity.return_value = 300.0
 
         self.mock_backoff_strategy = Mock(spec=ExponentialBackoffStrategy)
-        self.mock_backoff_strategy.calculate_delay.return_value = (
-            0.01  # Very short for tests
-        )
+        self.mock_backoff_strategy.calculate_delay.return_value = 0.01  # Very short for tests
 
         # Mock auth provider with realistic behavior
         self.mock_oauth_manager = Mock()
@@ -80,9 +78,7 @@ class TestMigrationOAuthFailureSimulation:
         self.mock_repository.get_oauth_tokens.return_value = {
             "access_token": "expired_token_after_49_minutes",
             "refresh_token": "still_valid_refresh_token",
-            "expires_at": (
-                datetime.now(timezone.utc) - timedelta(minutes=5)
-            ).isoformat(),  # Expired 5 min ago
+            "expires_at": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),  # Expired 5 min ago
             "created_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
         }
 
@@ -114,9 +110,7 @@ class TestMigrationOAuthFailureSimulation:
 
         # Verify the reactive refresh sequence happened
         assert self.mock_http_client.post.call_count == 2
-        self.mock_oauth_manager.refresh_access_token.assert_called_once_with(
-            "still_valid_refresh_token"
-        )
+        self.mock_oauth_manager.refresh_access_token.assert_called_once_with("still_valid_refresh_token")
         self.mock_repository.save_oauth_tokens.assert_called_once()
 
         # Verify the retry used the new token
@@ -138,12 +132,8 @@ class TestMigrationOAuthFailureSimulation:
         self.mock_repository.get_oauth_tokens.return_value = {
             "access_token": "expired_access_token",
             "refresh_token": "invalid_or_expired_refresh_token",
-            "expires_at": (
-                datetime.now(timezone.utc) - timedelta(minutes=5)
-            ).isoformat(),
-            "created_at": (
-                datetime.now(timezone.utc) - timedelta(weeks=8)
-            ).isoformat(),  # Very old
+            "expires_at": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
+            "created_at": (datetime.now(timezone.utc) - timedelta(weeks=8)).isoformat(),  # Very old
         }
 
         # Setup: Token refresh fails (refresh token invalid)
@@ -182,9 +172,7 @@ class TestMigrationOAuthFailureSimulation:
         self.mock_repository.get_oauth_tokens.return_value = {
             "access_token": "expired_token",
             "refresh_token": "valid_refresh_token",
-            "expires_at": (
-                datetime.now(timezone.utc) - timedelta(minutes=1)
-            ).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 

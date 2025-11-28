@@ -54,15 +54,44 @@ class EntityMapper:
             last_name = data.get("lastName", "")
 
             # Extract primary email from emails array
+            # GraphQL returns: emails { address }
             emails = data.get("emails", [])
-            email = MapperUtils.extract_primary_field(emails, "value", "primary")
+            email = MapperUtils.extract_primary_field(emails, "address", "primary")
 
             # Extract primary phone from phones array
+            # GraphQL returns: phones { number }
             phones = data.get("phones", [])
-            phone = MapperUtils.extract_primary_field(phones, "value", "primary")
+            phone = MapperUtils.extract_primary_field(phones, "number", "primary")
+
+            # Extract ALL emails and phones for additional contact methods
+            all_emails = MapperUtils.extract_all_fields(emails, "address")
+            all_phones = MapperUtils.extract_all_fields(phones, "number")
+
+            # Remove primary from additional lists to avoid duplication
+            additional_emails = [e for e in all_emails if e != email]
+            additional_phones = [p for p in all_phones if p != phone]
+
+            # Serialize to JSON for SQLite TEXT storage
+            additional_emails_json = MapperUtils.serialize_json_field(additional_emails)
+            additional_phones_json = MapperUtils.serialize_json_field(additional_phones)
 
             # Format ISO datetime
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
+
+            # Map new fields
+            company_name = data.get("companyName") or ""
+            balance = data.get("balance", 0.0)
+            balance_cents = MapperUtils.convert_to_cents(balance)
+            is_archivable = 1 if data.get("isArchivable") else 0
+            is_company = 1 if data.get("isCompany") else 0
+
+            # Flatten billing address
+            billing_address = data.get("billingAddress") or {}
+            billing_street = billing_address.get("street") or ""
+            billing_city = billing_address.get("city") or ""
+            billing_province = billing_address.get("province") or ""
+            billing_postal_code = billing_address.get("postalCode") or ""
+            billing_country = billing_address.get("country") or ""
 
             return Client(
                 id=client_id,
@@ -71,6 +100,17 @@ class EntityMapper:
                 email=email,
                 phone=phone,
                 created_at=created_at,
+                additional_emails=additional_emails_json,
+                additional_phones=additional_phones_json,
+                company_name=company_name,
+                balance_cents=balance_cents,
+                is_archivable=is_archivable,
+                is_company=is_company,
+                billing_street=billing_street,
+                billing_city=billing_city,
+                billing_province=billing_province,
+                billing_postal_code=billing_postal_code,
+                billing_country=billing_country,
             )
 
         except Exception as e:
@@ -106,18 +146,43 @@ class EntityMapper:
             # Extract invoice number
             number = data.get("invoiceNumber", "")
 
-            # Extract and convert total amount to cents
+            # Extract and convert amounts to cents
             amounts = data.get("amounts", {})
             total_amount = None
+            subtotal_amount = None
+            tax_amount = None
+            discount_amount = None
+            deposit_amount = None
             if isinstance(amounts, dict):
                 total_amount = amounts.get("total")
+                subtotal_amount = amounts.get("subtotal")
+                tax_amount = amounts.get("taxAmount")
+                discount_amount = amounts.get("discountAmount")
+                deposit_amount = amounts.get("depositAmount")
+
             total_cents = MapperUtils.convert_to_cents(total_amount)
+            subtotal = MapperUtils.convert_to_cents(subtotal_amount)
+            tax_cents = MapperUtils.convert_to_cents(tax_amount)
+            discount_cents = MapperUtils.convert_to_cents(discount_amount)
+            deposit_cents = MapperUtils.convert_to_cents(deposit_amount)
+
+            # Extract invoice net (already in cents according to schema)
+            invoice_net = data.get("invoiceNet") or 0
 
             # Extract invoice status
             status = data.get("invoiceStatus", "")
 
-            # Format issued date
+            # Extract subject and message
+            subject = data.get("subject") or ""
+            message = data.get("message") or ""
+
+            # Format dates
             issued_at = self._format_iso_datetime(data.get("issuedDate"))
+            due_date = MapperUtils.format_iso_datetime(data.get("dueDate"))
+
+            # Extract and serialize line items
+            line_items_data = data.get("lineItems", {})
+            line_items = self._serialize_line_items(line_items_data)
 
             return Invoice(
                 id=invoice_id,
@@ -126,6 +191,15 @@ class EntityMapper:
                 total_cents=total_cents,
                 status=status,
                 issued_at=issued_at,
+                due_date=due_date,
+                subtotal=subtotal,
+                line_items=line_items,
+                subject=subject,
+                message=message,
+                tax_cents=tax_cents,
+                discount_cents=discount_cents,
+                deposit_cents=deposit_cents,
+                invoice_net=invoice_net,
             )
 
         except Exception as e:
@@ -158,6 +232,12 @@ class EntityMapper:
             if not client_id:
                 raise MappingError("Quote client ID is required but missing")
 
+            # Extract property ID from property relationship (optional)
+            property_obj = data.get("property", {})
+            property_id = ""
+            if isinstance(property_obj, dict):
+                property_id = property_obj.get("id", "")
+
             # Extract quote number
             quote_number = data.get("quoteNumber", "")
 
@@ -168,15 +248,25 @@ class EntityMapper:
             amounts = data.get("amounts", {})
             total_amount = None
             subtotal_amount = None
+            tax_amount = None
+            discount_amount = None
             if isinstance(amounts, dict):
                 total_amount = amounts.get("total")
                 subtotal_amount = amounts.get("subtotal")
+                tax_amount = amounts.get("taxAmount")
+                discount_amount = amounts.get("discountAmount")
 
             total = self._convert_to_cents(total_amount)
             subtotal = self._convert_to_cents(subtotal_amount)
+            tax_cents = self._convert_to_cents(tax_amount)
+            discount_cents = self._convert_to_cents(discount_amount)
 
             # Extract disclaimer/message
             disclaimer = data.get("message", "")
+
+            # Extract quote status and sent timestamp
+            quote_status = data.get("quoteStatus") or ""
+            sent_at = self._format_iso_datetime(data.get("sentAt"))
 
             # Extract and serialize line items to JSON string
             line_items_data = data.get("lineItems", {})
@@ -190,6 +280,7 @@ class EntityMapper:
             return Quote(
                 id=quote_id,
                 client_id=client_id,
+                property_id=property_id,
                 quote_number=quote_number,
                 title=title,
                 total=total,
@@ -199,33 +290,42 @@ class EntityMapper:
                 created_at=created_at,
                 transitioned_at=transitioned_at,
                 updated_at=updated_at,
+                quote_status=quote_status,
+                sent_at=sent_at,
+                tax_cents=tax_cents,
+                discount_cents=discount_cents,
             )
 
         except Exception as e:
             raise MappingError(f"Failed to map Quote data: {e}") from e
 
-    def map_note(self, data: dict[str, Any]) -> Note:
+    def map_note(self, data: dict[str, Any], lenient: bool = False) -> Note:
         """
         Map GraphQL Note data to Note domain model.
 
         Handles polymorphic note types from different GraphQL fragments
-        (ClientNote, JobNote, QuoteNote, InvoiceNote) and extracts the
-        appropriate entity type and ID relationships.
+        (ClientNote, PropertyNote, RequestNote, JobNote, VisitNote, QuoteNote, InvoiceNote)
+        and extracts the appropriate entity type and ID relationships.
 
         Args:
             data: Raw GraphQL Note node data from polymorphic query
+            lenient: If True, use placeholder values for missing required fields
+                    instead of raising MappingError (useful for orphaned notes)
 
         Returns:
             Note: Typed Note dataclass instance
 
         Raises:
-            MappingError: If required fields are missing or invalid
+            MappingError: If required fields are missing or invalid (unless lenient=True)
         """
         try:
             # Extract required fields with validation
             note_id = data.get("id")
             if not note_id:
-                raise MappingError("Note ID is required but missing")
+                if lenient:
+                    note_id = "ORPHANED_NOTE_MISSING_ID"
+                else:
+                    raise MappingError("Note ID is required but missing")
 
             # Extract message
             message = data.get("message", "")
@@ -238,10 +338,22 @@ class EntityMapper:
             if "client" in data and isinstance(data["client"], dict):
                 entity_type = "client"
                 entity_id = data["client"].get("id", "")
+            # Check for property relationship (PropertyNote)
+            elif "property" in data and isinstance(data["property"], dict):
+                entity_type = "property"
+                entity_id = data["property"].get("id", "")
+            # Check for request relationship (RequestNote)
+            elif "request" in data and isinstance(data["request"], dict):
+                entity_type = "request"
+                entity_id = data["request"].get("id", "")
             # Check for job relationship (JobNote)
             elif "job" in data and isinstance(data["job"], dict):
                 entity_type = "job"
                 entity_id = data["job"].get("id", "")
+            # Check for visit relationship (VisitNote)
+            elif "visit" in data and isinstance(data["visit"], dict):
+                entity_type = "visit"
+                entity_id = data["visit"].get("id", "")
             # Check for quote relationship (QuoteNote)
             elif "quote" in data and isinstance(data["quote"], dict):
                 entity_type = "quote"
@@ -251,10 +363,17 @@ class EntityMapper:
                 entity_type = "invoice"
                 entity_id = data["invoice"].get("id", "")
             else:
-                raise MappingError("Note entity relationship is required but missing")
+                if lenient:
+                    entity_type = "ORPHANED"
+                    entity_id = "UNKNOWN"
+                else:
+                    raise MappingError("Note entity relationship is required but missing")
 
             if not entity_id:
-                raise MappingError(f"Note {entity_type} ID is required but missing")
+                if lenient:
+                    entity_id = "UNKNOWN"
+                else:
+                    raise MappingError(f"Note {entity_type} ID is required but missing")
 
             # Format ISO datetimes
             created_at = self._format_iso_datetime(data.get("createdAt"))
@@ -272,24 +391,30 @@ class EntityMapper:
         except Exception as e:
             raise MappingError(f"Failed to map Note data: {e}") from e
 
-    def map_attachment(self, data: dict[str, Any]) -> Attachment:
+    def map_attachment(self, data: dict[str, Any], lenient: bool = False, parent_entity_id: str = "") -> Attachment:
         """
         Map GraphQL Attachment data to Attachment domain model.
 
         Args:
             data: Raw GraphQL Attachment (noteFile) node data
+            lenient: If True, use placeholder values for missing required fields
+                    instead of raising MappingError (useful for orphaned attachments)
+            parent_entity_id: Parent entity ID (job/client/etc) for organizing orphaned attachments
 
         Returns:
             Attachment: Typed Attachment dataclass instance
 
         Raises:
-            MappingError: If required fields are missing or invalid
+            MappingError: If required fields are missing or invalid (unless lenient=True)
         """
         try:
             # Extract required fields with validation
             attachment_id = data.get("id")
             if not attachment_id:
-                raise MappingError("Attachment ID is required but missing")
+                if lenient:
+                    attachment_id = "ORPHANED_ATTACHMENT_MISSING_ID"
+                else:
+                    raise MappingError("Attachment ID is required but missing")
 
             # Extract note ID from note relationship
             note = data.get("note", {})
@@ -297,7 +422,11 @@ class EntityMapper:
             if isinstance(note, dict):
                 note_id = note.get("id", "")
             if not note_id:
-                raise MappingError("Attachment note ID is required but missing")
+                if lenient:
+                    # Use ORPHANED marker so files get organized in orphaned directory
+                    note_id = "ORPHANED"
+                else:
+                    raise MappingError("Attachment note ID is required but missing")
 
             # Extract file metadata
             file_name = data.get("fileName", "")
@@ -306,8 +435,12 @@ class EntityMapper:
             original_url = data.get("url", "")
 
             # Generate local file path following convention:
-            # ./attachments/{note_id}/{filename}
-            local_file_path = f"./attachments/{note_id}/{file_name}" if file_name else ""
+            # For orphaned: ./attachments/ORPHANED/{parent_entity_id}/{filename}
+            # For normal: ./attachments/{note_id}/{filename}
+            if note_id == "ORPHANED" and parent_entity_id:
+                local_file_path = f"./attachments/ORPHANED/{parent_entity_id}/{file_name}" if file_name else ""
+            else:
+                local_file_path = f"./attachments/{note_id}/{file_name}" if file_name else ""
 
             # Extract file size
             file_size = data.get("fileSize", 0)
@@ -326,6 +459,10 @@ class EntityMapper:
                 local_file_path=local_file_path,
                 file_size=file_size,
                 created_at=created_at,
+                download_status="pending",  # Initial state for metadata-only extraction
+                hash=None,  # Computed during binary download phase
+                downloaded_at=None,  # Set when download completes
+                download_error=None,  # Set if download fails
             )
 
         except Exception as e:
@@ -364,18 +501,29 @@ class EntityMapper:
             # Extract job details
             job_number = data.get("jobNumber", "")
             title = data.get("title", "")
-            description = data.get("description", "")
-            status = data.get("status", "")
+            # API provides 'instructions' field, use it for description
+            description = data.get("instructions", "")
+            # API uses 'jobStatus' not 'status'
+            status = data.get("jobStatus", "")
 
             # Extract scheduling information
-            scheduled_start_at = MapperUtils.format_iso_datetime(data.get("scheduledStartAt"))
-            scheduled_end_at = MapperUtils.format_iso_datetime(data.get("scheduledEndAt"))
+            # API uses 'startAt' and 'endAt' not 'scheduledStartAt' and 'scheduledEndAt'
+            scheduled_start_at = MapperUtils.format_iso_datetime(data.get("startAt"))
+            scheduled_end_at = MapperUtils.format_iso_datetime(data.get("endAt"))
             completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
 
             # Extract and convert total amount to cents
-            amounts = data.get("amounts", {})
-            total_amount = MapperUtils.safe_get_nested(amounts, "total")
+            # API provides 'total' directly, not nested in 'amounts'
+            total_amount = data.get("total")
             total = MapperUtils.convert_to_cents(total_amount)
+
+            # Extract job type and billing type
+            job_type = data.get("jobType") or ""
+            billing_type = data.get("billingType") or ""
+
+            # Extract and convert invoiced total to cents
+            invoiced_total_amount = data.get("invoicedTotal")
+            invoiced_total = MapperUtils.convert_to_cents(invoiced_total_amount)
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -396,6 +544,9 @@ class EntityMapper:
                 total=total,
                 created_at=created_at,
                 updated_at=updated_at,
+                job_type=job_type,
+                billing_type=billing_type,
+                invoiced_total=invoiced_total,
             )
 
         except Exception as e:
@@ -430,17 +581,34 @@ class EntityMapper:
 
             # Extract address information
             address = data.get("address", {})
-            address_line1 = MapperUtils.safe_get_nested(address, "line1", default="")
-            address_line2 = MapperUtils.safe_get_nested(address, "line2", default="")
+            address_line1 = MapperUtils.safe_get_nested(address, "street1", default="")
+            address_line2 = MapperUtils.safe_get_nested(address, "street2", default="")
             city = MapperUtils.safe_get_nested(address, "city", default="")
-            state_province = MapperUtils.safe_get_nested(address, "stateProvince", default="")
+            state_province = MapperUtils.safe_get_nested(address, "province", default="")
             postal_code = MapperUtils.safe_get_nested(address, "postalCode", default="")
             country = MapperUtils.safe_get_nested(address, "country", default="")
 
-            # Extract GPS coordinates
-            coordinates = data.get("coordinates", {})
+            # Extract GPS coordinates (nested under address in GraphQL response)
+            coordinates = address.get("coordinates", {}) if address else {}
             latitude = str(MapperUtils.safe_get_nested(coordinates, "latitude", default=""))
             longitude = str(MapperUtils.safe_get_nested(coordinates, "longitude", default=""))
+
+            # Extract tax rate relationship
+            tax_rate_obj = data.get("taxRate", {})
+            tax_rate_id = ""
+            tax_rate_name = ""
+            tax_rate = ""
+            if isinstance(tax_rate_obj, dict):
+                tax_rate_id = tax_rate_obj.get("id") or ""
+                tax_rate_name = tax_rate_obj.get("name") or ""
+                rate_value = tax_rate_obj.get("rate")
+                tax_rate = str(rate_value) if rate_value is not None else ""
+
+            # Extract billing address flag and routing order
+            is_billing_address = 1 if data.get("isBillingAddress") else 0
+            routing_order = data.get("routingOrder") or 0
+            if not isinstance(routing_order, int):
+                routing_order = 0
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -460,6 +628,11 @@ class EntityMapper:
                 longitude=longitude,
                 created_at=created_at,
                 updated_at=updated_at,
+                tax_rate_id=tax_rate_id,
+                tax_rate_name=tax_rate_name,
+                tax_rate=tax_rate,
+                is_billing_address=is_billing_address,
+                routing_order=routing_order,
             )
 
         except Exception as e:
@@ -468,6 +641,10 @@ class EntityMapper:
     def map_request(self, data: dict[str, Any]) -> Request:
         """
         Map GraphQL Request data to Request domain model.
+
+        Based on Jobber API schema: https://developer.getjobber.com/docs/
+        Available fields: id, client, property, title, source, requestStatus,
+        companyName, contactName, email, phone, notes, noteAttachments, createdAt, updatedAt
 
         Args:
             data: Raw GraphQL Request node data
@@ -492,17 +669,24 @@ class EntityMapper:
             # Extract optional property ID from property relationship
             property_id = MapperUtils.extract_id_from_relationship(data.get("property"))
 
-            # Extract request details
+            # Extract request details - using correct API field names
             title = data.get("title", "")
-            description = data.get("description", "")
-            status = data.get("status", "")
-            priority = data.get("priority", "")
             source = data.get("source", "")
-            assigned_to = data.get("assignedTo", "")
+            # API uses 'requestStatus' not 'status'
+            status = data.get("requestStatus", "")
 
-            # Extract conversion relationships
-            converted_to_quote_id = MapperUtils.extract_id_from_relationship(data.get("convertedToQuote"))
-            converted_to_job_id = MapperUtils.extract_id_from_relationship(data.get("convertedToJob"))
+            # Additional contact fields from API
+            company_name = data.get("companyName", "")
+            contact_name = data.get("contactName", "")
+            email = data.get("email", "")
+            phone = data.get("phone", "")
+
+            # Fields not available in API - use empty defaults
+            description = ""  # Not in API schema
+            priority = ""  # Not in API schema
+            assigned_to = ""  # Not in API schema
+            converted_to_quote_id = ""  # Not in API schema (use quotes connection instead)
+            converted_to_job_id = ""  # Not in API schema (use jobs connection instead)
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -520,6 +704,10 @@ class EntityMapper:
                 assigned_to=assigned_to,
                 converted_to_quote_id=converted_to_quote_id,
                 converted_to_job_id=converted_to_job_id,
+                company_name=company_name,
+                contact_name=contact_name,
+                email=email,
+                phone=phone,
                 created_at=created_at,
                 updated_at=updated_at,
             )
@@ -551,9 +739,9 @@ class EntityMapper:
             first_name = MapperUtils.safe_get_nested(name, "first", default="")
             last_name = MapperUtils.safe_get_nested(name, "last", default="")
 
-            # Extract email
+            # Extract email (UserEmail type uses 'raw' field, not 'email')
             email_obj = data.get("email", {})
-            email = MapperUtils.safe_get_nested(email_obj, "email", default="")
+            email = MapperUtils.safe_get_nested(email_obj, "raw", default="")
 
             # Derive role from admin flags
             is_account_admin = data.get("isAccountAdmin", False)
@@ -570,13 +758,16 @@ class EntityMapper:
             is_account_owner_str = str(is_account_owner).lower()
             status = data.get("status", "")
 
-            # Extract phone
+            # Extract phone (UserPhone type uses 'raw' field, not 'number')
             phone_obj = data.get("phone", {})
-            phone = MapperUtils.safe_get_nested(phone_obj, "number", default="")
+            phone = MapperUtils.safe_get_nested(phone_obj, "raw", default="")
 
-            # Extract timezone
-            timezone_obj = data.get("timezone", {})
-            timezone = MapperUtils.safe_get_nested(timezone_obj, "identifier", default="")
+            # Extract timezone (Timezone is SCALAR, query directly)
+            timezone = data.get("timezone", "")
+
+            # Extract scheduling and display fields
+            available_for_scheduling = 1 if data.get("availableForScheduling") else 0
+            assigned_color = data.get("assignedColor") or ""
 
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
@@ -595,6 +786,8 @@ class EntityMapper:
                 timezone=timezone,
                 created_at=created_at,
                 last_login_at=last_login_at,
+                available_for_scheduling=available_for_scheduling,
+                assigned_color=assigned_color,
             )
 
         except Exception as e:
@@ -642,6 +835,11 @@ class EntityMapper:
             # Extract expense date
             expense_date = MapperUtils.format_iso_datetime(data.get("date"))
 
+            # Extract tracking fields
+            entered_by_id = MapperUtils.extract_id_from_relationship(data.get("enteredBy"))
+            paid_by_id = MapperUtils.extract_id_from_relationship(data.get("paidBy"))
+            reimbursable_to_id = MapperUtils.extract_id_from_relationship(data.get("reimbursableTo"))
+
             # Format ISO datetimes
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
             updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
@@ -655,6 +853,9 @@ class EntityMapper:
                 receipt_url=receipt_url,
                 vendor=vendor,
                 expense_date=expense_date,
+                entered_by_id=entered_by_id,
+                paid_by_id=paid_by_id,
+                reimbursable_to_id=reimbursable_to_id,
                 created_at=created_at,
                 updated_at=updated_at,
             )
@@ -708,18 +909,25 @@ class EntityMapper:
             title = data.get("title", "")
             instructions = data.get("instructions", "")
             status = data.get("visitStatus", "")
-            all_day = str(data.get("allDay", False)).lower()
+            all_day = 1 if data.get("allDay") else 0
 
             # Extract duration
             duration = data.get("duration", 0)
             duration_minutes = int(duration) if isinstance(duration, (int, float)) else 0
+
+            # Extract client confirmation flag
+            client_confirmed = 1 if data.get("clientConfirmed") else 0
+
+            # Extract completed by user ID (handle as scalar string, not relationship)
+            completed_by = data.get("completedBy", "")
+            completed_by_id = completed_by if isinstance(completed_by, str) else ""
 
             # Format ISO datetimes
             start_at = MapperUtils.format_iso_datetime(data.get("startAt"))
             end_at = MapperUtils.format_iso_datetime(data.get("endAt"))
             completed_at = MapperUtils.format_iso_datetime(data.get("completedAt"))
             created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
-            updated_at = MapperUtils.format_iso_datetime(data.get("createdAt"))  # Use createdAt for updated_at
+            updated_at = None  # Field not available in Jobber Visit schema
 
             return Visit(
                 id=visit_id,
@@ -737,6 +945,8 @@ class EntityMapper:
                 completed_at=completed_at,
                 created_at=created_at,
                 updated_at=updated_at,
+                client_confirmed=client_confirmed,
+                completed_by_id=completed_by_id,
             )
 
         except Exception as e:
@@ -766,9 +976,9 @@ class EntityMapper:
             if not user_id:
                 raise MappingError("TimeSheetEntry user ID is required but missing")
 
+            # job_id is optional - some timesheet entries may not be associated with a job
+            # (e.g., general admin time, PTO, or other non-job-specific time tracking)
             job_id = MapperUtils.extract_id_from_relationship(data.get("job"))
-            if not job_id:
-                raise MappingError("TimeSheetEntry job ID is required but missing")
 
             # Extract optional relationship IDs
             visit_id = MapperUtils.extract_id_from_relationship(data.get("visit"))
@@ -845,9 +1055,10 @@ class EntityMapper:
             name = data.get("name", "")
             description = data.get("description", "")
 
-            # Extract category
-            category_obj = data.get("category", {})
-            category = MapperUtils.safe_get_nested(category_obj, "name", default="")
+            # Extract category (handle both scalar string and object)
+            category = data.get("category", "")
+            if isinstance(category, dict):
+                category = category.get("name", "")
 
             # Extract and convert pricing to cents
             default_unit_cost = data.get("defaultUnitCost", 0)
@@ -867,7 +1078,7 @@ class EntityMapper:
             # Extract flags
             taxable = str(data.get("taxable", False)).lower()
             visible = str(data.get("visible", True)).lower()
-            online_booking_enabled = str(data.get("onlineBookingEnabled", False)).lower()
+            online_booking_enabled = str(data.get("onlineBookingsEnabled", False)).lower()
 
             # Extract ordering
             online_booking_sort_order = data.get("onlineBookingSortOrder", 0)
@@ -907,6 +1118,9 @@ class EntityMapper:
         """
         Map GraphQL TaxRate data to TaxRate domain model.
 
+        Note: Jobber GraphQL API TaxRate type only exposes 'id' and 'name' fields.
+        Other fields (rate, region, compound, etc.) are not available via the API.
+
         Args:
             data: Raw GraphQL TaxRate node data
 
@@ -922,41 +1136,12 @@ class EntityMapper:
             if not tax_rate_id:
                 raise MappingError("TaxRate ID is required but missing")
 
-            # Extract tax rate details
+            # Extract name (only other field available from API)
             name = data.get("name", "")
-            rate = data.get("rate", 0)
-            rate_percentage = str(rate)
-
-            # Extract geographic and configuration details
-            region = data.get("region", "")
-            compound = str(data.get("compound", False)).lower()
-            active = str(data.get("active", True)).lower()
-            description = data.get("description", "")
-            tax_number = data.get("taxNumber", "")
-
-            # Extract display configuration
-            display_order = data.get("displayOrder", 0)
-            display_order = int(display_order) if isinstance(display_order, (int, float)) else 0
-
-            default_for_region = str(data.get("defaultForRegion", False)).lower()
-
-            # Format ISO datetimes
-            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
-            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
 
             return TaxRate(
                 id=tax_rate_id,
                 name=name,
-                rate_percentage=rate_percentage,
-                region=region,
-                compound=compound,
-                active=active,
-                description=description,
-                tax_number=tax_number,
-                display_order=display_order,
-                default_for_region=default_for_region,
-                created_at=created_at,
-                updated_at=updated_at,
             )
 
         except Exception as e:

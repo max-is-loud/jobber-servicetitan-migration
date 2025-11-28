@@ -26,5 +26,9 @@ class Request:
     assigned_to: str  # assignedTo: String - Team member handling the request
     converted_to_quote_id: str  # convertedToQuote.id - Quote created from this request
     converted_to_job_id: str  # convertedToJob.id - Job created from this request
+    company_name: str  # companyName: String - Company name from request
+    contact_name: str  # contactName: String - Contact person name
+    email: str  # email: String - Contact email address
+    phone: str  # phone: String - Contact phone number
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string
     updated_at: str  # updatedAt: ISO8601DateTime! - ISO format string

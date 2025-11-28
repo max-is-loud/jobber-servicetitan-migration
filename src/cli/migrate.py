@@ -1,15 +1,13 @@
 """Migration commands for TightBeam CLI."""
 
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, List, Optional
 
 import typer
 
-from src.config import ConfigManagerImpl
 from src.constants import (
     DEFAULT_OPTIMIZATION_LEVEL,
     MIGRATION_EMOJI,
-    DRY_RUN_EMOJI,
     ERROR_EMOJI,
     INFO_EMOJI,
 )
@@ -17,7 +15,7 @@ from src.exceptions import (
     ConfigurationError,
 )
 
-from .services import ServiceFactory
+from .services import ServiceFactory, SharedServices
 
 # Get shared console instance
 console = ServiceFactory.get_console()
@@ -82,20 +80,6 @@ def migrate_callback(
     ctx: typer.Context,
     db: Annotated[Optional[Path], typer.Option(help="SQLite database path")] = None,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable verbose logging")] = False,
-    deferred_notes: Annotated[
-        bool,
-        typer.Option(
-            "--deferred-notes",
-            help="Use deferred notes loading to prevent GraphQL throttling",
-        ),
-    ] = True,
-    enable_notes_persistence: Annotated[
-        bool,
-        typer.Option(
-            "--enable-notes-persistence",
-            help="Enable temporary storage for note references (for very large migrations)",
-        ),
-    ] = False,
     optimization_level: Annotated[
         str,
         typer.Option(
@@ -107,28 +91,6 @@ def migrate_callback(
             )
         ),
     ] = DEFAULT_OPTIMIZATION_LEVEL,
-    enable_cost_monitoring: Annotated[
-        bool,
-        typer.Option(
-            "--enable-cost-monitoring",
-            help=(
-                "Enable GraphQL cost monitoring and rate limit tracking. "
-                "Provides detailed performance insights and API usage statistics. "
-                "Recommended for performance analysis and optimization tuning."
-            ),
-        ),
-    ] = True,
-    cost_monitoring_verbose: Annotated[
-        bool,
-        typer.Option(
-            "--cost-monitoring-verbose",
-            help=(
-                "Enable verbose cost monitoring output during migration. "
-                "Shows detailed GraphQL query costs, accuracy percentages, and rate limit analysis. "
-                "Use for detailed performance debugging and optimization insights."
-            ),
-        ),
-    ] = False,
     resume: Annotated[
         bool,
         typer.Option(
@@ -136,29 +98,17 @@ def migrate_callback(
             help="Skip entities that already exist in database (for resuming interrupted migrations)",
         ),
     ] = False,
-    enable_adaptive_optimization: Annotated[
-        bool,
-        typer.Option(
-            "--adaptive",
-            help="Enable adaptive performance optimization (auto-tune page size and delays)",
-        ),
-    ] = False,
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Preview migration operations without making any changes to the database",
-        ),
-    ] = False,
 ) -> None:
     """
     Data migration commands for TightBeam.
 
-    If no subcommand is provided, runs the 'all' command by default.
+    Two-pass ETL pattern:
+    - max-extract: Extract all metadata (Pass 1)
+    - download-attachments: Download binary files (Pass 2)
     """
     # Initialize configuration manager
     try:
-        config_manager = ConfigManagerImpl()
+        config_manager = ServiceFactory.create_config_manager()
     except ConfigurationError as e:
         typer.echo(f"Error: Configuration loading failed: {e}")
         raise typer.Exit(1) from e
@@ -169,24 +119,18 @@ def migrate_callback(
     except ConfigurationError:
         available_levels = ["conservative", "moderate", "aggressive"]
         typer.echo(
-            f"Error: Invalid optimization level '{optimization_level}'. " f"Choose from: {', '.join(available_levels)}"
+            f"Error: Invalid optimization level '{optimization_level}'. Choose from: {', '.join(available_levels)}"
         )
         raise typer.Exit(1) from None
 
-        # Store shared configuration in context for subcommands
+    # Store shared configuration in context for subcommands
     ctx.ensure_object(dict)
     ctx.obj.update(
         {
-            "db": db or Path("tightbeam.sqlite"),
+            "db": SharedServices.resolve_db_path(db),
             "verbose": verbose,
-            "deferred_notes": deferred_notes,
-            "enable_notes_persistence": enable_notes_persistence,
             "optimization_level": optimization_level,
-            "enable_cost_monitoring": enable_cost_monitoring,
-            "cost_monitoring_verbose": cost_monitoring_verbose,
             "resume": resume,
-            "enable_adaptive_optimization": enable_adaptive_optimization,
-            "dry_run": dry_run,
         }
     )
 
@@ -195,657 +139,317 @@ def migrate_callback(
             f"{MIGRATION_EMOJI} [bold blue]Migration Verbose Mode:[/bold blue] Detailed output enabled", style="dim"
         )
 
-    if dry_run:
-        console.print(
-            f"{DRY_RUN_EMOJI} [bold yellow]Dry Run Mode:[/bold yellow] Preview mode - no database changes will be made",
-            style="dim",
-        )
-
     # Check authentication before allowing migration commands
     _check_authentication(console)
 
-    if ctx.invoked_subcommand is None:
-        # Default to 'all' command when no subcommand is specified
-        migrate_all(
-            ctx=ctx,
-            db=ctx.obj["db"],
-            verbose=verbose,
-            deferred_notes=deferred_notes,
-            enable_notes_persistence=enable_notes_persistence,
-            optimization_level=optimization_level,
-            enable_cost_monitoring=enable_cost_monitoring,
-            cost_monitoring_verbose=cost_monitoring_verbose,
-            resume=resume,
-            enable_adaptive_optimization=enable_adaptive_optimization,
-            dry_run=dry_run,
-        )
 
 
-@migrate_app.command("all")
-def migrate_all(
-    ctx: typer.Context,
-    db: Annotated[Path, typer.Option(help="SQLite database path")] = Path("tightbeam.sqlite"),
-    verbose: Annotated[bool, typer.Option("--verbose", help="Enable verbose logging")] = False,
-    deferred_notes: Annotated[
-        bool,
+@migrate_app.command(name="download-attachments")
+def download_attachments(
+    db: Annotated[
+        Optional[Path],
         typer.Option(
-            "--deferred-notes",
-            help="Use deferred notes loading to prevent GraphQL throttling",
-        ),
-    ] = True,
-    enable_notes_persistence: Annotated[
-        bool,
-        typer.Option(
-            "--enable-notes-persistence",
-            help="Enable temporary storage for note references (for very large migrations)",
-        ),
-    ] = False,
-    resume: Annotated[
-        Optional[bool],
-        typer.Option(
-            "--resume",
-            help="Skip entities that already exist in database (for resuming interrupted migrations)",
+            "--db",
+            help="Path to SQLite database file",
+            show_default=True,
         ),
     ] = None,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="Directory for downloaded attachment files",
+            show_default=True,
+        ),
+    ] = Path("./attachments"),
+    batch_size: Annotated[
+        int,
+        typer.Option(
+            "--batch-size",
+            help="Number of attachments to fetch per batch",
+            min=1,
+            max=1000,
+            show_default=True,
+        ),
+    ] = 100,
+) -> None:
+    """Download pending attachment files from Jobber.
+
+    Phase 2 of the two-phase ETL pattern for binary file downloads.
+    Fetches all attachments with download_status='pending' and saves them
+    to hash-based storage: {sha256_hash}.{original_extension}
+
+    The database must already contain attachment metadata from Phase 1
+    (entity extraction).
+
+    Examples:
+        # Download all pending attachments
+        tightbeam migrate download-attachments
+
+        # Specify custom database and output directory
+        tightbeam migrate download-attachments --db ./data/export.db --output-dir ./files
+
+        # Control batch size for large datasets
+        tightbeam migrate download-attachments --batch-size 50
+    """
+    from src.extractors.attachment_downloader import AttachmentDownloader
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+    # Resolve database path with environment variable and config fallback
+    db = SharedServices.resolve_db_path(db)
+
+    console.print(f"\n{INFO_EMOJI} Starting attachment download")
+    console.print(f"   Database: {db}")
+    console.print(f"   Output directory: {output_dir}")
+    console.print(f"   Batch size: {batch_size}\n")
+
+    # Validate database exists
+    if not db.exists():
+        console.print(f"{ERROR_EMOJI} Database not found: {db}", style="bold red")
+        console.print(f"   Run 'tightbeam migrate jobber' first to extract metadata\n")
+        raise typer.Exit(code=1)
+
+    try:
+        # Initialize services
+        repository = ServiceFactory.create_repository(db)
+        logger = ServiceFactory.create_logger(verbose=True)
+
+        # Check for pending attachments
+        pending_count_query = repository._connection.cursor()
+        pending_count_query.execute("SELECT COUNT(*) FROM attachments WHERE download_status = 'pending'")
+        total_pending = pending_count_query.fetchone()[0]
+        pending_count_query.close()
+
+        if total_pending == 0:
+            console.print(f"{INFO_EMOJI} No pending attachments found", style="yellow")
+            console.print(f"   All attachments already downloaded or no attachments in database\n")
+            return
+
+        console.print(f"{INFO_EMOJI} Found {total_pending} pending attachment(s)\n")
+
+        # Initialize downloader
+        downloader = AttachmentDownloader(
+            repository=repository,
+            logger=logger,
+            base_download_path=str(output_dir),
+            max_retries=3,
+        )
+
+        # Validate dependencies
+        downloader.validate_dependencies()
+
+        # Download with progress tracking
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Downloading attachments...", total=total_pending)
+
+            # Get initial stats
+            stats = {"success": 0, "failed": 0, "total_bytes": 0}
+
+            # Process in batches
+            while True:
+                batch = repository.get_pending_attachments()
+                if not batch:
+                    break
+
+                # Limit batch size
+                batch = batch[:batch_size]
+
+                for attachment in batch:
+                    result = downloader.download_attachment(attachment)
+
+                    if result["success"]:
+                        stats["success"] += 1
+                        stats["total_bytes"] += result["bytes_downloaded"]
+                    else:
+                        stats["failed"] += 1
+
+                    # Update progress
+                    progress.update(task, advance=1)
+
+                # If we got fewer than batch_size, we're done
+                if len(batch) < batch_size:
+                    break
+
+        # Display summary
+        console.print()
+        console.print("📊 Download Summary:", style="bold cyan")
+        console.print(f"   ✓ Success: {stats['success']} files ({_format_bytes(stats['total_bytes'])})")
+        if stats["failed"] > 0:
+            console.print(f"   ✗ Failed: {stats['failed']} files", style="bold red")
+        console.print()
+
+        if stats["failed"] > 0:
+            console.print(f"{INFO_EMOJI} Check database download_error field for failure details:")
+            console.print(f"   SELECT id, file_name, download_error FROM attachments WHERE download_status = 'failed'\n")
+
+    except ConfigurationError as e:
+        console.print(f"{ERROR_EMOJI} Configuration error: {e}", style="bold red")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"{ERROR_EMOJI} Unexpected error: {e}", style="bold red")
+        raise typer.Exit(code=1)
+
+
+def _format_bytes(bytes_count: int) -> str:
+    """Format byte count as human-readable string.
+
+    Args:
+        bytes_count: Number of bytes
+
+    Returns:
+        Formatted string (e.g., "1.5 MB")
+    """
+    for unit in ["B", "KB", "MB", "GB"]:
+        if bytes_count < 1024.0:
+            return f"{bytes_count:.1f} {unit}"
+        bytes_count /= 1024.0
+    return f"{bytes_count:.1f} TB"
+
+
+@migrate_app.command(name="max-extract")
+def max_extract(
+    db: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--db",
+            help="Path to SQLite database file",
+            show_default=True,
+        ),
+    ] = None,
+    entities: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--entities",
+            help="Specific entities to extract (default: all)",
+        ),
+    ] = None,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Resume from last checkpoint",
+        ),
+    ] = False,
     optimization_level: Annotated[
         str,
         typer.Option(
-            help=(
-                "Rate limiting optimization level:\n"
-                "• conservative (4 req/s): Safest option with 52% safety margin, recommended for production\n"
-                "• moderate (6 req/s): Balanced performance with 28% safety margin, default recommended\n"
-                "• aggressive (8 req/s): Maximum speed with 4% safety margin, requires active monitoring"
-            )
+            "--optimization-level",
+            help="Rate limiting optimization level (conservative/moderate/aggressive)",
+            show_default=True,
         ),
     ] = "moderate",
-    enable_cost_monitoring: Annotated[
-        bool,
-        typer.Option(
-            "--enable-cost-monitoring",
-            help=(
-                "Enable GraphQL cost monitoring and rate limit tracking. "
-                "Provides detailed performance insights and API usage statistics. "
-                "Recommended for performance analysis and optimization tuning."
-            ),
-        ),
-    ] = True,
-    cost_monitoring_verbose: Annotated[
-        bool,
-        typer.Option(
-            "--cost-monitoring-verbose",
-            help=(
-                "Enable verbose cost monitoring output during migration. "
-                "Shows detailed GraphQL query costs, accuracy percentages, and rate limit analysis. "
-                "Use for detailed performance debugging and optimization insights."
-            ),
-        ),
-    ] = False,
-    enable_adaptive_optimization: Annotated[
-        bool,
-        typer.Option(
-            "--adaptive",
-            help="Enable adaptive performance optimization (auto-tune page size and delays)",
-        ),
-    ] = False,
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Preview migration operations without making any changes to the database",
-        ),
-    ] = False,
 ) -> None:
+    """Extract all Jobber data (Pass 1: metadata extraction with resumable checkpoints).
+
+    Phase 7 orchestrated extraction that processes all entities in dependency order.
+    Supports selective extraction and resume from checkpoint for interrupted migrations.
+
+    This is Pass 1 of the two-phase ETL pattern - it extracts all metadata including
+    attachment URLs but does not download binary files. Use 'download-attachments'
+    after this command to fetch binaries (Pass 2).
+
+    Examples:
+        # Extract all entities
+        tightbeam migrate max-extract
+
+        # Extract specific entities only
+        tightbeam migrate max-extract --entities clients --entities invoices
+
+        # Resume interrupted extraction
+        tightbeam migrate max-extract --resume
+
+        # Use aggressive rate limiting for faster extraction
+        tightbeam migrate max-extract --optimization-level aggressive
     """
-    Migrate all data from Jobber API to SQLite database.
+    from src.coordinators.max_extract_coordinator import MaxExtractCoordinator
 
-    Fetches all clients, invoices, quotes, notes, and attachments from the Jobber
-    GraphQL API using cursor-based pagination and stores them in the specified SQLite
-    database. Attachment files are downloaded to ./attachments directory. Features
-    deferred notes loading by default to prevent GraphQL throttling issues.
+    # Resolve database path with environment variable and config fallback
+    db = SharedServices.resolve_db_path(db)
 
-    Deferred Notes Loading (Default):
-    - Collects note IDs during client/invoice processing
-    - Processes notes separately to avoid nested query complexity
-    - Prevents GraphQL throttling on large datasets
-    - Use --immediate-notes to disable (legacy mode)
-
-    Resume Mode (--resume):
-    - Skips entities that already exist in the database
-    - Enables resuming interrupted migrations without duplicate processing
-    - Uses fast primary key lookups for efficient existence checking
-    - Works with all entity types including clients, invoices, quotes, notes, and attachments
-
-    Authentication options:
-    1. Set JOBBER_TOKEN environment variable with a valid Jobber API token
-    2. Configure OAuth2 variables and run 'tightbeam oauth init'
-    """
-    import sqlite3
-    import sys
-
-    # Import required components
-    from src.auth import AuthProvider, OAuth2Manager
-    from src.clients import HttpClient
-    from src.config import ConfigManagerImpl
-    from src.coordinators import BaseMigrationCoordinator
-    from src.mappers import EntityMapper
-    from src.exceptions import ConfigurationError
-    from src.loggers import RichLogger
-    from src.repositories import Repository
-
-    # Get shared configuration from context (group-level flags take precedence)
-    config = ctx.obj or {}
-
-    # Resolve actual parameter values (context values override local defaults)
-    actual_db = config.get("db", db)
-    actual_verbose = config.get("verbose", verbose)
-    actual_deferred_notes = config.get("deferred_notes", deferred_notes)
-    actual_enable_notes_persistence = config.get("enable_notes_persistence", enable_notes_persistence)
-    actual_optimization_level = config.get("optimization_level", optimization_level)
-    actual_enable_cost_monitoring = config.get("enable_cost_monitoring", enable_cost_monitoring)
-    actual_cost_monitoring_verbose = config.get("cost_monitoring_verbose", cost_monitoring_verbose)
-    actual_enable_adaptive_optimization = config.get("enable_adaptive_optimization", enable_adaptive_optimization)
-
-    # Special handling for resume: command-level explicit value > group-level > default False
-    actual_resume = resume if resume is not None else config.get("resume", False)
-
-    connection = None
+    console.print(f"\n{MIGRATION_EMOJI} Starting Jobber Max Extract (Pass 1: Metadata)")
+    console.print(f"   Database: {db}")
+    console.print(f"   Optimization level: {optimization_level}")
+    console.print(f"   Resume: {resume}")
+    if entities:
+        console.print(f"   Entities: {', '.join(entities)}")
+    else:
+        console.print(f"   Entities: ALL (in dependency order)")
+    console.print()
 
     try:
-        # Create database connection with Rich logger
-        logger = RichLogger(verbose=actual_verbose)
-        logger.info(f"Connecting to database: {actual_db}")
+        # Initialize services with optimization level
+        repository = ServiceFactory.create_repository(db)
+        logger = ServiceFactory.create_logger(verbose=True)
+        config_manager = ServiceFactory.create_config_manager()
 
-        # Ensure parent directory exists
-        actual_db.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.Connection(str(actual_db))
-
-        # Dependency injection - wire up all components
-        logger.debug("Initializing application components")
-
-        # Initialize repository first for OAuth token storage
-        repository = Repository(connection)
-
-        # Create OAuth2 components
-        try:
-            client_id, client_secret, redirect_uri = AuthProvider.get_oauth2_config()
-            http_client = HttpClient()
-            oauth_manager = OAuth2Manager(
-                client_id=client_id,
-                client_secret=client_secret,
-                redirect_uri=redirect_uri,
-                http_client=http_client,
-            )
-            auth_provider = AuthProvider(oauth_manager, repository)
-        except ConfigurationError as e:
-            raise ConfigurationError(
-                f"OAuth2 configuration error: {e}. "
-                "Please ensure JOBBER_CLIENT_ID, JOBBER_CLIENT_SECRET, and "
-                "JOBBER_REDIRECT_URI are set and run 'tightbeam oauth init' "
-                "to authorize."
-            ) from None
-
-        # Core dependencies with rate limiting integration
-        # Initialize configuration manager for consistent settings
-        config_manager = ConfigManagerImpl()
-
-        # Create JobberClient with rate limiting via ServiceFactory
-        # This centralizes rate limiting setup and eliminates code duplication
+        # Create authenticated Jobber client with rate limiting
+        auth_provider = ServiceFactory.create_auth_provider(repository, logger)
         jobber_client = ServiceFactory.create_rate_limited_jobber_client(
             auth_provider=auth_provider,
             repository=repository,
             config_manager=config_manager,
-            optimization_level=actual_optimization_level,
-            enable_cost_monitoring=actual_enable_cost_monitoring,
+            optimization_level=optimization_level,
         )
 
-        # Log rate limiting configuration for visibility
-        rate_config = config_manager.get_rate_limit_config(actual_optimization_level)
-        requests_per_second = rate_config["refill_rate"] / 60
-        logger.info(
-            f"Rate limiting configured: {actual_optimization_level.upper()} optimization level "
-            f"({rate_config['capacity']} tokens, {rate_config['refill_rate']}/minute, "
-            f"~{requests_per_second:.0f} req/sec)"
-        )
+        # Create entity mapper
+        entity_mapper = ServiceFactory.create_entity_mapper()
 
-        entity_mapper = EntityMapper()
-
-        # Create optional extractors for enhanced entity coverage
-        from src.extractors import (
-            ClientsExtractor,
-            InvoicesExtractor,
-            NoteReferenceCollector,
-            NotesExtractor,
-            QuotesExtractor,
-        )
-
-        # Create note components for deferred processing if enabled
-        note_reference_collector = None
-        notes_extractor = None
-
-        if actual_deferred_notes:
-            logger.info("🔄 Deferred notes loading enabled - preventing GraphQL throttling")
-            note_reference_collector = NoteReferenceCollector(
-                repository=repository,
-                logger=logger,
-                enable_persistence=actual_enable_notes_persistence,
-                batch_size=1000,
-            )
-            notes_extractor = NotesExtractor(
-                jobber_client,
-                entity_mapper,
-                repository,
-                logger,
-                config_manager=config_manager,
-                skip_existing_entities=actual_resume,
-            )
-
-            if actual_enable_notes_persistence:
-                logger.info("💾 Notes persistence enabled for large migration volumes")
-        else:
-            logger.info("⚡ Immediate notes processing enabled (legacy mode)")
-
-        # Create entity extractors for modular extraction
-        clients_extractor = ClientsExtractor(
-            jobber_client,
-            entity_mapper,
-            repository,
-            logger,
-            config_manager=config_manager,
-            skip_existing_entities=actual_resume,
-        )
-        invoices_extractor = InvoicesExtractor(
-            jobber_client,
-            entity_mapper,
-            repository,
-            logger,
-            config_manager=config_manager,
-            skip_existing_entities=actual_resume,
-        )
-        quotes_extractor = QuotesExtractor(
-            jobber_client,
-            entity_mapper,
-            repository,
-            logger,
-            config_manager=config_manager,
-            skip_existing_entities=actual_resume,
-        )
-
-        # Note: AttachmentDownloader is now a helper class used by extractors
-        # Attachments are extracted inline with parent entities via noteAttachments fields
-
-        # Create migration coordinator with all dependencies including optional extractors
-        if actual_resume:
-            logger.info("🔄 Resume mode ENABLED - will skip existing entities and use saved cursors")
-        else:
-            logger.info("🆕 Full migration mode - processing all entities from beginning")
-
-        # Create unified Rich-based migration coordinator
-        migration_coordinator = BaseMigrationCoordinator(
+        # Initialize coordinator
+        coordinator = MaxExtractCoordinator(
             jobber_client=jobber_client,
-            entity_mapper=entity_mapper,
             repository=repository,
             logger=logger,
-            note_reference_collector=note_reference_collector,
-            notes_extractor=notes_extractor,
-            clients_extractor=clients_extractor,
-            invoices_extractor=invoices_extractor,
-            quotes_extractor=quotes_extractor,
-            config_manager=config_manager,
-            resume=actual_resume,
-            enable_adaptive_optimization=actual_enable_adaptive_optimization,
+            entity_mapper=entity_mapper,
         )
 
-        # Execute migration workflow with Rich progress bars
-        logger.info("Starting migration process")
+        # Execute extraction
+        console.print(f"{INFO_EMOJI} Beginning extraction...\n")
 
-        # Enhanced startup logging for optimization configuration
-        logger.info("🚀 Performance Configuration:")
-        logger.info(f"   • Optimization level: {actual_optimization_level.upper()}")
-        logger.info(f"   • Target rate: {requests_per_second:.0f} requests/sec")
-        if enable_adaptive_optimization:
-            logger.info("   • Adaptive optimization: ENABLED (will auto-tune performance)")
-        else:
-            logger.info("   • Adaptive optimization: DISABLED (using static settings)")
-
-        # Calculate safety margin
-        api_limit_per_sec = 500 / 60  # 500 req/min = ~8.33 req/sec
-        safety_margin = ((api_limit_per_sec - requests_per_second) / api_limit_per_sec) * 100
-        logger.info(f"   • Safety margin: {safety_margin:.0f}% below API limits")
-
-        # Cost monitoring status
-        if actual_enable_cost_monitoring:
-            logger.info("   • GraphQL cost monitoring: ENABLED")
-            if actual_cost_monitoring_verbose:
-                logger.info("   • Verbose cost monitoring: ENABLED")
-        else:
-            logger.info("   • GraphQL cost monitoring: DISABLED")
-
-        logger.info("🔍 Rate Limiter Status:")
-        rate_limiter = jobber_client.http_client.get_rate_limiter()
-        logger.info(f"   • Available tokens: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
-        logger.info(
-            f"   • Refill rate: {rate_limiter.get_refill_rate()}/min (~{rate_limiter.get_refill_rate()/60:.1f}/sec)"
+        summary = coordinator.extract_all(
+            entities=entities,
+            resume=resume,
         )
 
-        summary = migration_coordinator.migrate()
+        # Display results
+        console.print(f"\n{MIGRATION_EMOJI} Extraction Complete!")
+        console.print(f"\n📊 Summary:")
+        console.print(f"   Total entities extracted: {summary['total_entities']}")
+        console.print(f"   Entity types processed: {len(summary['results'])}")
 
-        # Enhanced performance logging and metrics display
-        logger.info("\n📊 Migration Performance Analysis:")
-
-        # Calculate migration speed
-        total_entities = (
-            summary.clients_processed
-            + summary.invoices_processed
-            + summary.quotes_processed
-            + summary.notes_processed
-            + summary.attachments_processed
-        )
-        if summary.duration_seconds > 0:
-            entities_per_minute = (total_entities / summary.duration_seconds) * 60
-            logger.info(f"   • Migration speed: {entities_per_minute:.1f} entities/minute")
-            logger.info(f"   • Total entities: {total_entities} in {summary.duration_seconds:.1f}s")
-
-        # Enhanced rate limiting and cost metrics display
-        if metrics_collector:
-            rate_metrics = metrics_collector.get_human_readable_summary()
-            cost_stats = metrics_collector.get_cost_statistics()
-            rate_limit_status = metrics_collector.get_rate_limit_status()
-
-            # GraphQL cost monitoring (verbose mode)
-            if actual_cost_monitoring_verbose and cost_stats["total_queries"] > 0:
-                logger.info("🧮 GraphQL Cost Analysis:")
-                logger.info(f"   • Total queries: {cost_stats['total_queries']}")
-                logger.info(f"   • Avg requested cost: {cost_stats['avg_requested_cost']:.0f}")
-                logger.info(f"   • Avg actual cost: {cost_stats['avg_actual_cost']:.0f}")
-                logger.info(f"   • Cost accuracy: {cost_stats['cost_accuracy_percentage']:.1f}%")
-
-            # Rate limit status
-            if rate_limit_status["remaining_requests"] is not None:
-                logger.info("🔄 Rate Limit Status:")
-                logger.info(f"   • Remaining requests: {rate_limit_status['remaining_requests']}")
-                if (
-                    rate_limit_status["seconds_until_reset"] is not None
-                    and rate_limit_status["seconds_until_reset"] > 0
-                ):
-                    logger.info(f"   • Reset in: {rate_limit_status['seconds_until_reset']:.0f}s")
-        else:
-            logger.info("   • Cost monitoring: DISABLED")
-            rate_metrics = {
-                "throttle_rate": "0.0%",
-                "throttled_requests": 0,
-                "requests_per_minute": "N/A",
-                "total_requests": 0,
-                "rate_limit_errors": 0,
-                "average_response_time": "N/A",
-            }
-
-        # Display final summary with rate limiting metrics using Rich table
-        if metrics_collector:
-            rate_metrics = metrics_collector.get_human_readable_summary()
-        else:
-            rate_metrics = {
-                "throttle_rate": "0.0%",
-                "throttled_requests": 0,
-                "requests_per_minute": "N/A",
-                "total_requests": 0,
-                "rate_limit_errors": 0,
-                "average_response_time": "N/A",
-            }
-
-        summary_data = {
-            "clients_processed": summary.clients_processed,
-            "invoices_processed": summary.invoices_processed,
-            "quotes_processed": summary.quotes_processed,
-            "notes_processed": summary.notes_processed,
-            "note_references_collected": summary.note_references_collected,
-            "attachments_processed": summary.attachments_processed,
-            "files_downloaded": summary.files_downloaded,
-            "total_bytes_downloaded": summary.total_bytes_downloaded,
-            "download_failures": summary.download_failures,
-            "duration": summary.format_duration(),
-            "errors_count": len(summary.errors),
-            "status": ("SUCCESS" if len(summary.errors) == 0 else "COMPLETED_WITH_ERRORS"),
-            # Add migration mode information
-            "deferred_notes_enabled": actual_deferred_notes,
-            "notes_persistence_enabled": actual_enable_notes_persistence,
-            "resume_mode_enabled": actual_resume,
-            # Add rate limiting metrics
-            "rate_limiting": {
-                "requests_per_minute": rate_metrics["requests_per_minute"],
-                "total_requests": rate_metrics["total_requests"],
-                "throttled_requests": rate_metrics["throttled_requests"],
-                "rate_limit_errors": rate_metrics["rate_limit_errors"],
-                "average_response_time": rate_metrics["average_response_time"],
-                "throttle_rate": rate_metrics["throttle_rate"],
-            },
-        }
-
-        logger.log_summary(summary_data)
-
-        # Display deferred notes performance information
-        if actual_deferred_notes and summary.note_references_collected > 0:
-            logger.info("📊 Deferred Notes Processing Performance:")
-            logger.info(f"   • Note references collected: {summary.note_references_collected:,}")
-            logger.info(f"   • Notes processed separately: {summary.notes_processed:,}")
-            throttle_rate = float(rate_metrics["throttle_rate"].rstrip("%"))
-            if throttle_rate < 5.0:  # Less than 5% throttling
-                logger.info("   ✅ GraphQL throttling successfully minimized!")
+        # Show per-entity breakdown
+        console.print(f"\n📦 By Entity Type:")
+        for entity_type, count in summary['results'].items():
+            # Special handling for notes - they're extracted inline, not as a separate entity
+            if entity_type == "notes":
+                # Query actual note count from database
+                try:
+                    note_count = repository._connection.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+                    status_icon = "✓" if note_count > 0 else "○"
+                    console.print(f"   {status_icon} {entity_type}: {note_count} (extracted inline)")
+                except Exception:
+                    # If query fails, skip notes entirely
+                    continue
             else:
-                logger.info(f"   ⚠️  Some throttling occurred: {rate_metrics['throttle_rate']} of requests")
-            logger.info("   🎯 Trading complex nested queries for simple individual queries")
+                status_icon = "✓" if count > 0 else "○"
+                console.print(f"   {status_icon} {entity_type}: {count}")
 
-        # Display final token status and rate limiting effectiveness
-        logger.info("🔍 Final Token Status:")
-        logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
-        logger.info(
-            f"   • Total requests: {rate_metrics['total_requests']} "
-            f"(avg: {rate_metrics['requests_per_minute']}/min)"
-        )
-        logger.info(
-            f"   • Throttling rate: {rate_metrics['throttle_rate']} "
-            f"({rate_metrics['throttled_requests']} throttled)"
-        )
-        if float(rate_metrics["throttle_rate"].rstrip("%")) < 1.0:
-            logger.info("   ✅ Jobber-optimized rate limiting working effectively!")
-        elif float(rate_metrics["throttle_rate"].rstrip("%")) < 5.0:
-            logger.info("   ⚠️  Minor throttling - rate limiting working well")
-        else:
-            logger.info("   🔴 Significant throttling - consider further rate limit tuning")
+        # Show errors if any
+        if summary['errors']:
+            console.print(f"\n{ERROR_EMOJI} Errors ({len(summary['errors'])}):")
+            for error in summary['errors']:
+                console.print(f"   ✗ {error['entity_type']}: {error['error']}", style="bold red")
 
-        # Display errors if any
-        if summary.errors:
-            logger.error(f"Migration completed with {len(summary.errors)} non-fatal errors:")
-            for i, error in enumerate(summary.errors, 1):
-                logger.error(f"  {i}. {error}")
-
-        # Exit with appropriate code
-        exit_code = 0 if len(summary.errors) == 0 else 1
-        logger.info(f"Migration completed with exit code {exit_code}")
-        sys.exit(exit_code)
+        console.print(f"\n{INFO_EMOJI} Next step: Run 'tightbeam migrate download-attachments' to fetch binaries (Pass 2)\n")
 
     except ConfigurationError as e:
-        # Configuration/environment issues
-        # Use module-level console instance (already initialized at top of file)
-
-        console.print(f"[red]Configuration Error:[/red] {e}")
-        console.print("[yellow]To configure authentication, you can either:[/yellow]")
-        console.print("  1. Run [bold]tightbeam oauth init[/bold] to set up OAuth authentication")
-        console.print("  2. Manually set the following environment variables:")
-        console.print("     - JOBBER_CLIENT_ID")
-        console.print("     - JOBBER_CLIENT_SECRET")
-        console.print("     - JOBBER_REDIRECT_URI")
-        console.print("     - JOBBER_TOKEN")
-
-        sys.exit(1)
-
-
-@migrate_app.command("quotes")
-def migrate_quotes(
-    ctx: typer.Context,
-    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
-    resume: Annotated[
-        bool,
-        typer.Option(
-            "--resume",
-            help="Skip entities that already exist in database",
-        ),
-    ] = False,
-) -> None:
-    """
-    Extract quote data from Jobber API to SQLite database.
-
-    Fetches all quotes from the Jobber GraphQL API using cursor-based pagination
-    and stores them in the specified SQLite database. Uses centralized rate limiting
-    configuration from parent command options.
-
-    Note: Individual migrate commands use simplified GraphQL queries and don't
-    support deferred notes loading. For deferred notes, use 'migrate all' command.
-
-    Args:
-        page_limit: Optional limit on number of pages to process (for testing)
-        resume: Skip entities that already exist in database (for resuming interrupted migrations)
-    """  # noqa: E501
-    # Get shared configuration from context
-    config = ctx.obj or {}
-
-    # Import the helper function from CLI services
-    from .services import _execute_entity_extraction
-
-    _execute_entity_extraction(
-        entity_type="quotes",
-        db=config.get("db", Path("tightbeam.sqlite")),
-        verbose=config.get("verbose", False),
-        page_limit=page_limit,
-        optimization_level=config.get("optimization_level", "moderate"),
-        resume=resume,
-    )
-
-
-@migrate_app.command("attachments")
-def migrate_attachments(
-    ctx: typer.Context,
-    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
-    download_path: Annotated[
-        str, typer.Option("--download-path", help="Base path for attachment downloads")
-    ] = "./attachments",
-    resume: Annotated[
-        bool,
-        typer.Option(
-            "--resume",
-            help="Skip entities that already exist in database",
-        ),
-    ] = False,
-) -> None:
-    """
-    Extract attachment data and download files from Jobber API to local storage.
-
-    Fetches all attachments from the Jobber GraphQL API using cursor-based pagination,
-    downloads the binary files to organized local storage, and stores metadata in the
-    specified SQLite database. Uses centralized rate limiting configuration from parent
-    command options (--optimization-level).
-
-    Args:
-        page_limit: Optional limit on number of pages to process (for testing)
-        download_path: Base directory for attachment file downloads
-    """  # noqa: E501
-    # Get shared configuration from context
-    config = ctx.obj or {}
-
-    # Import the helper function from CLI services
-    from .services import _execute_entity_extraction
-
-    _execute_entity_extraction(
-        entity_type="attachments",
-        db=config.get("db", Path("tightbeam.sqlite")),
-        verbose=config.get("verbose", False),
-        page_limit=page_limit,
-        download_path=download_path,
-        optimization_level=config.get("optimization_level", "moderate"),
-        resume=resume,
-    )
-
-
-# Additional migrate commands would follow the same pattern
-# For brevity, I'll add a few more key ones:
-
-
-@migrate_app.command("users")
-def migrate_users(
-    ctx: typer.Context,
-    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
-    resume: Annotated[
-        bool,
-        typer.Option(
-            "--resume",
-            help="Skip entities that already exist in database",
-        ),
-    ] = False,
-) -> None:
-    """
-    Extract user data from Jobber API to SQLite database.
-
-    Fetches all users from the Jobber GraphQL API using cursor-based pagination
-    and stores them in the specified SQLite database. Includes user notes extraction
-    for performance tracking and administrative information. Uses centralized rate
-    limiting configuration from parent command options (--optimization-level).
-
-    Args:
-        page_limit: Optional limit on number of pages to process (for testing)
-    """
-    # Get shared configuration from context
-    config = ctx.obj or {}
-
-    # Import the helper function from CLI services
-    from .services import _execute_entity_extraction
-
-    _execute_entity_extraction(
-        entity_type="users",
-        db=config.get("db", Path("tightbeam.sqlite")),
-        verbose=config.get("verbose", False),
-        page_limit=page_limit,
-        optimization_level=config.get("optimization_level", "moderate"),
-        resume=resume,
-    )
-
-
-@migrate_app.command("expenses")
-def migrate_expenses(
-    ctx: typer.Context,
-    page_limit: Annotated[Optional[int], typer.Option("--limit", help="Limit number of pages for testing")] = None,
-    resume: Annotated[
-        bool,
-        typer.Option(
-            "--resume",
-            help="Skip entities that already exist in database",
-        ),
-    ] = False,
-) -> None:
-    """
-    Extract expense data from Jobber API to SQLite database.
-
-    Fetches all expenses from the Jobber GraphQL API using cursor-based pagination
-    and stores them in the specified SQLite database. Includes job-related cost
-    tracking and vendor information for financial management. Requires authentication
-    via JOBBER_TOKEN environment variable or OAuth2 configuration.
-
-    Args:
-        page_limit: Optional limit on number of pages to process (for testing)
-    """
-    # Get shared configuration from context
-    config = ctx.obj or {}
-
-    # Import the helper function from CLI services
-    from .services import _execute_entity_extraction
-
-    _execute_entity_extraction(
-        entity_type="expenses",
-        db=config.get("db", Path("tightbeam.sqlite")),
-        verbose=config.get("verbose", False),
-        page_limit=page_limit,
-        optimization_level=config.get("optimization_level", "moderate"),
-        resume=resume,
-    )
-
-
-# Add remaining commands following the same pattern...
-# (visits, timesheet-entries, products, tax-rates)
+        console.print(f"{ERROR_EMOJI} Configuration error: {e}", style="bold red")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"{ERROR_EMOJI} Extraction failed: {e}", style="bold red")
+        raise typer.Exit(code=1)

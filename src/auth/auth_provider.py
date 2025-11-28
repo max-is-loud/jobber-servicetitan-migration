@@ -37,6 +37,7 @@ These optimizations are particularly beneficial for:
 """
 
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Optional
 
@@ -208,42 +209,88 @@ class AuthProvider:
 
         # ENHANCED EXPIRATION CHECKING: Use database expires_at field as single source of truth
         # This eliminates JWT decoding overhead and ensures accuracy
-        try:
-            if self._is_token_expired_from_db(expires_at):
-                # Refresh the access token
-                new_tokens = self.oauth_manager.refresh_access_token(refresh_token)
-
-                # Convert expires_in to ISO 8601 timestamp
-                expires_in = new_tokens.get("expires_in")
-                if expires_in is None:
-                    raise OAuth2Error("The 'expires_in' field is missing in the token response.")
-                expires_at_datetime = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-                expires_at = expires_at_datetime.isoformat()
-
-                # Store the new tokens
-                self.repository.save_oauth_tokens(
-                    access_token=new_tokens["access_token"],
-                    refresh_token=new_tokens["refresh_token"],
-                    expires_at=expires_at,
+        if self._is_token_expired_from_db(expires_at):
+            # Token expired - attempt refresh with retry logic for transient failures
+            # Use transactional refresh to prevent race conditions
+            try:
+                new_tokens = self.repository.refresh_oauth_token_transactionally(
+                    old_refresh_token=refresh_token, refresh_callback=self._refresh_token_with_retry
                 )
 
-                # CACHE UPDATE: Store refreshed token for future calls
+                # Update cache with new tokens
+                expires_at_datetime = datetime.fromisoformat(new_tokens["expires_at"].replace("Z", "+00:00"))
                 self._update_cache(new_tokens["access_token"], expires_at_datetime)
                 return new_tokens["access_token"]
-            else:
-                # Token is still valid - populate cache to optimize subsequent calls
-                expires_at_datetime = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-                self._update_cache(access_token, expires_at_datetime)
-                return access_token
 
-        except OAuth2Error:
-            # Token refresh failed, clear stored tokens and cache
-            self.repository.clear_oauth_tokens()
-            self._clear_cache()
-            raise ConfigurationError(
-                "OAuth2 tokens are invalid and refresh failed. Please re-authorize "
-                "using the CLI command 'tightbeam oauth init'."
-            ) from None
+            except Exception as e:
+                # If transactional refresh fails, we can't proceed
+                raise OAuth2Error(f"Token refresh failed: {e}") from e
+        else:
+            # Token is still valid - populate cache to optimize subsequent calls
+            expires_at_datetime = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            self._update_cache(access_token, expires_at_datetime)
+            return access_token
+
+    def _refresh_token_with_retry(self, refresh_token: str, max_retries: int = 3, base_delay: float = 2.0) -> dict:
+        """
+        Refresh access token with retry logic for transient failures.
+
+        This method implements robust token refresh with exponential backoff to handle
+        transient network failures. NEVER clears tokens from database - if refresh fails
+        after all retries, the tokens remain so recovery is possible.
+
+        Args:
+            refresh_token: Valid refresh token from previous token exchange
+            max_retries: Maximum number of retry attempts (default: 3)
+            base_delay: Base delay in seconds for exponential backoff (default: 2.0)
+
+        Returns:
+            Dictionary containing refreshed token information
+
+        Raises:
+            OAuth2Error: If token refresh fails after all retries
+        """
+        last_error = None
+        last_error_type = None
+
+        for attempt in range(max_retries):
+            try:
+                # Attempt token refresh
+                new_tokens = self.oauth_manager.refresh_access_token(refresh_token)
+
+                # Success - return new tokens
+                if attempt > 0:
+                    # Log successful retry (only if we had to retry)
+                    print(f"✓ OAuth token refresh succeeded on attempt {attempt + 1}/{max_retries}")
+
+                return new_tokens
+
+            except (ConfigurationError, OAuth2Error) as e:
+                # Store error for retry logic - don't distinguish between types here
+                # All errors are treated as potentially transient
+                last_error = e
+                last_error_type = type(e).__name__
+
+            # Retry logic - only reached if we caught an error
+            if attempt < max_retries - 1:
+                delay = base_delay * (2**attempt)  # Exponential backoff
+                print(f"⚠ OAuth token refresh failed (attempt {attempt + 1}/{max_retries}): {last_error}")
+                print(f"   Retrying in {delay:.1f}s...")
+                time.sleep(delay)
+            else:
+                # Final attempt failed - log but preserve tokens
+                print(f"❌ OAuth token refresh failed after {max_retries} attempts ({last_error_type}): {last_error}")
+                print("   Tokens preserved in database - you may retry or run 'tightbeam oauth init' to re-authorize.")
+
+        # All retries exhausted - raise error but PRESERVE tokens in database
+        # This allows recovery if the issue was transient (network glitch, API timeout, etc.)
+        # User can retry the operation or manually re-authorize if needed
+        raise OAuth2Error(
+            f"Failed to refresh OAuth token after {max_retries} attempts ({last_error_type}). "
+            f"Last error: {last_error}. "
+            f"This may be a temporary issue - try again in a moment. "
+            f"If this persists, re-authorize with 'tightbeam oauth init'."
+        ) from last_error
 
     def get_headers(self) -> dict[str, str]:
         """
@@ -309,34 +356,24 @@ class AuthProvider:
         refresh_token = token_data["refresh_token"]
 
         try:
-            # Force refresh the access token
-            new_tokens = self.oauth_manager.refresh_access_token(refresh_token)
-
-            # Convert expires_in to ISO 8601 timestamp
-            expires_in = new_tokens.get("expires_in")
-            if expires_in is None:
-                raise OAuth2Error("The 'expires_in' field is missing in the token response.")
-            expires_at_datetime = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-            expires_at = expires_at_datetime.isoformat()
-
-            # Store the new tokens
-            self.repository.save_oauth_tokens(
-                access_token=new_tokens["access_token"],
-                refresh_token=new_tokens["refresh_token"],
-                expires_at=expires_at,
+            # Force refresh the access token transactionally
+            new_tokens = self.repository.refresh_oauth_token_transactionally(
+                old_refresh_token=refresh_token, refresh_callback=self.oauth_manager.refresh_access_token
             )
 
             # CACHE REPOPULATION: Store new token for immediate availability in subsequent calls
+            expires_at_datetime = datetime.fromisoformat(new_tokens["expires_at"].replace("Z", "+00:00"))
             self._update_cache(new_tokens["access_token"], expires_at_datetime)
             return new_tokens["access_token"]
-        except OAuth2Error:
+
+        except Exception as e:
             # Token refresh failed, clear stored tokens and cache
             self.repository.clear_oauth_tokens()
             self._clear_cache()
             raise ConfigurationError(
-                "OAuth2 tokens are invalid and refresh failed. Please re-authorize "
+                f"OAuth2 tokens are invalid and refresh failed: {e}. Please re-authorize "
                 "using the CLI command 'tightbeam oauth init'."
-            ) from None
+            ) from e
 
     @staticmethod
     def get_oauth2_config() -> tuple[str, str, str]:

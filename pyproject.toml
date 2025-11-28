@@ -1,6 +1,6 @@
 [project]
-name = "tightbeam-v2"
-version = "0.1.3"
+name = "project-tightbeam"
+version = "0.8.0"
 description = "Jobber Data Migration Tool"
 authors = [{name = "Maxime Langlois-Morin", email = "max@maxmorin.ca"}]
 readme = "README.md"
@@ -21,11 +21,31 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Utilities",
 ]
+dependencies = [
+    "typer>=0.20.0",
+    "requests>=2.31.0",
+    "pyjwt>=2.8.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+    "watchdog>=3.0.0",
+    "rich>=13.6.0",
+    "pytest-mock>=3.14.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.8.0",
+    "pytest>=8.3.5",
+    "pytest-cov>=5.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "ruff>=0.5.3",
+]
 
 [tool.poetry]
-name = "tightbeam-v2"
+name = "project-tightbeam"
 # Version is managed in src/constants.py - update there to change version
-version = "0.1.3"
+version = "0.8.0"
 description = "Jobber Data Migration Tool"
 authors = ["Maxime Langlois-Morin <max@maxmorin.ca>"]
 readme = "README.md"
@@ -70,10 +90,10 @@ ruff = "^0.5.3"
 tightbeam = "src.cli:main"
 
 [tool.poetry.urls]
-Homepage = "https://github.com/maxmorin/tightbeam-v2"
-Repository = "https://github.com/maxmorin/tightbeam-v2"
-Documentation = "https://github.com/maxmorin/tightbeam-v2#readme"
-Issues = "https://github.com/maxmorin/tightbeam-v2/issues"
+Homepage = "https://github.com/maxmorin/project-tightbeam"
+Repository = "https://github.com/maxmorin/project-tightbeam"
+Documentation = "https://github.com/maxmorin/project-tightbeam#readme"
+Issues = "https://github.com/maxmorin/project-tightbeam/issues"
 
 [build-system]
 requires = ["poetry-core"]

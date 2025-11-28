@@ -32,3 +32,6 @@ class Job:
     total: int  # amounts.total converted to cents for precision
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string
     updated_at: str  # updatedAt: ISO8601DateTime! - ISO format string
+    job_type: str = ""  # jobType: JobTypeEnum - Type of job (one_time, recurring, etc.)
+    billing_type: str = ""  # billingType: BillingTypeEnum - Billing method (flat_rate, hourly, etc.)
+    invoiced_total: int = 0  # invoicedTotal: Float - Total amount invoiced in cents

@@ -3,11 +3,12 @@
 import json
 import pytest
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 from src.mappers.entity_mapper import EntityMapper
 from src.mappers.mapper_utils import MapperUtils
 from src.exceptions import MappingError
-from src.models import Client, Invoice, Quote
+from src.models import Client, Invoice, Quote, ProductService
 
 
 class TestMapperUtils:
@@ -95,9 +96,7 @@ class TestMapperUtils:
         field_list = [
             {"phone_number": "555-0100", "is_primary": True},
         ]
-        result = MapperUtils.extract_primary_field(
-            field_list, field_name="phone_number", primary_key="is_primary"
-        )
+        result = MapperUtils.extract_primary_field(field_list, field_name="phone_number", primary_key="is_primary")
         assert result == "555-0100"
 
     def test_extract_primary_field_converts_to_string(self):
@@ -370,8 +369,8 @@ class TestEntityMapper:
             "id": "client_123",
             "firstName": "John",
             "lastName": "Doe",
-            "emails": [{"value": "john@example.com", "primary": True}],
-            "phones": [{"value": "555-0100", "primary": True}],
+            "emails": [{"address": "john@example.com", "primary": True}],
+            "phones": [{"number": "555-0100", "primary": True}],
             "createdAt": "2023-11-15T14:30:00Z",
         }
 
@@ -425,8 +424,8 @@ class TestEntityMapper:
         data = {
             "id": "client_123",
             "emails": [
-                {"value": "secondary@example.com", "primary": False},
-                {"value": "primary@example.com", "primary": True},
+                {"address": "secondary@example.com", "primary": False},
+                {"address": "primary@example.com", "primary": True},
             ],
         }
 
@@ -438,8 +437,8 @@ class TestEntityMapper:
         data = {
             "id": "client_123",
             "emails": [
-                {"value": "first@example.com", "primary": False},
-                {"value": "second@example.com", "primary": False},
+                {"address": "first@example.com", "primary": False},
+                {"address": "second@example.com", "primary": False},
             ],
         }
 
@@ -614,11 +613,66 @@ class TestEntityMapper:
 
     def test_mapper_preserves_original_exception_in_chain(self):
         """Test MappingError preserves original exception."""
-        try:
-            # Passing None will cause a TypeError inside map_client, which should be wrapped.
-            self.mapper.map_client(None)
-        except MappingError as e:
-            assert e.__cause__ is not None  # Original exception should be preserved
+        # Create a mock that raises a specific exception
+        mock_utils = MagicMock()
+        original_error = ValueError("Original error")
+        mock_utils.extract_primary_field.side_effect = original_error
+
+        # Patch MapperUtils with our mock
+        with patch("src.mappers.entity_mapper.MapperUtils", mock_utils):
+            with pytest.raises(MappingError) as exc_info:
+                self.mapper.map_client({"id": "123"})
+
+            # Verify the original exception is chained
+            assert exc_info.value.__cause__ is original_error
+
+    def test_map_product_service_valid(self):
+        """Test mapping a valid product/service."""
+        data = {
+            "id": "product_123",
+            "name": "Lawn Mowing",
+            "description": "Weekly mowing service",
+            "category": {"name": "Maintenance"},
+            "defaultUnitCost": 50.0,
+            "internalUnitCost": 30.0,
+            "markup": 0.66,
+            "durationMinutes": 60,
+            "taxable": True,
+            "visible": True,
+            "onlineBookingEnabled": True,
+            "onlineBookingSortOrder": 1,
+        }
+
+        result = self.mapper.map_product_service(data)
+
+        assert isinstance(result, ProductService)
+        assert result.id == "product_123"
+        assert result.name == "Lawn Mowing"
+        assert result.category == "Maintenance"
+        assert result.default_unit_cost_cents == 5000
+        assert result.internal_unit_cost_cents == 3000
+        assert result.markup_percentage == "0.66"
+        assert result.duration_minutes == 60
+        assert result.taxable == "true"
+        assert result.visible == "true"
+        assert result.online_booking_enabled == "true"
+        assert result.created_at == ""
+        assert result.updated_at == ""
+
+    def test_map_product_service_minimal(self):
+        """Test mapping a minimal product/service."""
+        data = {
+            "id": "product_123",
+            "name": "Basic Service",
+        }
+
+        result = self.mapper.map_product_service(data)
+
+        assert result.id == "product_123"
+        assert result.name == "Basic Service"
+        assert result.category == ""
+        assert result.default_unit_cost_cents == 0
+        assert result.created_at == ""
 
 
 class TestMapperIntegration:
@@ -635,13 +689,13 @@ class TestMapperIntegration:
             "firstName": "Jane",
             "lastName": "Smith",
             "emails": [
-                {"value": "jane.personal@example.com", "primary": False},
-                {"value": "jane.work@example.com", "primary": True},
-                {"value": "jane.other@example.com", "primary": False},
+                {"address": "jane.personal@example.com", "primary": False},
+                {"address": "jane.work@example.com", "primary": True},
+                {"address": "jane.other@example.com", "primary": False},
             ],
             "phones": [
-                {"value": "555-0100", "primary": True},
-                {"value": "555-0200", "primary": False},
+                {"number": "555-0100", "primary": True},
+                {"number": "555-0200", "primary": False},
             ],
             "createdAt": "2023-01-15T08:30:45Z",
         }

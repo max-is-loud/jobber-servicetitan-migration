@@ -123,14 +123,20 @@ class MetricsCollector:
         actual_cost: int,
         query_type: str = "unknown",
         batch_size: int = 0,
+        maximum_available: int | None = None,
+        currently_available: int | None = None,
+        restore_rate: int | None = None,
     ) -> None:
-        """Record GraphQL query cost information.
+        """Record GraphQL query cost information with throttle status.
 
         Args:
             requested_cost: The cost requested/estimated for the query
             actual_cost: The actual cost returned in response extensions
             query_type: Type of GraphQL query (e.g., 'fetch_clients', 'fetch_invoices')
             batch_size: Number of records requested in the batch
+            maximum_available: Maximum complexity points available (bucket capacity)
+            currently_available: Points remaining after this query
+            restore_rate: Points restored per second (refill rate)
         """
         with self._lock:
             timestamp = time.time()
@@ -145,6 +151,9 @@ class MetricsCollector:
                     "difference": cost_difference,
                     "query_type": query_type,
                     "batch_size": batch_size,
+                    "maximum_available": maximum_available,
+                    "currently_available": currently_available,
+                    "restore_rate": restore_rate,
                 }
             )
 
@@ -164,6 +173,9 @@ class MetricsCollector:
                         "cost_difference": cost_difference,
                         "timestamp": timestamp,
                         "created_at": created_at,
+                        "maximum_available": maximum_available,
+                        "currently_available": currently_available,
+                        "restore_rate": restore_rate,
                     }
 
                     # Save to database using repository
@@ -317,6 +329,70 @@ class MetricsCollector:
                 "cost_accuracy_percentage": avg_accuracy,
             }
 
+    def get_throttle_status_statistics(self) -> dict[str, float | int | None]:
+        """Get GraphQL throttle status statistics from recent queries.
+
+        Analyzes the throttleStatus fields from Jobber's API responses to provide
+        insights into API capacity utilization and potential throttling risks.
+
+        Returns:
+            dict: Throttle statistics including capacity, utilization, and recommendations
+        """
+        with self._lock:
+            if not self._graphql_costs:
+                return {
+                    "queries_with_throttle_data": 0,
+                    "maximum_available": None,
+                    "avg_currently_available": None,
+                    "min_currently_available": None,
+                    "restore_rate": None,
+                    "avg_capacity_used_percentage": None,
+                    "lowest_capacity_percentage": None,
+                }
+
+            # Filter entries with throttle status data
+            throttle_entries = [
+                entry
+                for entry in self._graphql_costs
+                if entry.get("maximum_available") is not None
+                and entry.get("currently_available") is not None
+                and entry.get("restore_rate") is not None
+            ]
+
+            if not throttle_entries:
+                return {
+                    "queries_with_throttle_data": 0,
+                    "maximum_available": None,
+                    "avg_currently_available": None,
+                    "min_currently_available": None,
+                    "restore_rate": None,
+                    "avg_capacity_used_percentage": None,
+                    "lowest_capacity_percentage": None,
+                }
+
+            # Extract throttle metrics
+            maximum_available = throttle_entries[0]["maximum_available"]  # Should be constant
+            currently_available_values = [entry["currently_available"] for entry in throttle_entries]
+            restore_rate = throttle_entries[0]["restore_rate"]  # Should be constant
+
+            # Calculate utilization percentages
+            capacity_used_percentages = [
+                ((maximum_available - curr) / maximum_available) * 100 if maximum_available > 0 else 0
+                for curr in currently_available_values
+            ]
+
+            return {
+                "queries_with_throttle_data": len(throttle_entries),
+                "maximum_available": maximum_available,
+                "avg_currently_available": sum(currently_available_values) / len(currently_available_values),
+                "min_currently_available": min(currently_available_values),
+                "restore_rate": restore_rate,
+                "avg_capacity_used_percentage": sum(capacity_used_percentages) / len(capacity_used_percentages),
+                "lowest_capacity_percentage": (min(currently_available_values) / maximum_available * 100)
+                if maximum_available > 0
+                else 0,
+            }
+
     def get_rate_limit_status(self) -> dict[str, int | float | None]:
         """Get current rate limit status from headers.
 
@@ -330,7 +406,7 @@ class MetricsCollector:
                 "seconds_until_reset": (self._rate_limit_reset - time.time() if self._rate_limit_reset else None),
             }
 
-    def get_summary(self) -> dict[str, float | int]:
+    def get_summary(self) -> dict[str, float | int | None]:
         """Get comprehensive metrics summary as dictionary.
 
         Returns comprehensive metrics suitable for integration with
@@ -342,6 +418,7 @@ class MetricsCollector:
         with self._lock:
             uptime = self.get_uptime_seconds()
             cost_stats = self.get_cost_statistics()
+            throttle_stats = self.get_throttle_status_statistics()
             rate_limit_status = self.get_rate_limit_status()
 
             summary = {
@@ -382,6 +459,19 @@ class MetricsCollector:
                     "graphql_max_actual_cost": cost_stats["max_actual_cost"],
                     "graphql_avg_cost_difference": cost_stats["avg_cost_difference"],
                     "graphql_cost_accuracy_percentage": cost_stats["cost_accuracy_percentage"],
+                }
+            )
+
+            # Add GraphQL throttle status statistics
+            summary.update(
+                {
+                    "throttle_queries_with_data": throttle_stats["queries_with_throttle_data"],
+                    "throttle_maximum_available": throttle_stats["maximum_available"],
+                    "throttle_avg_currently_available": throttle_stats["avg_currently_available"],
+                    "throttle_min_currently_available": throttle_stats["min_currently_available"],
+                    "throttle_restore_rate": throttle_stats["restore_rate"],
+                    "throttle_avg_capacity_used_pct": throttle_stats["avg_capacity_used_percentage"],
+                    "throttle_lowest_capacity_pct": throttle_stats["lowest_capacity_percentage"],
                 }
             )
 

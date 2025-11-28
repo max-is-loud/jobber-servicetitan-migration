@@ -1,0 +1,3900 @@
+{
+  "results": {
+    "UserEmail": {
+      "name": "UserEmail",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "isValid",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "raw",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "UserPhone": {
+      "name": "UserPhone",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "areaCode",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "countryCode",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "friendly",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "isValid",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "raw",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "Timezone": {
+      "name": "Timezone",
+      "kind": "SCALAR",
+      "fields": null
+    },
+    "PropertyAddress": {
+      "name": "PropertyAddress",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "city",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "coordinates",
+          "type": {
+            "name": "GeoPoint",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "country",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "geoStatus",
+          "type": {
+            "name": "GeoStatus",
+            "kind": "ENUM",
+            "ofType": null
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "postalCode",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "province",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "street",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "street1",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "street2",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        }
+      ]
+    },
+    "Property": {
+      "name": "Property",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "address",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "PropertyAddress",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "client",
+          "type": {
+            "name": "Client",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "contacts",
+          "type": {
+            "name": "ContactModelConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "customFields",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isBillingAddress",
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "jobberWebUri",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobs",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "quotes",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "recentPricing",
+          "type": {
+            "name": "ProductOrServiceConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "requests",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "RequestConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "routingOrder",
+          "type": {
+            "name": "Int",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "taxRate",
+          "type": {
+            "name": "TaxRate",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        }
+      ]
+    },
+    "QuoteLineItem": {
+      "name": "QuoteLineItem",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "category",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ProductsAndServicesCategory",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "description",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "linkedProductOrService",
+          "type": {
+            "name": "ProductOrService",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "markup",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "optional",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "quantity",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "recommended",
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "sortOrder",
+          "type": {
+            "name": "Int",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "taxable",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "textOnly",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "totalCost",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "totalPrice",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "unitCost",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "unitPrice",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "InvoiceLineItem": {
+      "name": "InvoiceLineItem",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "category",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ProductsAndServicesCategory",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "date",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "description",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobLineItem",
+          "type": {
+            "name": "JobLineItem",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "linkedProductOrService",
+          "type": {
+            "name": "ProductOrService",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "originalCost",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "quantity",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "taxRate",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "TaxRate",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "taxable",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "totalPrice",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "unitPrice",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "Visit": {
+      "name": "Visit",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "actionsUponComplete",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "allDay",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "arrivalWindow",
+          "type": {
+            "name": "ArrivalWindow",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "assignedUsers",
+          "type": {
+            "name": "UserConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "client",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Client",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "clientConfirmed",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "completedAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "completedBy",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "createdBy",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "duration",
+          "type": {
+            "name": "Int",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "endAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "incompleteJobFormsCount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Int",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "instructions",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "invoice",
+          "type": {
+            "name": "Invoice",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "isComplete",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isDefaultTitle",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isLastScheduledVisit",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "job",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Job",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "lineItems",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobLineItemConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "notes",
+          "type": {
+            "name": "JobNoteUnionConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "overrideOrder",
+          "type": {
+            "name": "Int",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "property",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Property",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "routingOrder",
+          "type": {
+            "name": "Int",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "startAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "teamReminderOffset",
+          "type": {
+            "name": "Minutes",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "timeSheetEntries",
+          "type": {
+            "name": "TimeSheetEntryConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "title",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "visitStatus",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "VisitStatusTypeEnum",
+              "kind": "ENUM"
+            }
+          }
+        }
+      ]
+    },
+    "RequestNoteUnion": {
+      "name": "RequestNoteUnion",
+      "kind": "UNION",
+      "possibleTypes": [
+        {
+          "name": "ClientNote"
+        },
+        {
+          "name": "RequestNote"
+        }
+      ]
+    },
+    "QuoteNoteUnion": {
+      "name": "QuoteNoteUnion",
+      "kind": "UNION",
+      "possibleTypes": [
+        {
+          "name": "ClientNote"
+        },
+        {
+          "name": "QuoteNote"
+        },
+        {
+          "name": "RequestNote"
+        }
+      ]
+    },
+    "JobNoteUnion": {
+      "name": "JobNoteUnion",
+      "kind": "UNION",
+      "possibleTypes": [
+        {
+          "name": "ClientNote"
+        },
+        {
+          "name": "JobNote"
+        },
+        {
+          "name": "QuoteNote"
+        },
+        {
+          "name": "RequestNote"
+        }
+      ]
+    },
+    "InvoiceNoteUnion": {
+      "name": "InvoiceNoteUnion",
+      "kind": "UNION",
+      "possibleTypes": [
+        {
+          "name": "ClientNote"
+        },
+        {
+          "name": "InvoiceNote"
+        },
+        {
+          "name": "JobNote"
+        },
+        {
+          "name": "QuoteNote"
+        },
+        {
+          "name": "RequestNote"
+        }
+      ]
+    },
+    "Client": {
+      "name": "Client",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "balance",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "billingAddress",
+          "type": {
+            "name": "ClientAddress",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "billingAddressPresent",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "clientProperties",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "PropertyConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "companyName",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "contacts",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ContactModelConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "customFields",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "defaultEmails",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "defaultPhones",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "emails",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "firstName",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "invoices",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "InvoiceConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "isArchivable",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isArchived",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isCompany",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isLead",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobberWebUri",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobs",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "lastName",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "messages",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "MessageInterfaceConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "noteAttachments",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ClientNoteFileConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "notes",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ClientNoteConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "phones",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "quotes",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "receivesFollowUps",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "receivesInvoiceFollowUps",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "receivesQuoteFollowUps",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "receivesReminders",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "receivesReviewRequests",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "requestedWorkObjects",
+          "type": {
+            "name": "RequestedWorkObjectUnionConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "requests",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "RequestConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "sampleData",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "scheduledItems",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ScheduledItemInterfaceConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "secondaryName",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "sourceAttribution",
+          "type": {
+            "name": "SourceAttribution",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "tags",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "TagConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "title",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "unallocatedDepositRecords",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "PaymentRecordInterfaceConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "Email": {
+      "name": "Email",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "address",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "client",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Client",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "contact",
+          "type": {
+            "name": "ContactModel",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "description",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "primary",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "ClientPhoneNumber": {
+      "name": "ClientPhoneNumber",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "client",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Client",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "contact",
+          "type": {
+            "name": "ContactModel",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "description",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "friendly",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "normalizedPhoneNumber",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "number",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "primary",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "smsAllowed",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "ClientAddress": {
+      "name": "ClientAddress",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "city",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "country",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "latitude",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "longitude",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "postalCode",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "province",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "street",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "street1",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "street2",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "Request": {
+      "name": "Request",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "arrivalWindow",
+          "type": {
+            "name": "ArrivalWindow",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "assessment",
+          "type": {
+            "name": "Assessment",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "client",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Client",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "companyName",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "contactName",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "email",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isArchivable",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isScheduled",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobberWebUri",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobs",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "lineItems",
+          "type": {
+            "name": "RequestLineItemConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "noteAttachments",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "RequestNoteFileConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "notes",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "RequestNoteUnionConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "phone",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "property",
+          "type": {
+            "name": "Property",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "quotes",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "referringClient",
+          "type": {
+            "name": "Client",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "requestStatus",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "RequestStatusTypeEnum",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "source",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "title",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "Quote": {
+      "name": "Quote",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "amounts",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteAmounts",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "client",
+          "type": {
+            "name": "Client",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "clientHubUri",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "clientHubViewedAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "contractDisclaimer",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "customFields",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "depositAmountUnallocated",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "depositRecords",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "PaymentRecordConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "eligibleForFinancing",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobberWebUri",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobs",
+          "type": {
+            "name": "JobConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "lastTransitioned",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteLastTransitioned",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "lineItems",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteLineItemConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "linkedCommunications",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "MessageInterfaceConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "message",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "noteAttachments",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteNoteFileConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "notes",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteNoteUnionConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "property",
+          "type": {
+            "name": "Property",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "quoteNumber",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "quoteStatus",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "QuoteStatusTypeEnum",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "request",
+          "type": {
+            "name": "Request",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "salesperson",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "sentAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "taxDetails",
+          "type": {
+            "name": "TaxDetails",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "title",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "transitionedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "unallocatedDepositRecords",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "PaymentRecordConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "Job": {
+      "name": "Job",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "allowReviewRequest",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "arrivalWindow",
+          "type": {
+            "name": "ArrivalWindow",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "billingType",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "BillingStrategy",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "bookingConfirmationSentAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "client",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Client",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "completedAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "customFields",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "defaultVisitTitle",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "endAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "expenses",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ExpenseConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "instructions",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "invoiceSchedule",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "InvoiceSchedule",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "invoicedTotal",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "invoices",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "InvoiceConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "jobBalanceTotals",
+          "type": {
+            "name": "JobBalanceTotals",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "jobCosting",
+          "type": {
+            "name": "JobCosting",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "jobNumber",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Int",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobStatus",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobStatusTypeEnum",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "jobType",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobTypeTypeEnum",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "jobberWebUri",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "lineItems",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobLineItemConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "nextDateToSendReviewSms",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "noteAttachments",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobNoteFileConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "notes",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobNoteUnionConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "paymentRecords",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "PaymentRecordConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "property",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Property",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "quote",
+          "type": {
+            "name": "Quote",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "request",
+          "type": {
+            "name": "Request",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "salesperson",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "source",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Source",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "startAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "timeSheetEntries",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "TimeSheetEntryConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "title",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "total",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "uninvoicedTotal",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "visitSchedule",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "VisitSchedule",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "visits",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "VisitConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "visitsInfo",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "VisitsInfo",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "willClientBeAutomaticallyCharged",
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        }
+      ]
+    },
+    "Invoice": {
+      "name": "Invoice",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "allowReviewRequest",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "amounts",
+          "type": {
+            "name": "InvoiceAmounts",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "billingAddress",
+          "type": {
+            "name": "InvoiceBillingAddress",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "billingIsSameAsPropertyAddress",
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "client",
+          "type": {
+            "name": "Client",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "clientHubUri",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "contractDisclaimer",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "customFields",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "dateViewedInClientHub",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "dueDate",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "hasInvoiceNumberDuplicates",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "invoiceNet",
+          "type": {
+            "name": "Int",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "invoiceNumber",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "invoiceStatus",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "InvoiceStatusTypeEnum",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "issuedDate",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "jobberWebUri",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "jobs",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JobConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "lineItems",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "InvoiceLineItemConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "linkedCommunications",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "MessageInterfaceConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "message",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "nextDateToSendReviewSms",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "noteAttachments",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "InvoiceNoteFileConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "notes",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "InvoiceNoteUnionConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "paymentRecords",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "PaymentRecordConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "properties",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "PropertyConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "receivedDate",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "salesperson",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "subject",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "taxCalculationMethod",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "taxDetails",
+          "type": {
+            "name": "TaxDetails",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "taxRate",
+          "type": {
+            "name": "TaxRate",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "visits",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "VisitConnection",
+              "kind": "OBJECT"
+            }
+          }
+        }
+      ]
+    },
+    "User": {
+      "name": "User",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "account",
+          "type": {
+            "name": "Account",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "address",
+          "type": {
+            "name": "UserAddress",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "apps",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ApplicationConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "assignedColor",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "assignedVehicle",
+          "type": {
+            "name": "Vehicle",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "availableForScheduling",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "customFields",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "email",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "UserEmail",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "firstDayOfTheWeek",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "UserFirstDayOfTheWeekEnum",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "franchiseTokenLastFour",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isAccountAdmin",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isAccountOwner",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "isCurrentUser",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "lastLoginAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Name",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "phone",
+          "type": {
+            "name": "UserPhone",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "status",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "UserStatusEnum",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "timezone",
+          "type": {
+            "name": "Timezone",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "uuid",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "Expense": {
+      "name": "Expense",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "date",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "description",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "enteredBy",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "linkedJob",
+          "type": {
+            "name": "Job",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "paidBy",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "reimbursableTo",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "title",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "total",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "TimeSheetEntry": {
+      "name": "TimeSheetEntry",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "approved",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "approvedBy",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "client",
+          "type": {
+            "name": "Client",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "createdAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "endAt",
+          "type": {
+            "name": "ISO8601DateTime",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "finalDuration",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Seconds",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "job",
+          "type": {
+            "name": "Job",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "label",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "labourRate",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "note",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "paidBy",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "startAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "ticking",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "updatedAt",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ISO8601DateTime",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "user",
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "visit",
+          "type": {
+            "name": "Visit",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "visitDurationTotal",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Int",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "ProductOrService": {
+      "name": "ProductOrService",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "bookableType",
+          "type": {
+            "name": "SelfServeBooking",
+            "kind": "ENUM",
+            "ofType": null
+          }
+        },
+        {
+          "name": "category",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "ProductsAndServicesCategory",
+              "kind": "ENUM"
+            }
+          }
+        },
+        {
+          "name": "defaultUnitCost",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "description",
+          "type": {
+            "name": "String",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "durationMinutes",
+          "type": {
+            "name": "Minutes",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "id",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "EncodedId",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "internalUnitCost",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "lastJobLineItem",
+          "type": {
+            "name": "JobLineItem",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "lastQuoteLineItem",
+          "type": {
+            "name": "QuoteLineItem",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "markup",
+          "type": {
+            "name": "Float",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "String",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "onlineBookingSortOrder",
+          "type": {
+            "name": "Int",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "onlineBookingsEnabled",
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "quantityRange",
+          "type": {
+            "name": "QuantityRange",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "taxable",
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "visible",
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        }
+      ]
+    },
+    "QuoteAmounts": {
+      "name": "QuoteAmounts",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "depositAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "discountAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "nonTaxAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "outstandingDepositAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "subtotal",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "taxAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "total",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    },
+    "InvoiceAmounts": {
+      "name": "InvoiceAmounts",
+      "kind": "OBJECT",
+      "fields": [
+        {
+          "name": "depositAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "discountAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "invoiceBalance",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "legacyDiscountAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "nonTaxAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "paymentsTotal",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "subtotal",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "taxAmount",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "tipsTotal",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "total",
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Float",
+              "kind": "SCALAR"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "errors": {},
+  "summary": {
+    "total_queries": 26,
+    "successful": 26,
+    "failed": 0
+  }
+}

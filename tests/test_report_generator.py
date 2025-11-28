@@ -141,9 +141,7 @@ class TestGenerateTextReport:
     def test_generate_text_report_with_single_extractor(self):
         """Test text report with single extractor summary."""
         generator = MigrationReportGenerator()
-        generator.add_extractor_summary(
-            "clients", {"total_entities": 150, "total_pages": 8, "error_count": 1}
-        )
+        generator.add_extractor_summary("clients", {"total_entities": 150, "total_pages": 8, "error_count": 1})
         report = generator.generate_text_report()
 
         assert "Total Entities Extracted: 150" in report
@@ -157,12 +155,8 @@ class TestGenerateTextReport:
     def test_generate_text_report_with_multiple_extractors(self):
         """Test text report with multiple extractor summaries."""
         generator = MigrationReportGenerator()
-        generator.add_extractor_summary(
-            "clients", {"total_entities": 150, "total_pages": 8, "error_count": 1}
-        )
-        generator.add_extractor_summary(
-            "invoices", {"total_entities": 500, "total_pages": 25, "error_count": 3}
-        )
+        generator.add_extractor_summary("clients", {"total_entities": 150, "total_pages": 8, "error_count": 1})
+        generator.add_extractor_summary("invoices", {"total_entities": 500, "total_pages": 25, "error_count": 3})
         report = generator.generate_text_report()
 
         # Overall totals
@@ -191,9 +185,7 @@ class TestGenerateTextReport:
     def test_generate_text_report_with_duration_formatting(self):
         """Test various duration formatting scenarios."""
         generator = MigrationReportGenerator()
-        generator.add_extractor_summary(
-            "clients", {"total_entities": 100, "duration_seconds": 3725}  # 1h 2m 5s
-        )
+        generator.add_extractor_summary("clients", {"total_entities": 100, "duration_seconds": 3725})  # 1h 2m 5s
         report = generator.generate_text_report()
 
         assert "Duration:      1h 2m 5s" in report
@@ -201,9 +193,7 @@ class TestGenerateTextReport:
     def test_generate_text_report_with_rate_calculation(self):
         """Test that rate is calculated correctly."""
         generator = MigrationReportGenerator()
-        generator.add_extractor_summary(
-            "clients", {"total_entities": 100, "duration_seconds": 50.0}
-        )
+        generator.add_extractor_summary("clients", {"total_entities": 100, "duration_seconds": 50.0})
         report = generator.generate_text_report()
 
         assert "Rate:" in report
@@ -230,9 +220,7 @@ class TestGenerateTextReport:
     def test_generate_text_report_formats_large_numbers(self):
         """Test that large numbers are formatted with commas."""
         generator = MigrationReportGenerator()
-        generator.add_extractor_summary(
-            "clients", {"total_entities": 1234567, "total_pages": 6173, "error_count": 42}
-        )
+        generator.add_extractor_summary("clients", {"total_entities": 1234567, "total_pages": 6173, "error_count": 42})
         report = generator.generate_text_report()
 
         assert "1,234,567" in report
@@ -332,12 +320,8 @@ class TestGenerateJsonReport:
     def test_generate_json_report_aggregates_multiple_extractors(self):
         """Test JSON report aggregates data from multiple extractors."""
         generator = MigrationReportGenerator()
-        generator.add_extractor_summary(
-            "clients", {"total_entities": 150, "total_pages": 8, "error_count": 1}
-        )
-        generator.add_extractor_summary(
-            "invoices", {"total_entities": 500, "total_pages": 25, "error_count": 3}
-        )
+        generator.add_extractor_summary("clients", {"total_entities": 150, "total_pages": 8, "error_count": 1})
+        generator.add_extractor_summary("invoices", {"total_entities": 500, "total_pages": 25, "error_count": 3})
 
         json_report = generator.generate_json_report()
         data = json.loads(json_report)
@@ -393,9 +377,7 @@ class TestSaveTextReport:
         """Test that save_text_report creates a file."""
         with TemporaryDirectory() as tmpdir:
             generator = MigrationReportGenerator()
-            generator.add_extractor_summary(
-                "clients", {"total_entities": 100, "total_pages": 5, "error_count": 0}
-            )
+            generator.add_extractor_summary("clients", {"total_entities": 100, "total_pages": 5, "error_count": 0})
 
             output_path = Path(tmpdir) / "report.txt"
             generator.save_text_report(output_path)
@@ -407,9 +389,7 @@ class TestSaveTextReport:
         """Test that saved text report has correct content."""
         with TemporaryDirectory() as tmpdir:
             generator = MigrationReportGenerator(migration_name="test")
-            generator.add_extractor_summary(
-                "clients", {"total_entities": 100, "total_pages": 5, "error_count": 0}
-            )
+            generator.add_extractor_summary("clients", {"total_entities": 100, "total_pages": 5, "error_count": 0})
 
             output_path = Path(tmpdir) / "report.txt"
             generator.save_text_report(output_path)
@@ -437,9 +417,7 @@ class TestSaveJsonReport:
         """Test that save_json_report creates a file."""
         with TemporaryDirectory() as tmpdir:
             generator = MigrationReportGenerator()
-            generator.add_extractor_summary(
-                "clients", {"total_entities": 100, "total_pages": 5, "error_count": 0}
-            )
+            generator.add_extractor_summary("clients", {"total_entities": 100, "total_pages": 5, "error_count": 0})
 
             output_path = Path(tmpdir) / "report.json"
             generator.save_json_report(output_path)
@@ -451,9 +429,7 @@ class TestSaveJsonReport:
         """Test that saved JSON report has valid JSON content."""
         with TemporaryDirectory() as tmpdir:
             generator = MigrationReportGenerator(migration_name="test")
-            generator.add_extractor_summary(
-                "clients", {"total_entities": 100, "total_pages": 5, "error_count": 0}
-            )
+            generator.add_extractor_summary("clients", {"total_entities": 100, "total_pages": 5, "error_count": 0})
 
             output_path = Path(tmpdir) / "report.json"
             generator.save_json_report(output_path)
@@ -482,9 +458,7 @@ class TestSaveReports:
         """Test that save_reports creates both text and JSON files."""
         with TemporaryDirectory() as tmpdir:
             generator = MigrationReportGenerator()
-            generator.add_extractor_summary(
-                "clients", {"total_entities": 100, "total_pages": 5, "error_count": 0}
-            )
+            generator.add_extractor_summary("clients", {"total_entities": 100, "total_pages": 5, "error_count": 0})
 
             base_path = Path(tmpdir)
             text_path, json_path = generator.save_reports(base_path, include_timestamp=False)

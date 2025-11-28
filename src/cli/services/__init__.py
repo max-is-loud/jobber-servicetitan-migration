@@ -7,7 +7,7 @@ from .entity_extraction import _execute_entity_extraction
 
 __all__ = [
     "CLIErrorHandler",
-    "ServiceFactory", 
+    "ServiceFactory",
     "SharedServices",
     "_execute_entity_extraction",
 ]

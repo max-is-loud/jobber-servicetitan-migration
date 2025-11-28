@@ -38,10 +38,11 @@ def _execute_entity_extraction(
         resume: Skip entities that already exist in database
     """
     connection = None
+    repository = None
 
     try:
         # Create database connection and logger
-        logger = RichLogger(verbose=verbose)
+        logger = RichLogger(verbose=verbose, console=ServiceFactory.get_console())
         logger.info(f"Starting {entity_type} extraction to database: {db}")
 
         # Ensure parent directory exists
@@ -254,8 +255,7 @@ def _execute_entity_extraction(
         logger.info("🔍 Final Token Status:")
         logger.info(f"   • Tokens remaining: {rate_limiter.get_available_tokens():.1f}/{rate_limiter.get_capacity()}")
         logger.info(
-            f"   • Throttling rate: {rate_metrics['throttle_rate']} "
-            f"({rate_metrics['throttled_requests']} throttled)"
+            f"   • Throttling rate: {rate_metrics['throttle_rate']} ({rate_metrics['throttled_requests']} throttled)"
         )
         if float(rate_metrics["throttle_rate"].rstrip("%")) < 1.0:
             logger.info("   ✅ Jobber-optimized rate limiting working effectively!")
@@ -282,9 +282,7 @@ def _execute_entity_extraction(
         elif entity_type == "users":
             logger.info(f"✅ User extraction completed: {result['entities_processed']} users processed")
         elif entity_type == "expenses":
-            logger.info(
-                f"✅ Expense extraction completed: {result['entities_processed']} expenses processed"
-            )
+            logger.info(f"✅ Expense extraction completed: {result['entities_processed']} expenses processed")
         elif entity_type == "visits":
             logger.info(f"✅ Visit extraction completed: {result['entities_processed']} visits processed")
         elif entity_type == "timesheet-entries":
@@ -296,9 +294,7 @@ def _execute_entity_extraction(
                 f"✅ Product/service extraction completed: {result['entities_processed']} products/services processed"
             )
         elif entity_type == "tax-rates":
-            logger.info(
-                f"✅ Tax rate extraction completed: {result['entities_processed']} tax rates processed"
-            )
+            logger.info(f"✅ Tax rate extraction completed: {result['entities_processed']} tax rates processed")
 
         # Handle continuation if more pages available
         if result["has_next_page"] and page_limit is None:
@@ -309,9 +305,11 @@ def _execute_entity_extraction(
         exit_code = 0 if extraction_summary["error_count"] == 0 else 1
 
     except Exception as e:
-        logger = RichLogger(verbose=verbose)
+        logger = RichLogger(verbose=verbose, console=ServiceFactory.get_console())
         logger.error(f"Error during {entity_type} extraction: {e}")
         exit_code = 1
     finally:
-        if connection:
-            connection.close() 
+        if repository:
+            repository.close()
+        elif connection:
+            connection.close()

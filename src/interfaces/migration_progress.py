@@ -19,9 +19,7 @@ class MigrationProgressDisplay(Protocol):
         """
         ...
 
-    def add_entity_task(
-        self, display_obj: Any, entity_name: str, description: str
-    ) -> Optional[Any]:
+    def add_entity_task(self, display_obj: Any, entity_name: str, description: str) -> Optional[Any]:
         """Add a new entity migration task to the progress display.
 
         Args:

@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 """VisitsExtractor for extracting Visit entities from Jobber GraphQL API."""
 
 from typing import Any, List, Optional
 
 from ..clients import JobberClient
+from ..config import ConfigManagerImpl
 from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
@@ -30,7 +32,9 @@ class VisitsExtractor(BaseExtractor[Visit]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
+        config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize VisitsExtractor with required dependencies.
 
@@ -39,7 +43,9 @@ class VisitsExtractor(BaseExtractor[Visit]):
             entity_mapper: Mapper for transforming GraphQL data to domain models
             repository: Repository for database operations
             logger: Logger for structured output and progress tracking
+            config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
+            **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -48,7 +54,9 @@ class VisitsExtractor(BaseExtractor[Visit]):
             logger=logger,
             entity_type=Visit,
             entity_name="visit",
+            config_manager=config_manager,
             skip_existing_entities=skip_existing_entities,
+            **kwargs,
         )
         # Track entities from last batch for extract_all
         self._last_batch_entities: List[Visit] = []
@@ -99,6 +107,10 @@ class VisitsExtractor(BaseExtractor[Visit]):
         # Track for extract_all
         self._last_batch_entities = entities
 
+    def _extract_entity_data(self, response: dict[str, Any]) -> dict[str, Any]:
+        """Extract visits data from GraphQL response."""
+        return response.get("data", {}).get("visits", {})
+
     def _extract_related_entities(self, node: dict[str, Any], primary_entity: Visit) -> dict[str, List[Note]]:
         """Extract notes related to the visit.
 
@@ -148,42 +160,3 @@ class VisitsExtractor(BaseExtractor[Visit]):
         """
         return self._last_batch_entities
 
-    def get_entity_count(self) -> int:
-        """Get total count of visits available for extraction.
-
-        Performs a lightweight API call to determine the total number of visits
-        available for extraction without actually extracting data.
-
-        Returns:
-            Total number of visits available for extraction
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-        """
-        self._logger.debug("Fetching total visit count from API")
-
-        # Use minimal query to get just the count
-        response = self._jobber_client.fetch_visits(cursor=None)
-        visits_data = response.get("data", {}).get("visits", {})
-        page_info = visits_data.get("pageInfo", {})
-
-        # If API provides totalCount, use it
-        total_count = visits_data.get("totalCount")
-        if total_count is not None:
-            self._logger.debug(f"API reported total visit count: {total_count}")
-            return int(total_count)
-
-        # Otherwise estimate from first page
-        edges = visits_data.get("edges", [])
-        if not edges:
-            return 0
-
-        # Rough estimate based on first page size and hasNextPage
-        page_size = len(edges)
-        if not page_info.get("hasNextPage", False):
-            return page_size
-
-        # Can't determine exact count without pagination
-        self._logger.info("Cannot determine exact visit count without full pagination")
-        return -1  # Indicate unknown count

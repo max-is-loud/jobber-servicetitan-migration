@@ -52,7 +52,20 @@ class ConfigManagerImpl:
     Provides centralized configuration management with environment-specific overrides
     and comprehensive validation using dataclasses. Follows the project's Protocol-based
     dependency injection architecture.
+
+    Singleton pattern ensures only one watchdog observer is created across all instances.
     """
+
+    _instance: Optional["ConfigManagerImpl"] = None
+    _instance_lock = threading.Lock()
+
+    def __new__(cls, config_dir: str = "config", environment: str | None = None, enable_hot_reload: bool = True):
+        """Ensure only one instance exists (singleton pattern)."""
+        with cls._instance_lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
 
     def __init__(self, config_dir: str = "config", environment: str | None = None, enable_hot_reload: bool = True):
         """Initialize ConfigManager with configuration directory and environment.
@@ -65,6 +78,10 @@ class ConfigManagerImpl:
         Raises:
             ConfigurationError: If config files cannot be loaded or are invalid
         """
+        # Only initialize once (singleton pattern)
+        if self._initialized:
+            return
+
         self.config_dir = Path(config_dir)
         self.environment = environment
         self.config: AppConfig | None = None
@@ -77,6 +94,8 @@ class ConfigManagerImpl:
         # Start file watcher if hot reload is enabled
         if self.enable_hot_reload:
             self._start_file_watcher()
+
+        self._initialized = True
 
     def _load_config(self) -> None:
         """Load and validate configuration from YAML files.
@@ -352,6 +371,9 @@ class ConfigManagerImpl:
                 old_config = self.config
                 self._load_config()
 
+                # Only print message if configuration actually changed
+                config_changed = old_config != self.config
+
                 # Notify callbacks of configuration change
                 for callback in self._reload_callbacks:
                     try:
@@ -360,7 +382,9 @@ class ConfigManagerImpl:
                         # Don't let callback errors break the reload
                         pass
 
-                print(f"🔄 Configuration reloaded from {self.config_dir / 'settings.yaml'}")
+                # Only notify user if something actually changed
+                if config_changed:
+                    print(f"🔄 Configuration reloaded from {self.config_dir / 'settings.yaml'}")
 
             except Exception as e:
                 print(f"❌ Failed to reload configuration: {e}")
@@ -390,3 +414,68 @@ class ConfigManagerImpl:
     def get_current_rate_limit_settings(self, optimization_level: str) -> dict[str, Any]:
         """Get current rate limiting settings for hot-reload updates."""
         return self.get_rate_limit_config(optimization_level)
+
+    def get_adaptive_page_size(
+        self,
+        entity_type: str,
+        requested_cost: int | None = None,
+        currently_available: int | None = None,
+        maximum_available: int | None = None,
+    ) -> tuple[int, str | None]:
+        """Calculate adaptive page size based on GraphQL cost and throttle status.
+
+        Implements cost-aware pagination by reducing page size when:
+        1. Requested query cost exceeds safety threshold (8000 points)
+        2. Currently available points drop below minimum threshold (2000 points)
+
+        This prevents throttling by proactively reducing batch sizes when approaching
+        API capacity limits, based on real-time throttle status from Jobber API.
+
+        Args:
+            entity_type: Entity type to get pagination for (e.g., 'clients', 'invoices')
+            requested_cost: Requested query cost from last response (optional)
+            currently_available: Currently available points from throttle status (optional)
+            maximum_available: Maximum available points from throttle status (optional)
+
+        Returns:
+            Tuple of (page_size, adjustment_reason):
+            - page_size: Calculated pagination size (reduced if needed)
+            - adjustment_reason: Explanation of adjustment, or None if not adjusted
+
+        Based on Jobber API documentation:
+        - maximumAvailable: 10000 (bucket capacity)
+        - currentlyAvailable: Points remaining after query
+        - restoreRate: 500 points/second
+        - requestedQueryCost: Expected cost before execution
+        """
+        # Get base page size for entity type
+        base_page_size = self.get_pagination_config(entity_type)
+
+        # If no throttle data available, return base size
+        if requested_cost is None and currently_available is None:
+            return (base_page_size, None)
+
+        # Threshold values based on task specification
+        HIGH_COST_THRESHOLD = 8000  # Reduce if requestedQueryCost > 8000
+        LOW_CAPACITY_THRESHOLD = 2000  # Reduce if currentlyAvailable < 2000
+
+        adjustment_reason = None
+
+        # Check if requested cost is too high
+        if requested_cost is not None and requested_cost > HIGH_COST_THRESHOLD:
+            # Reduce by 20% as specified in PRP (multiply by 0.8)
+            reduction_factor = 0.8
+            adjusted_size = max(10, int(base_page_size * reduction_factor))  # Minimum 10
+            adjustment_reason = f"High query cost ({requested_cost} > {HIGH_COST_THRESHOLD})"
+            return (adjusted_size, adjustment_reason)
+
+        # Check if available capacity is too low
+        if currently_available is not None and currently_available < LOW_CAPACITY_THRESHOLD:
+            # Reduce by 50% as specified in PRP (multiply by 0.5)
+            reduction_factor = 0.5
+            adjusted_size = max(10, int(base_page_size * reduction_factor))  # Minimum 10
+            adjustment_reason = f"Low capacity ({currently_available} < {LOW_CAPACITY_THRESHOLD})"
+            return (adjusted_size, adjustment_reason)
+
+        # No adjustment needed
+        return (base_page_size, None)

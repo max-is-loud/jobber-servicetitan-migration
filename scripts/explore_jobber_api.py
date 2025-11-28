@@ -15,7 +15,7 @@ from typing import Any, Optional
 import requests
 
 
-def get_oauth_token(db_path: str = "tightbeam.db") -> Optional[str]:
+def get_oauth_token(db_path: str = "tightbeam.sqlite") -> Optional[str]:
     """Retrieve the OAuth access token from tightbeam's database."""
     try:
         conn = sqlite3.connect(db_path)
@@ -40,9 +40,7 @@ def get_oauth_token(db_path: str = "tightbeam.db") -> Optional[str]:
             if expiry > datetime.now(expiry.tzinfo):
                 return access_token
             else:
-                print(
-                    "⚠️  Token is expired. Please run 'tightbeam oauth init' to refresh."
-                )
+                print("⚠️  Token is expired. Please run 'tightbeam oauth init' to refresh.")
                 return None
         else:
             print("❌ No OAuth token found. Please run 'tightbeam oauth init' first.")

@@ -1,7 +1,7 @@
 """Migration summary data structure for reporting and logging."""
 
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import Any, List
 
 
 @dataclass(frozen=False)
@@ -44,6 +44,9 @@ class MigrationSummary:
     quotes_skipped: int = 0  # Number of quote records skipped (already exist)
     notes_skipped: int = 0  # Number of note records skipped (already exist)
     attachments_skipped: int = 0  # Number of attachment records skipped (already exist)
+
+    # Data quality issue tracking - detailed failure information
+    data_quality_issues: list[dict[str, Any]] = field(default_factory=list)  # Specific entities with data issues
 
     def format_duration(self) -> str:
         """Format duration_seconds into human-readable time string.

@@ -32,9 +32,7 @@ class TestReactiveOAuthRefresh:
         self.mock_rate_limiter.get_capacity.return_value = 100.0
 
         self.mock_backoff_strategy = Mock(spec=ExponentialBackoffStrategy)
-        self.mock_backoff_strategy.calculate_delay.return_value = (
-            0.1  # Short delay for tests
-        )
+        self.mock_backoff_strategy.calculate_delay.return_value = 0.1  # Short delay for tests
 
         # Mock auth provider
         self.mock_auth_provider = Mock(spec=AuthProvider)
@@ -99,9 +97,7 @@ class TestReactiveOAuthRefresh:
         """Test that if token refresh fails, original error is raised."""
         # Arrange
         auth_error = ConfigurationError("Invalid or expired authentication token")
-        refresh_error = ConfigurationError(
-            "OAuth2 tokens are invalid and refresh failed"
-        )
+        refresh_error = ConfigurationError("OAuth2 tokens are invalid and refresh failed")
 
         self.mock_http_client.post.side_effect = auth_error
         self.mock_auth_provider.force_refresh_token.side_effect = refresh_error
@@ -303,16 +299,12 @@ class TestReactiveOAuthRefresh:
 
         # Assert
         assert result == success_response
-        mock_oauth_manager.refresh_access_token.assert_called_once_with(
-            "valid_refresh_token"
-        )
+        mock_oauth_manager.refresh_access_token.assert_called_once_with("valid_refresh_token")
         mock_repository.save_oauth_tokens.assert_called_once()
 
         # Verify new token was used in retry
         second_call_args = self.mock_http_client.post.call_args_list[1]
-        assert (
-            second_call_args[1]["headers"]["Authorization"] == "Bearer new_fresh_token"
-        )
+        assert second_call_args[1]["headers"]["Authorization"] == "Bearer new_fresh_token"
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ This module provides centralized access to commonly used services
 across all CLI commands to eliminate duplication.
 """
 
+import os
 from pathlib import Path
 from typing import ClassVar, Optional
 
@@ -45,7 +46,13 @@ class SharedServices:
 
     @classmethod
     def resolve_db_path(cls, db: Optional[Path] = None) -> Path:
-        """Resolve database path with fallback to default.
+        """Resolve database path with environment variable and config fallback.
+
+        Resolution order:
+        1. Explicit db parameter (if provided)
+        2. TIGHTBEAM_DB environment variable
+        3. Config file database.default_path
+        4. Hardcoded DEFAULT_DB_PATH fallback
 
         Args:
             db: Optional database path
@@ -53,4 +60,22 @@ class SharedServices:
         Returns:
             Path: Resolved database path
         """
-        return db or cls.DEFAULT_DB_PATH
+        if db is not None:
+            return db
+
+        # Check environment variable
+        env_db = os.environ.get("TIGHTBEAM_DB")
+        if env_db:
+            return Path(env_db)
+
+        # Check config file
+        try:
+            from src.config import ConfigManagerImpl
+            config_manager = ConfigManagerImpl()
+            db_config = config_manager.get_database_config()
+            return Path(db_config["default_path"])
+        except Exception:
+            # Fall back to hardcoded default if config loading fails
+            pass
+
+        return cls.DEFAULT_DB_PATH

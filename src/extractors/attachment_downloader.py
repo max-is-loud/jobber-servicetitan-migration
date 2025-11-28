@@ -1,8 +1,10 @@
 """AttachmentDownloader helper for downloading and managing attachment files."""
 
+import hashlib
 import os
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -12,22 +14,23 @@ from urllib3.util.retry import Retry
 from ..exceptions import ConfigurationError
 from ..interfaces import Logger
 from ..models import Attachment
+from ..repositories import Repository
 
 
 class AttachmentDownloader:
     """
-    Helper class for downloading attachment files from Jobber.
+    Phase 6 Pass 2: Binary attachment downloader with hash-based storage.
 
-    Provides file download utilities for entity extractors to download
-    attachment files after extracting metadata from noteAttachments fields.
-    Attachments are now fetched inline with parent entities (Client, Job,
-    Quote, Request, Invoice) rather than via a separate query.
+    Downloads attachment files from Jobber using a two-phase ETL pattern:
+    - Phase 1 (metadata): Extractors collect attachment metadata and URLs
+    - Phase 2 (binaries): AttachmentDownloader fetches files and updates database
 
     Features:
-    - Binary file downloads with streaming for large files
-    - Organized local storage: ./attachments/{note_id}/{filename}
-    - File conflict handling and filename sanitization
-    - Retry logic for failed downloads
+    - Streaming downloads with SHA256 hash computation
+    - Content-addressed storage: ./attachments/{sha256_hash}.{ext}
+    - Database updates with hash, status, and timestamps
+    - Retry logic with exponential backoff (via requests.Session)
+    - SSRF protection with domain allowlisting
     """
 
     # HTTP timeout constants (in seconds)
@@ -36,6 +39,7 @@ class AttachmentDownloader:
 
     def __init__(
         self,
+        repository: Repository,
         logger: Logger,
         base_download_path: str = "./attachments",
         max_retries: int = 3,
@@ -46,13 +50,15 @@ class AttachmentDownloader:
         """Initialize AttachmentDownloader with required dependencies.
 
         Args:
+            repository: Repository for database updates
             logger: Logger for structured output and progress tracking
-            base_download_path: Base directory for attachment storage
+            base_download_path: Base directory for hash-based attachment storage
             max_retries: Maximum retry attempts for failed downloads
             chunk_size: Chunk size in bytes for streaming downloads
             connect_timeout: HTTP connection timeout in seconds
             read_timeout: HTTP read timeout in seconds
         """
+        self._repository = repository
         self._logger = logger
         self._base_download_path = base_download_path
         self._max_retries = max_retries
@@ -76,21 +82,9 @@ class AttachmentDownloader:
         Path(self._base_download_path).mkdir(parents=True, exist_ok=True)
 
         # Configure allowed domains for SSRF protection
-        # NOTE: These domains should be verified against actual Jobber attachment URLs
-        # and narrowed to specific S3 buckets/CloudFront distributions if possible.
-        # Current configuration allows known Jobber domains and their specific CDN endpoints.
+        # Attachments are served exclusively from Jobber's S3 bucket
         self._allowed_domains = {
-            # Jobber main domains
-            "getjobber.com",
-            "cdn.getjobber.com",
-            "assets.getjobber.com",
-            # Jobber-specific S3 buckets (narrowed from broad s3.amazonaws.com)
-            # TODO: Replace with actual Jobber S3 bucket names once identified
-            "jobber-attachments.s3.amazonaws.com",
-            "jobber-assets.s3.amazonaws.com",
-            # Jobber-specific CloudFront distributions (narrowed from broad cloudfront.net)
-            # TODO: Replace with actual CloudFront distribution IDs once identified
-            "d123456abcdef.cloudfront.net",  # Example - replace with actual distribution
+            "jobber.s3.amazonaws.com",
         }
 
     def _validate_url(self, url: str) -> tuple[bool, str]:
@@ -132,7 +126,10 @@ class AttachmentDownloader:
                     break
 
             if not is_allowed:
-                return False, f"Domain '{parsed.hostname}' is not in the allowed domains list. Allowed: {', '.join(sorted(self._allowed_domains))}"
+                return (
+                    False,
+                    f"Domain '{parsed.hostname}' is not in the allowed domains list. Allowed: {', '.join(sorted(self._allowed_domains))}",
+                )
 
             return True, ""
 
@@ -152,14 +149,57 @@ class AttachmentDownloader:
             - 'success': bool - Whether download succeeded
             - 'local_file_path': str - Local file path (if successful)
             - 'bytes_downloaded': int - Number of bytes downloaded
+            - 'hash': str - SHA256 hash of downloaded content
             - 'error_message': str - Error message (if failed)
         """
         return self._download_attachment_file(attachment)
 
+    def download_all_pending(self, batch_size: int = 100) -> dict[str, int]:
+        """Download all pending attachments in batches.
+
+        Retrieves pending attachments from the database and downloads them
+        in batches. Updates database with download status after each file.
+
+        Args:
+            batch_size: Number of attachments to fetch per batch
+
+        Returns:
+            Dictionary with download statistics:
+            - 'success': Number of successful downloads
+            - 'failed': Number of failed downloads
+            - 'skipped': Number of skipped attachments
+            - 'total_bytes': Total bytes downloaded
+        """
+        stats = {"success": 0, "failed": 0, "skipped": 0, "total_bytes": 0}
+
+        while True:
+            # Fetch next batch of pending attachments
+            batch = self._repository.get_pending_attachments()
+            if not batch:
+                break
+
+            # Limit batch size
+            batch = batch[:batch_size]
+
+            for attachment in batch:
+                result = self._download_attachment_file(attachment)
+
+                if result["success"]:
+                    stats["success"] += 1
+                    stats["total_bytes"] += result["bytes_downloaded"]
+                else:
+                    stats["failed"] += 1
+
+            # If we got fewer than batch_size, we're done
+            if len(batch) < batch_size:
+                break
+
+        return stats
+
     def validate_dependencies(self) -> bool:
         """Validate that all required dependencies are properly configured.
 
-        Validates download directory permissions and that the logger is available.
+        Validates download directory permissions and that the logger/repository are available.
 
         Returns:
             True if all dependencies are valid and ready for file downloads
@@ -170,6 +210,9 @@ class AttachmentDownloader:
         if not self._logger:
             raise ConfigurationError("Logger dependency is required")
 
+        if not self._repository:
+            raise ConfigurationError("Repository dependency is required")
+
         # Validate download directory
         try:
             base_path = Path(self._base_download_path)
@@ -177,9 +220,7 @@ class AttachmentDownloader:
                 base_path.mkdir(parents=True, exist_ok=True)
 
             if not os.access(base_path, os.W_OK):
-                raise ConfigurationError(
-                    f"Download directory not writable: {base_path}"
-                )
+                raise ConfigurationError(f"Download directory not writable: {base_path}")
 
             return True
 
@@ -187,7 +228,13 @@ class AttachmentDownloader:
             raise ConfigurationError(f"Dependency validation failed: {e}") from e
 
     def _download_attachment_file(self, attachment: Attachment) -> dict[str, Any]:
-        """Download attachment file from remote URL to local storage.
+        """Download attachment file from remote URL to hash-based local storage.
+
+        Implements Phase 6 Pass 2 binary download pattern:
+        - Stream download with SHA256 hash computation
+        - Hash-based file naming: {sha256_hash}.{original_extension}
+        - Database update with hash, local_path, status, timestamp
+        - Retry logic with exponential backoff (via requests.Session)
 
         Validates URL for security (SSRF protection) before downloading.
 
@@ -199,6 +246,7 @@ class AttachmentDownloader:
             - 'success': bool - Whether download succeeded
             - 'local_file_path': str - Local file path (if successful)
             - 'bytes_downloaded': int - Number of bytes downloaded
+            - 'hash': str - SHA256 hash of downloaded content
             - 'error_message': str - Error message (if failed)
         """
         # Validate URL for security (prevent SSRF attacks)
@@ -206,115 +254,114 @@ class AttachmentDownloader:
         if not is_valid:
             error_msg = f"URL validation failed for {attachment.file_name}: {validation_error}"
             self._logger.error(error_msg)
+
+            # Update database with failure status
+            self._repository.update_attachment_download(
+                attachment_id=attachment.id,
+                download_status="failed",
+                download_error=error_msg,
+            )
+
             return {
                 "success": False,
                 "local_file_path": "",
                 "bytes_downloaded": 0,
+                "hash": "",
                 "error_message": error_msg,
             }
 
         try:
-            # Create note-specific directory
-            note_dir = Path(self._base_download_path) / attachment.note_id
-            note_dir.mkdir(parents=True, exist_ok=True)
-
-            # Sanitize filename to prevent directory traversal and filesystem issues
-            safe_filename = self._sanitize_filename(attachment.file_name)
-            local_file_path = note_dir / safe_filename
-
-            # Handle file conflicts by adding counter
-            if local_file_path.exists():
-                local_file_path = self._resolve_file_conflict(local_file_path)
-
-            # Download file with streaming for large files
-            self._logger.debug(
-                f"Downloading {attachment.original_url} -> {local_file_path}"
-            )
+            # Stream download with hash computation
+            self._logger.debug(f"Downloading {attachment.original_url}")
 
             response = self._session.get(
                 attachment.original_url,
                 stream=True,
                 timeout=(self._connect_timeout, self._read_timeout),
-                allow_redirects=False,  # Prevent redirect following for additional security
+                allow_redirects=True,  # Follow redirects for CDN URLs
             )
             response.raise_for_status()
 
+            # Stream to memory while computing hash
+            hash_obj = hashlib.sha256()
+            chunks = []
             bytes_downloaded = 0
-            with open(local_file_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=self._chunk_size):
-                    if chunk:  # Filter out keep-alive chunks
-                        f.write(chunk)
-                        bytes_downloaded += len(chunk)
 
-            self._logger.info(f"Downloaded {safe_filename} ({bytes_downloaded} bytes)")
+            for chunk in response.iter_content(chunk_size=self._chunk_size):
+                if chunk:  # Filter out keep-alive chunks
+                    chunks.append(chunk)
+                    hash_obj.update(chunk)
+                    bytes_downloaded += len(chunk)
+
+            # Get hash and determine filename
+            file_hash = hash_obj.hexdigest()
+            file_ext = Path(attachment.file_name).suffix or ".bin"
+            filename = f"{file_hash}{file_ext}"
+
+            # Write to hash-based flat directory
+            base_path = Path(self._base_download_path)
+            base_path.mkdir(parents=True, exist_ok=True)
+            local_file_path = base_path / filename
+
+            # Write file content
+            with open(local_file_path, "wb") as f:
+                for chunk in chunks:
+                    f.write(chunk)
+
+            # Update database with success
+            downloaded_at = datetime.utcnow().isoformat() + "Z"
+            self._repository.update_attachment_download(
+                attachment_id=attachment.id,
+                local_file_path=str(local_file_path),
+                hash=file_hash,
+                download_status="completed",
+                downloaded_at=downloaded_at,
+            )
+
+            self._logger.info(f"Downloaded {attachment.file_name} → {filename} ({bytes_downloaded} bytes, hash: {file_hash[:8]}...)")
 
             return {
                 "success": True,
                 "local_file_path": str(local_file_path),
                 "bytes_downloaded": bytes_downloaded,
+                "hash": file_hash,
                 "error_message": "",
             }
 
         except requests.exceptions.RequestException as e:
             error_msg = f"Download failed for {attachment.file_name}: {e}"
             self._logger.error(error_msg)
+
+            # Update database with failure status
+            self._repository.update_attachment_download(
+                attachment_id=attachment.id,
+                download_status="failed",
+                download_error=error_msg,
+            )
+
             return {
                 "success": False,
                 "local_file_path": "",
                 "bytes_downloaded": 0,
+                "hash": "",
                 "error_message": error_msg,
             }
         except OSError as e:
             error_msg = f"File write failed for {attachment.file_name}: {e}"
             self._logger.error(error_msg)
+
+            # Update database with failure status
+            self._repository.update_attachment_download(
+                attachment_id=attachment.id,
+                download_status="failed",
+                download_error=error_msg,
+            )
+
             return {
                 "success": False,
                 "local_file_path": "",
                 "bytes_downloaded": 0,
+                "hash": "",
                 "error_message": error_msg,
             }
 
-    def _sanitize_filename(self, filename: str) -> str:
-        """Sanitize filename to prevent filesystem issues.
-
-        Args:
-            filename: Original filename from attachment
-
-        Returns:
-            Sanitized filename safe for filesystem use
-        """
-        if not filename:
-            return "unknown_file"
-
-        # Remove or replace dangerous characters
-        dangerous_chars = '<>:"/\\|?*'
-        safe_filename = filename
-        for char in dangerous_chars:
-            safe_filename = safe_filename.replace(char, "_")
-
-        # Limit length and ensure it's not empty
-        safe_filename = safe_filename[:255].strip()
-        if not safe_filename:
-            safe_filename = "unknown_file"
-
-        return safe_filename
-
-    def _resolve_file_conflict(self, file_path: Path) -> Path:
-        """Resolve file naming conflicts by adding counter suffix.
-
-        Args:
-            file_path: Original file path that already exists
-
-        Returns:
-            New file path with counter suffix
-        """
-        stem = file_path.stem
-        suffix = file_path.suffix
-        parent = file_path.parent
-
-        counter = 1
-        while True:
-            new_path = parent / f"{stem}_{counter}{suffix}"
-            if not new_path.exists():
-                return new_path
-            counter += 1

@@ -5,12 +5,16 @@ service dependencies used across CLI commands.
 """
 
 import sqlite3
+import atexit
 from pathlib import Path
 from typing import Optional
 
 from src.auth import AuthProvider, OAuth2Manager
 from src.clients import HttpClient, JobberClient
 from src.config import ConfigManagerImpl
+from src.interfaces import Logger
+from src.loggers.rich_logger import RichLogger
+from src.mappers import EntityMapper
 from src.rate_limiting import (
     ExponentialBackoffStrategy,
     MetricsCollector,
@@ -49,6 +53,7 @@ class ServiceFactory:
 
         # Initialize schema including oauth_tokens table
         repository.init_schema()
+        atexit.register(repository.close)
 
         return repository
 
@@ -155,11 +160,7 @@ class ServiceFactory:
         initial_tokens = rate_config["initial_tokens"]
 
         # Create token bucket rate limiter with configured parameters
-        rate_limiter = TokenBucketRateLimiter(
-            capacity=capacity,
-            refill_rate=refill_rate,
-            initial_tokens=initial_tokens
-        )
+        rate_limiter = TokenBucketRateLimiter(capacity=capacity, refill_rate=refill_rate, initial_tokens=initial_tokens)
 
         # Get exponential backoff configuration for retry logic
         backoff_config = config_manager.get_backoff_config()
@@ -186,3 +187,47 @@ class ServiceFactory:
         jobber_client.set_http_client(rate_limited_client)
 
         return jobber_client
+
+    @staticmethod
+    def create_auth_provider(repository: Repository, logger: Optional[Logger] = None) -> AuthProvider:
+        """Create AuthProvider with OAuth2Manager and repository.
+
+        Args:
+            repository: Repository for OAuth token persistence
+            logger: Optional logger for auth operations (currently unused)
+
+        Returns:
+            AuthProvider: Configured authentication provider
+        """
+        oauth_manager = ServiceFactory.create_oauth2_manager()
+        return AuthProvider(oauth_manager, repository)
+
+    @staticmethod
+    def create_entity_mapper() -> EntityMapper:
+        """Create EntityMapper for transforming GraphQL data to domain models.
+
+        Returns:
+            EntityMapper: Configured entity mapper instance
+        """
+        return EntityMapper()
+
+    @staticmethod
+    def create_logger(verbose: bool = False) -> RichLogger:
+        """Create RichLogger with shared console.
+
+        Args:
+            verbose: Enable verbose logging
+
+        Returns:
+            RichLogger: Configured logger instance
+        """
+        return RichLogger(verbose=verbose, console=ServiceFactory.get_console())
+
+    @staticmethod
+    def create_config_manager() -> ConfigManagerImpl:
+        """Create ConfigManager for application settings.
+
+        Returns:
+            ConfigManagerImpl: Configured config manager instance
+        """
+        return ConfigManagerImpl()

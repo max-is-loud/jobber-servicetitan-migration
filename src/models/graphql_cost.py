@@ -22,10 +22,16 @@ class GraphQLCost:
     - batch_size: Number of records requested in the batch
     - timestamp: Precise timing of the query execution (Unix timestamp)
 
+    Throttle Status Fields (from Jobber API extensions.cost.throttleStatus):
+    - maximum_available: Maximum complexity points ever available (bucket capacity)
+    - currently_available: Points available after this query (remaining budget)
+    - restore_rate: Points restored per second (refill rate)
+
     Analysis Purpose:
     Enables optimization by analyzing the relationship between batch size
     and complexity points to maximize efficiency while staying within
-    Jobber's GraphQL rate limits and complexity budgets.
+    Jobber's GraphQL rate limits and complexity budgets. Throttle status
+    tracking enables adaptive page sizing based on real-time API capacity.
     """
 
     query_type: str  # Type of GraphQL query being tracked
@@ -35,4 +41,7 @@ class GraphQLCost:
     cost_difference: int  # Difference between actual and requested costs
     timestamp: float  # Unix timestamp of query execution
     created_at: str  # ISO8601DateTime when record was created
+    maximum_available: Optional[int] = None  # Throttle bucket capacity
+    currently_available: Optional[int] = None  # Remaining points after query
+    restore_rate: Optional[int] = None  # Points restored per second
     id: Optional[int] = None  # Database primary key (auto-generated)

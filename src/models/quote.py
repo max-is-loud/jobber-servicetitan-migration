@@ -15,6 +15,7 @@ class Quote:
 
     id: str  # EncodedId! - The unique identifier
     client_id: str  # client.id - Client relationship ID for foreign key
+    property_id: str  # property.id - Property relationship ID for foreign key (optional)
     quote_number: str  # quoteNumber: String! - A non-unique number assigned to the quote
     title: str  # title: String - The description of the quote
     total: int  # amounts.total converted to cents for precision
@@ -24,3 +25,7 @@ class Quote:
     created_at: str  # createdAt: ISO8601DateTime! - ISO format string
     transitioned_at: str  # transitionedAt: ISO8601DateTime! - ISO format string
     updated_at: str  # updatedAt: ISO8601DateTime! - ISO format string
+    quote_status: str = ""  # quoteStatus: QuoteStatusTypeEnum! - Quote status
+    sent_at: str = ""  # sentAt: ISO8601DateTime - When quote was sent to client
+    tax_cents: int = 0  # amounts.taxAmount converted to cents for precision
+    discount_cents: int = 0  # amounts.discountAmount converted to cents for precision
