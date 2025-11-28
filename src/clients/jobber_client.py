@@ -85,7 +85,11 @@ class JobberClient:
               totalCount
               edges {{
                 node {{
-                  id
+                  ... on ClientNote {{
+                    id
+                    message
+                    createdAt
+                  }}
                 }}
               }}
               pageInfo {{
@@ -172,9 +176,29 @@ class JobberClient:
                 node {{
                   ... on InvoiceNote {{
                     id
+                    message
+                    createdAt
+                    updatedAt
+                    invoice {{
+                      id
+                    }}
+                    attachments {{
+                      edges {{
+                        node {{
+                          id
+                          fileName
+                          contentType
+                          url
+                          fileSize
+                          createdAt
+                        }}
+                      }}
+                    }}
                   }}
                   ... on ClientNote {{
                     id
+                    message
+                    createdAt
                   }}
                 }}
               }}
@@ -261,9 +285,29 @@ class JobberClient:
                 node {{
                   ... on QuoteNote {{
                     id
+                    message
+                    createdAt
+                    updatedAt
+                    quote {{
+                      id
+                    }}
+                    attachments {{
+                      edges {{
+                        node {{
+                          id
+                          fileName
+                          contentType
+                          url
+                          fileSize
+                          createdAt
+                        }}
+                      }}
+                    }}
                   }}
                   ... on ClientNote {{
                     id
+                    message
+                    createdAt
                   }}
                 }}
               }}
@@ -354,9 +398,29 @@ class JobberClient:
                 node {{
                   ... on JobNote {{
                     id
+                    message
+                    createdAt
+                    updatedAt
+                    job {{
+                      id
+                    }}
+                    attachments {{
+                      edges {{
+                        node {{
+                          id
+                          fileName
+                          contentType
+                          url
+                          fileSize
+                          createdAt
+                        }}
+                      }}
+                    }}
                   }}
                   ... on ClientNote {{
                     id
+                    message
+                    createdAt
                   }}
                 }}
               }}
@@ -481,9 +545,29 @@ class JobberClient:
                 node {{
                   ... on RequestNote {{
                     id
+                    message
+                    createdAt
+                    updatedAt
+                    request {{
+                      id
+                    }}
+                    attachments {{
+                      edges {{
+                        node {{
+                          id
+                          fileName
+                          contentType
+                          url
+                          fileSize
+                          createdAt
+                        }}
+                      }}
+                    }}
                   }}
                   ... on ClientNote {{
                     id
+                    message
+                    createdAt
                   }}
                 }}
               }}
@@ -2782,6 +2866,22 @@ class JobberClient:
                     id
                     message
                     createdAt
+                    updatedAt
+                    {entity_type} {{
+                      id
+                    }}
+                    attachments {{
+                      edges {{
+                        node {{
+                          id
+                          fileName
+                          contentType
+                          url
+                          fileSize
+                          createdAt
+                        }}
+                      }}
+                    }}
                   }}
                   ... on ClientNote {{
                     id
