@@ -178,22 +178,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
-                    invoice {{
-                      id
-                    }}
-                    attachments {{
-                      edges {{
-                        node {{
-                          id
-                          fileName
-                          contentType
-                          url
-                          fileSize
-                          createdAt
-                        }}
-                      }}
-                    }}
                   }}
                   ... on ClientNote {{
                     id
@@ -287,22 +271,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
-                    quote {{
-                      id
-                    }}
-                    attachments {{
-                      edges {{
-                        node {{
-                          id
-                          fileName
-                          contentType
-                          url
-                          fileSize
-                          createdAt
-                        }}
-                      }}
-                    }}
                   }}
                   ... on ClientNote {{
                     id
@@ -400,22 +368,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
-                    job {{
-                      id
-                    }}
-                    attachments {{
-                      edges {{
-                        node {{
-                          id
-                          fileName
-                          contentType
-                          url
-                          fileSize
-                          createdAt
-                        }}
-                      }}
-                    }}
                   }}
                   ... on ClientNote {{
                     id
@@ -547,22 +499,6 @@ class JobberClient:
                     id
                     message
                     createdAt
-                    updatedAt
-                    request {{
-                      id
-                    }}
-                    attachments {{
-                      edges {{
-                        node {{
-                          id
-                          fileName
-                          contentType
-                          url
-                          fileSize
-                          createdAt
-                        }}
-                      }}
-                    }}
                   }}
                   ... on ClientNote {{
                     id
@@ -2882,6 +2818,7 @@ class JobberClient:
             """
         else:
             # For other entities, include both entity-specific and ClientNote fragments
+            # All note types only support: id, message, createdAt (no updatedAt, parent, or attachments)
             query = f"""
             query GetAdditionalNotes($id: EncodedId!, $cursor: String!) {{
               {entity_type}(id: $id) {{
@@ -2893,22 +2830,6 @@ class JobberClient:
                         id
                         message
                         createdAt
-                        updatedAt
-                        {entity_type} {{
-                          id
-                        }}
-                        attachments {{
-                          edges {{
-                            node {{
-                              id
-                              fileName
-                              contentType
-                              url
-                              fileSize
-                              createdAt
-                            }}
-                          }}
-                        }}
                       }}
                       ... on ClientNote {{
                         id
