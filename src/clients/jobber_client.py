@@ -58,6 +58,7 @@ class JobberClient:
         return f"""
     query GetClients($cursor: String) {{
       clients(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -131,6 +132,7 @@ class JobberClient:
         return f"""
     query GetInvoices($cursor: String) {{
       invoices(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -217,6 +219,7 @@ class JobberClient:
         return f"""
     query GetQuotes($cursor: String) {{
       quotes(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -321,6 +324,7 @@ class JobberClient:
         return f"""
     query GetJobs($cursor: String) {{
       jobs(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -400,6 +404,7 @@ class JobberClient:
         return f"""
     query GetProperties($cursor: String) {{
       properties(first: {size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -453,6 +458,7 @@ class JobberClient:
         return f"""
     query GetRequests($cursor: String) {{
       requests(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -522,6 +528,7 @@ class JobberClient:
     USERS_QUERY = """
     query GetUsers($cursor: String) {
       users(first: 100, after: $cursor) {
+        totalCount
         edges {
           node {
             id
@@ -557,6 +564,7 @@ class JobberClient:
     EXPENSES_QUERY = """
     query GetExpenses($cursor: String) {
       expenses(first: 100, after: $cursor) {
+        totalCount
         edges {
           node {
             id
@@ -594,6 +602,7 @@ class JobberClient:
         return f"""
     query GetVisits($cursor: String) {{
       visits(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -640,6 +649,7 @@ class JobberClient:
         return f"""
     query GetTimesheetEntries($cursor: String) {{
       timeSheetEntries(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -685,6 +695,7 @@ class JobberClient:
         return f"""
     query GetProductsServices($cursor: String) {{
       productOrServices(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id
@@ -715,6 +726,7 @@ class JobberClient:
         return f"""
     query GetTaxRates($cursor: String) {{
       taxRates(first: {page_size}, after: $cursor) {{
+        totalCount
         edges {{
           node {{
             id

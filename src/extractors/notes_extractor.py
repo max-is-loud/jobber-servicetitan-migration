@@ -84,6 +84,10 @@ class NotesExtractor(BaseExtractor[Note]):
         self._repository.save_notes(entities)
         self._last_batch_entities = entities
 
+    def _extract_entity_data(self, response: dict[str, Any]) -> dict[str, Any]:
+        """Extract notes data from GraphQL response."""
+        return response.get("data", {}).get("notes", {})
+
     def _get_entities_from_last_batch(self) -> List[Note]:
         """Get notes from the last extraction batch."""
         return self._last_batch_entities

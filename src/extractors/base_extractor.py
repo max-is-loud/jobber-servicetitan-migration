@@ -138,6 +138,7 @@ class BaseExtractor(ABC, Generic[T]):
         # Extraction state tracking
         self._last_extraction_summary = {
             "total_entities": 0,
+            "total_available": None,
             "entities_skipped": 0,
             "total_pages": 0,
             "extraction_duration": 0.0,
@@ -254,6 +255,25 @@ class BaseExtractor(ABC, Generic[T]):
 
         Returns:
             Tuple of (edges list, page_info dict)
+        """
+        ...
+
+    @abstractmethod
+    def _extract_entity_data(self, response: dict[str, Any]) -> dict[str, Any]:
+        """Extract entity data container from GraphQL response.
+
+        This method extracts the top-level entity data object that contains
+        totalCount, edges, and pageInfo.
+
+        Args:
+            response: Raw GraphQL API response
+
+        Returns:
+            Entity data dictionary (e.g., response['data']['visits'])
+
+        Example:
+            response = {"data": {"visits": {"totalCount": 150, "edges": [...]}}}
+            return response.get("data", {}).get("visits", {})
         """
         ...
 
@@ -537,6 +557,23 @@ class BaseExtractor(ABC, Generic[T]):
                 # Extract edges and page info
                 edges, page_info = self._extract_edges_and_page_info(response)
 
+                # Extract totalCount on first page
+                if not hasattr(self, '_total_count'):
+                    try:
+                        entity_data = self._extract_entity_data(response)
+                        total_count = entity_data.get("totalCount")
+                        if total_count is not None:
+                            self._total_count = int(total_count)
+                            self._logger.debug(
+                                f"Total {self._entity_name_plural} available: {self._total_count:,}"
+                            )
+                        else:
+                            self._total_count = None
+                            self._logger.debug("totalCount not available from API")
+                    except Exception as e:
+                        self._logger.debug(f"Failed to extract totalCount: {e}")
+                        self._total_count = None
+
                 if not edges:
                     self._logger.debug(f"No more {self._entity_name} data to process")
                     break
@@ -573,17 +610,30 @@ class BaseExtractor(ABC, Generic[T]):
                         self._save_entities(entities_to_save)
                         entities_processed += len(entities_to_save)
 
-                    # Log with processed vs skipped counts
-                    if self._skip_existing_entities and page_skipped > 0:
-                        self._logger.info(
-                            f"Processed {len(entities_to_save)} {self._entity_name_plural}, "
-                            f"skipped {page_skipped} (total: {entities_processed} processed, "
-                            f"{entities_skipped} skipped)"
-                        )
+                    # Log with processed vs skipped counts and percentage if available
+                    if hasattr(self, '_total_count') and self._total_count:
+                        percentage = (entities_processed / self._total_count) * 100
+                        if self._skip_existing_entities and page_skipped > 0:
+                            self._logger.info(
+                                f"Processed {len(entities_to_save)} {self._entity_name_plural}, "
+                                f"skipped {page_skipped} ({entities_processed:,}/{self._total_count:,} - {percentage:.1f}%)"
+                            )
+                        else:
+                            self._logger.info(
+                                f"Processed {len(entities_to_save)} {self._entity_name_plural} "
+                                f"({entities_processed:,}/{self._total_count:,} - {percentage:.1f}%)"
+                            )
                     else:
-                        self._logger.info(
-                            f"Processed {len(entities_to_save)} {self._entity_name_plural} " f"(total: {entities_processed})"
-                        )
+                        if self._skip_existing_entities and page_skipped > 0:
+                            self._logger.info(
+                                f"Processed {len(entities_to_save)} {self._entity_name_plural}, "
+                                f"skipped {page_skipped} (total: {entities_processed:,} processed, "
+                                f"{entities_skipped:,} skipped)"
+                            )
+                        else:
+                            self._logger.info(
+                                f"Processed {len(entities_to_save)} {self._entity_name_plural} (total: {entities_processed:,})"
+                            )
 
                 # Save related entities if any
                 if all_related_entities:
@@ -640,9 +690,15 @@ class BaseExtractor(ABC, Generic[T]):
                 "extraction_time": extraction_time,
             }
 
-            summary_msg = f"Completed {self._entity_name} extraction: {entities_processed} entities"
+            summary_msg = f"Completed {self._entity_name} extraction: {entities_processed:,} entities"
+
+            # Add percentage if total count is available
+            if hasattr(self, '_total_count') and self._total_count:
+                percentage = (entities_processed / self._total_count) * 100
+                summary_msg += f" ({percentage:.1f}% of {self._total_count:,})"
+
             if self._skip_existing_entities and entities_skipped > 0:
-                summary_msg += f", {entities_skipped} skipped"
+                summary_msg += f", {entities_skipped:,} skipped"
             summary_msg += f" in {extraction_time:.2f}s"
             self._logger.info(summary_msg)
 
@@ -709,7 +765,18 @@ class BaseExtractor(ABC, Generic[T]):
             sync_status="in_progress",
         )
 
-        self._logger.info(f"Starting {self._entity_name} extraction (resume={resume})")
+        # Get total count before extraction if available
+        total_count = self.get_entity_count()
+        if total_count is not None:
+            self._logger.info(
+                f"Starting {self._entity_name} extraction (resume={resume}): "
+                f"{total_count:,} entities available"
+            )
+        else:
+            self._logger.info(
+                f"Starting {self._entity_name} extraction (resume={resume}): "
+                f"total count unknown"
+            )
 
         while True:
             result = self.extract(cursor=cursor)
@@ -743,9 +810,14 @@ class BaseExtractor(ABC, Generic[T]):
             sync_status="completed",
         )
 
-        self._logger.info(
-            f"Completed full extraction: {len(all_entities)} {self._entity_name_plural} " f"from {total_pages} pages"
-        )
+        completion_msg = f"Completed full extraction: {len(all_entities):,} {self._entity_name_plural} from {total_pages} pages"
+
+        # Add percentage if total count is available
+        if hasattr(self, '_total_count') and self._total_count:
+            percentage = (len(all_entities) / self._total_count) * 100
+            completion_msg += f" ({percentage:.1f}% of {self._total_count:,})"
+
+        self._logger.info(completion_msg)
 
         return all_entities
 
@@ -760,18 +832,34 @@ class BaseExtractor(ABC, Generic[T]):
         """
         ...
 
-    @abstractmethod
-    def get_entity_count(self) -> int:
+    def get_entity_count(self) -> Optional[int]:
         """Get total count of entities available for extraction.
 
+        Returns totalCount from API if available, otherwise None.
+        Should be called after first page is fetched.
+
         Returns:
-            Total number of entities available for extraction
+            Total count if available, None if unknown
 
         Raises:
             JobberApiError: If GraphQL API communication fails
             ConfigurationError: If authentication or configuration is invalid
         """
-        ...
+        if hasattr(self, '_total_count'):
+            return self._total_count
+
+        # Fallback: Try to get from API
+        try:
+            response = self._fetch_page(cursor=None)
+            entity_data = self._extract_entity_data(response)
+            total_count = entity_data.get("totalCount")
+            if total_count is not None:
+                self._total_count = int(total_count)
+                return self._total_count
+        except Exception as e:
+            self._logger.debug(f"Failed to get entity count: {e}")
+
+        return None
 
     def validate_dependencies(self) -> bool:
         """Validate that all required dependencies are properly configured.
@@ -912,6 +1000,7 @@ class BaseExtractor(ABC, Generic[T]):
 
         self._last_extraction_summary = {
             "total_entities": entities_processed,
+            "total_available": self._total_count if hasattr(self, '_total_count') else None,
             "entities_skipped": entities_skipped,
             "total_pages": pages_processed,
             "extraction_duration": extraction_time,

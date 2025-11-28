@@ -79,7 +79,7 @@ class ProductServicesExtractor(BaseExtractor[ProductService]):
         Returns:
             Tuple of (edges list, page_info dict)
         """
-        products_data = response.get("data", {}).get("productsOrServices", {})
+        products_data = response.get("data", {}).get("productOrServices", {})
         edges = products_data.get("edges", [])
         page_info = products_data.get("pageInfo", {})
         return edges, page_info
@@ -105,6 +105,10 @@ class ProductServicesExtractor(BaseExtractor[ProductService]):
         # Track for extract_all
         self._last_batch_entities = entities
 
+    def _extract_entity_data(self, response: dict[str, Any]) -> dict[str, Any]:
+        """Extract products/services data from GraphQL response."""
+        return response.get("data", {}).get("productOrServices", {})
+
     def _get_entities_from_last_batch(self) -> List[ProductService]:
         """Get products/services from the last extraction batch.
 
@@ -113,42 +117,3 @@ class ProductServicesExtractor(BaseExtractor[ProductService]):
         """
         return self._last_batch_entities
 
-    def get_entity_count(self) -> int:
-        """Get total count of products/services available for extraction.
-
-        Performs a lightweight API call to determine the total number of products/services
-        available for extraction without actually extracting data.
-
-        Returns:
-            Total number of products/services available for extraction
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-        """
-        self._logger.debug("Fetching total product/service count from API")
-
-        # Use minimal query to get just the count
-        response = self._jobber_client.fetch_products_services(cursor=None)
-        products_data = response.get("data", {}).get("productsOrServices", {})
-        page_info = products_data.get("pageInfo", {})
-
-        # If API provides totalCount, use it
-        total_count = products_data.get("totalCount")
-        if total_count is not None:
-            self._logger.debug(f"API reported total product/service count: {total_count}")
-            return int(total_count)
-
-        # Otherwise estimate from first page
-        edges = products_data.get("edges", [])
-        if not edges:
-            return 0
-
-        # Rough estimate based on first page size and hasNextPage
-        page_size = len(edges)
-        if not page_info.get("hasNextPage", False):
-            return page_size
-
-        # Can't determine exact count without pagination
-        self._logger.info("Cannot determine exact product/service count without full pagination")
-        return -1  # Indicate unknown count

@@ -112,6 +112,10 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
         # Track for extract_all
         self._last_batch_entities = entities
 
+    def _extract_entity_data(self, response: dict[str, Any]) -> dict[str, Any]:
+        """Extract invoices data from GraphQL response."""
+        return response.get("data", {}).get("invoices", {})
+
     def _extract_related_entities(self, node: dict[str, Any], primary_entity: Invoice) -> dict[str, Any]:
         """Extract notes and attachments related to the invoice.
 
@@ -144,42 +148,3 @@ class InvoicesExtractor(BaseExtractor[Invoice]):
         """
         return self._last_batch_entities
 
-    def get_entity_count(self) -> int:
-        """Get total count of invoices available for extraction.
-
-        Performs a lightweight API call to determine the total number of invoices
-        available for extraction without actually extracting data.
-
-        Returns:
-            Total number of invoices available for extraction
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            ConfigurationError: If authentication or configuration is invalid
-        """
-        self._logger.debug("Fetching total invoice count from API")
-
-        # Use minimal query to get just the count
-        response = self._jobber_client.fetch_invoices(cursor=None)
-        invoices_data = response.get("data", {}).get("invoices", {})
-        page_info = invoices_data.get("pageInfo", {})
-
-        # If API provides totalCount, use it
-        total_count = invoices_data.get("totalCount")
-        if total_count is not None:
-            self._logger.debug(f"API reported total invoice count: {total_count}")
-            return int(total_count)
-
-        # Otherwise estimate from first page
-        edges = invoices_data.get("edges", [])
-        if not edges:
-            return 0
-
-        # Rough estimate based on first page size and hasNextPage
-        page_size = len(edges)
-        if not page_info.get("hasNextPage", False):
-            return page_size
-
-        # Can't determine exact count without pagination
-        self._logger.info("Cannot determine exact invoice count without full pagination")
-        return -1  # Indicate unknown count
