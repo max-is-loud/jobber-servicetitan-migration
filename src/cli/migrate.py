@@ -425,8 +425,19 @@ def max_extract(
         # Show per-entity breakdown
         console.print(f"\n📦 By Entity Type:")
         for entity_type, count in summary['results'].items():
-            status_icon = "✓" if count > 0 else "○"
-            console.print(f"   {status_icon} {entity_type}: {count}")
+            # Special handling for notes - they're extracted inline, not as a separate entity
+            if entity_type == "notes":
+                # Query actual note count from database
+                try:
+                    note_count = repository._connection.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+                    status_icon = "✓" if note_count > 0 else "○"
+                    console.print(f"   {status_icon} {entity_type}: {note_count} (extracted inline)")
+                except Exception:
+                    # If query fails, skip notes entirely
+                    continue
+            else:
+                status_icon = "✓" if count > 0 else "○"
+                console.print(f"   {status_icon} {entity_type}: {count}")
 
         # Show errors if any
         if summary['errors']:
