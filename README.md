@@ -1,4 +1,4 @@
-# TightBeam v2 - Jobber Data Migration Tool
+# Project Tightbeam - Jobber Data Migration Tool
 
 A powerful, user-friendly command-line tool for migrating data from Jobber to other systems, featuring a modern Rich-based interface with real-time progress tracking and enhanced error reporting.
 
@@ -38,7 +38,7 @@ A powerful, user-friendly command-line tool for migrating data from Jobber to ot
 
 ```bash
 git clone <repository-url>
-cd tightbeam-v2
+cd project-tightbeam
 ```
 
 2. Install dependencies using UV:
@@ -107,7 +107,7 @@ This ensures that OAuth operations and migration commands share the same databas
 
 ## Migration Coordinator Architecture
 
-TightBeam v2 uses a **unified Rich-based migration coordinator** system that provides:
+Project Tightbeam uses a **unified Rich-based migration coordinator** system that provides:
 
 ### `BaseMigrationCoordinator`
 
@@ -256,7 +256,7 @@ JOBBER_REDIRECT_URI=http://localhost:8080/callback
 
 ## Migration from Legacy System
 
-If you're upgrading from an older version of TightBeam:
+If you're upgrading from an older version of Project Tightbeam:
 
 ### Code Updates
 

@@ -1,5 +1,5 @@
 """
-TightBeam v2 Application Constants
+Project Tightbeam Application Constants
 
 Centralized location for all application metadata, version information,
 and configuration constants. Update these values in one place to ensure
@@ -13,7 +13,7 @@ APP_NAME = "Project Tightbeam"
 
 # Read version from package metadata (pyproject.toml is the single source of truth)
 try:
-    APP_VERSION = version("tightbeam-v2")
+    APP_VERSION = version("project-tightbeam")
 except PackageNotFoundError:
     # Fallback for development/editable installs where package metadata isn't available
     APP_VERSION = "0.0.0-dev"

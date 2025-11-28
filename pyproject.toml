@@ -1,5 +1,5 @@
 [project]
-name = "tightbeam-v2"
+name = "project-tightbeam"
 version = "0.8.0"
 description = "Jobber Data Migration Tool"
 authors = [{name = "Maxime Langlois-Morin", email = "max@maxmorin.ca"}]
@@ -43,7 +43,7 @@ dev = [
 ]
 
 [tool.poetry]
-name = "tightbeam-v2"
+name = "project-tightbeam"
 # Version is managed in src/constants.py - update there to change version
 version = "0.8.0"
 description = "Jobber Data Migration Tool"
@@ -90,10 +90,10 @@ ruff = "^0.5.3"
 tightbeam = "src.cli:main"
 
 [tool.poetry.urls]
-Homepage = "https://github.com/maxmorin/tightbeam-v2"
-Repository = "https://github.com/maxmorin/tightbeam-v2"
-Documentation = "https://github.com/maxmorin/tightbeam-v2#readme"
-Issues = "https://github.com/maxmorin/tightbeam-v2/issues"
+Homepage = "https://github.com/maxmorin/project-tightbeam"
+Repository = "https://github.com/maxmorin/project-tightbeam"
+Documentation = "https://github.com/maxmorin/project-tightbeam#readme"
+Issues = "https://github.com/maxmorin/project-tightbeam/issues"
 
 [build-system]
 requires = ["poetry-core"]
