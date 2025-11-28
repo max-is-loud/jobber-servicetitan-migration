@@ -26,7 +26,7 @@ pagination:
   expenses: 10
   visits: 42
   timesheet_entries: 50
-  product_services: 60
+  product_services: 80
   tax_rates: 30
   notes: 50
   nested_notes: 10

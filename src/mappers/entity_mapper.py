@@ -1118,6 +1118,9 @@ class EntityMapper:
         """
         Map GraphQL TaxRate data to TaxRate domain model.
 
+        Note: Jobber GraphQL API TaxRate type only exposes 'id' and 'name' fields.
+        Other fields (rate, region, compound, etc.) are not available via the API.
+
         Args:
             data: Raw GraphQL TaxRate node data
 
@@ -1133,41 +1136,12 @@ class EntityMapper:
             if not tax_rate_id:
                 raise MappingError("TaxRate ID is required but missing")
 
-            # Extract tax rate details
+            # Extract name (only other field available from API)
             name = data.get("name", "")
-            rate = data.get("rate", 0)
-            rate_percentage = str(rate)
-
-            # Extract geographic and configuration details
-            region = data.get("region", "")
-            compound = str(data.get("compound", False)).lower()
-            active = str(data.get("active", True)).lower()
-            description = data.get("description", "")
-            tax_number = data.get("taxNumber", "")
-
-            # Extract display configuration
-            display_order = data.get("displayOrder", 0)
-            display_order = int(display_order) if isinstance(display_order, (int, float)) else 0
-
-            default_for_region = str(data.get("defaultForRegion", False)).lower()
-
-            # Format ISO datetimes
-            created_at = MapperUtils.format_iso_datetime(data.get("createdAt"))
-            updated_at = MapperUtils.format_iso_datetime(data.get("updatedAt"))
 
             return TaxRate(
                 id=tax_rate_id,
                 name=name,
-                rate_percentage=rate_percentage,
-                region=region,
-                compound=compound,
-                active=active,
-                description=description,
-                tax_number=tax_number,
-                display_order=display_order,
-                default_for_region=default_for_region,
-                created_at=created_at,
-                updated_at=updated_at,
             )
 
         except Exception as e:

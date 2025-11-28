@@ -598,20 +598,11 @@ class Repository:
             cursor.execute(products_services_schema)
 
             # Create tax_rates table for regional tax configuration
+            # Note: Jobber API only exposes id and name fields for TaxRate type
             tax_rates_schema = """
                 CREATE TABLE IF NOT EXISTS tax_rates (
                     id TEXT PRIMARY KEY,
-                    name TEXT,
-                    rate_percentage TEXT,
-                    region TEXT,
-                    compound TEXT,
-                    active TEXT,
-                    description TEXT,
-                    tax_number TEXT,
-                    display_order INTEGER,
-                    default_for_region TEXT,
-                    created_at TEXT,
-                    updated_at TEXT
+                    name TEXT
                 )
             """
             cursor.execute(tax_rates_schema)
@@ -1898,6 +1889,8 @@ class Repository:
         Efficiently handles List[TaxRate] using executemany for bulk operations.
         Uses INSERT OR REPLACE for upsert behavior.
 
+        Note: TaxRate only has 'id' and 'name' fields from Jobber API.
+
         Args:
             tax_rates: List of TaxRate entities to save
 
@@ -1910,30 +1903,17 @@ class Repository:
         try:
             cursor = self._connection.cursor()
 
-            # Prepare data tuples for executemany
+            # Prepare data tuples for executemany (only id and name)
             tax_rate_data = [
                 (
                     tax_rate.id,
                     tax_rate.name,
-                    tax_rate.rate_percentage,
-                    tax_rate.region,
-                    tax_rate.compound,
-                    tax_rate.active,
-                    tax_rate.description,
-                    tax_rate.tax_number,
-                    tax_rate.display_order,
-                    tax_rate.default_for_region,
-                    tax_rate.created_at,
-                    tax_rate.updated_at,
                 )
                 for tax_rate in tax_rates
             ]
 
             cursor.executemany(
-                """INSERT OR REPLACE INTO tax_rates
-                   (id, name, rate_percentage, region, compound, active, description, tax_number,
-                    display_order, default_for_region, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",  # noqa: E501
+                """INSERT OR REPLACE INTO tax_rates (id, name) VALUES (?, ?)""",
                 tax_rate_data,
             )
 

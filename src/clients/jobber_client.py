@@ -721,7 +721,11 @@ class JobberClient:
     """
 
     def _get_tax_rates_query(self) -> str:
-        """Get GraphQL query for fetching tax rates with configurable pagination."""
+        """Get GraphQL query for fetching tax rates with configurable pagination.
+
+        Note: TaxRate type only has 'id' and 'name' fields in Jobber GraphQL API.
+        Fields like 'rate', 'region', 'compound', 'active', etc. do not exist on this type.
+        """
         page_size = self._get_pagination_size("tax_rates")
         return f"""
     query GetTaxRates($cursor: String) {{
@@ -731,16 +735,6 @@ class JobberClient:
           node {{
             id
             name
-            description
-            rate
-            region
-            compound
-            active
-            taxNumber
-            displayOrder
-            defaultForRegion
-            createdAt
-            updatedAt
           }}
         }}
         pageInfo {{
