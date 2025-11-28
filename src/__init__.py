@@ -40,7 +40,7 @@ from .repositories import Repository
 
 # Logging components
 
-__version__ = "0.1.0"
+__version__ = "0.8.0"
 __all__ = [
     # Core components
     "AuthProvider",
