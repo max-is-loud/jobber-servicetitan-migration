@@ -18,6 +18,7 @@ from ..extractors import (
     UsersExtractor,
     VisitsExtractor,
 )
+from ..extractors.note_reference_collector import NoteReferenceCollector
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..repositories import Repository
@@ -75,6 +76,14 @@ class MaxExtractCoordinator:
         self._repository = repository
         self._logger = logger
         self._entity_mapper = entity_mapper
+
+        # Create note reference collector for deferred note loading
+        self._note_collector = NoteReferenceCollector(
+            repository=repository,
+            logger=logger,
+            enable_persistence=True,  # Persist note references to database
+        )
+
         self._extractors = self._build_extractors()
 
     def _build_extractors(self) -> dict[str, Any]:
@@ -92,12 +101,14 @@ class MaxExtractCoordinator:
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
+                note_reference_collector=self._note_collector,
             ),
             "clients": ClientsExtractor(
                 jobber_client=self._jobber_client,
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
+                note_reference_collector=self._note_collector,
             ),
             "properties": PropertiesExtractor(
                 jobber_client=self._jobber_client,
@@ -110,18 +121,21 @@ class MaxExtractCoordinator:
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
+                note_reference_collector=self._note_collector,
             ),
             "quotes": QuotesExtractor(
                 jobber_client=self._jobber_client,
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
+                note_reference_collector=self._note_collector,
             ),
             "jobs": JobsExtractor(
                 jobber_client=self._jobber_client,
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
+                note_reference_collector=self._note_collector,
             ),
             "visits": VisitsExtractor(
                 jobber_client=self._jobber_client,
@@ -134,6 +148,7 @@ class MaxExtractCoordinator:
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
+                note_reference_collector=self._note_collector,
             ),
             "expenses": ExpensesExtractor(
                 jobber_client=self._jobber_client,
