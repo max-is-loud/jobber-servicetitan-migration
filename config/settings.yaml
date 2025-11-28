@@ -16,23 +16,23 @@ rate_limits:
     safety_margin: 0.04
 max_retries: 15
 pagination:
-  clients: 50
-  invoices: 26
-  quotes: 18
-  jobs: 32
-  properties: 55
-  requests: 54
+  clients: 20
+  invoices: 10
+  quotes: 10
+  jobs: 20
+  properties: 40
+  requests: 30
   users: 30
   expenses: 10
-  visits: 42
+  visits: 30
   timesheet_entries: 50
-  product_services: 80
+  product_services: 100
   tax_rates: 30
   notes: 50
   nested_notes: 10
   default: 30
 delays:
-  page_delay: 3.5 
+  page_delay: 1 
   request_timeout: 60.0
   retry_base_delay: 2.0
 backoff:
