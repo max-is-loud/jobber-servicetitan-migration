@@ -9,6 +9,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Optional
 
+from rich.console import Console
+
 from src.auth import AuthProvider, OAuth2Manager
 from src.clients import HttpClient, JobberClient
 from src.config import ConfigManagerImpl
@@ -85,7 +87,7 @@ class ServiceFactory:
         return HttpClient()
 
     @staticmethod
-    def get_console():
+    def get_console() -> Console:
         """Get shared console instance.
 
         Returns:

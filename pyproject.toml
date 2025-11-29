@@ -99,6 +99,12 @@ Issues = "https://github.com/maxmorin/project-tightbeam/issues"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20241230",
+    "types-requests>=2.32.0.20241016",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py38"

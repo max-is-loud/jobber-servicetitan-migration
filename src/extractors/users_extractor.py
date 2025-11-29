@@ -34,7 +34,7 @@ class UsersExtractor(BaseExtractor[User]):
         logger: Logger,
         config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize UsersExtractor with required dependencies.
 

@@ -39,7 +39,7 @@ class ClientsExtractor(BaseExtractor[Client]):
         logger: Logger,
         config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize ClientsExtractor with required dependencies.
 

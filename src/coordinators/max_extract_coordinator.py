@@ -321,7 +321,7 @@ class MaxExtractCoordinator:
 
                     # Set progress callback BEFORE extraction
                     # (total_count will be set by extractor during first API call)
-                    def progress_callback(completed: int, ext=extractor, ent_type=entity_type) -> None:
+                    def progress_callback(completed: int, ext: Any = extractor, ent_type: str = entity_type) -> None:
                         total_count = getattr(ext, '_total_count', None)
                         self._migration_ui.update_entity_progress(ent_type, completed, total_count)
 

@@ -30,7 +30,7 @@ class JobsExtractor(BaseExtractor[Job]):  # type: ignore[reportInvalidTypeArgume
         logger: Logger,
         config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize JobsExtractor with required dependencies.
 

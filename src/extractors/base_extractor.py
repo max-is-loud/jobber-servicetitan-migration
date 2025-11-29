@@ -114,7 +114,7 @@ class BaseExtractor(ABC, Generic[T]):
         entity_name: str,
         config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize BaseExtractor with required dependencies.
 

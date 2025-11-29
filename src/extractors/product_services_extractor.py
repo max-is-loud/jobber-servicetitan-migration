@@ -32,7 +32,7 @@ class ProductServicesExtractor(BaseExtractor[ProductService]):
         logger: Logger,
         config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize ProductServicesExtractor with required dependencies.
 

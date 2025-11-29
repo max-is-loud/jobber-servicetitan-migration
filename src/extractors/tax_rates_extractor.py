@@ -33,7 +33,7 @@ class TaxRatesExtractor(BaseExtractor[TaxRate]):
         logger: Logger,
         config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize TaxRatesExtractor with required dependencies.
 

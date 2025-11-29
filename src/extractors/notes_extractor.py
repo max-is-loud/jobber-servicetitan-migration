@@ -28,7 +28,7 @@ class NotesExtractor(BaseExtractor[Note]):
         logger: Logger,
         config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize NotesExtractor with required dependencies.
 

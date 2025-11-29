@@ -34,7 +34,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         logger: Logger,
         config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize PropertiesExtractor with required dependencies.
 
