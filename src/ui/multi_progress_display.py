@@ -1,5 +1,6 @@
 """Reusable multi-progress display for concurrent operations."""
 
+from threading import Lock
 from typing import Dict, Optional
 from rich.console import Console, Group
 from rich.live import Live
@@ -93,6 +94,9 @@ class MultiProgressDisplay:
         # Live display
         self._live: Optional[Live] = None
 
+        # Thread lock for synchronizing updates from worker threads
+        self._lock = Lock()
+
     def __enter__(self):
         """Start the live display."""
         # Create grouped display (tasks above, overall below)
@@ -125,7 +129,7 @@ class MultiProgressDisplay:
         )
 
     def add_task(self, task_name: str, total_bytes: int) -> TaskID:
-        """Add a new task to the display.
+        """Add a new task to the display (thread-safe).
 
         Args:
             task_name: Name/ID to display for this task
@@ -134,17 +138,18 @@ class MultiProgressDisplay:
         Returns:
             Task ID for updating progress
         """
-        # Truncate long task names
-        display_name = task_name[:24] if len(task_name) > 24 else task_name
+        with self._lock:
+            # Truncate long task names
+            display_name = task_name[:24] if len(task_name) > 24 else task_name
 
-        task_id = self._task_progress.add_task(
-            "download",
-            task_name=display_name,
-            total=total_bytes,
-        )
+            task_id = self._task_progress.add_task(
+                "download",
+                task_name=display_name,
+                total=total_bytes,
+            )
 
-        self._active_tasks[task_name] = task_id
-        return task_id
+            self._active_tasks[task_name] = task_id
+            return task_id
 
     def update(
         self,
@@ -152,49 +157,52 @@ class MultiProgressDisplay:
         advance: int = 0,
         completed: Optional[int] = None,
     ):
-        """Update task progress.
+        """Update task progress (thread-safe).
 
         Args:
             task_id: Task ID to update
             advance: Bytes to add to progress
             completed: Total bytes completed (overrides advance)
         """
-        # Update individual task
-        if completed is not None:
-            self._task_progress.update(task_id, completed=completed)
-        else:
-            self._task_progress.update(task_id, advance=advance)
-
-        # Update overall progress
-        if self._overall_task_id is not None:
+        with self._lock:
+            # Update individual task
             if completed is not None:
-                # For completed, don't double-count
-                pass
+                self._task_progress.update(task_id, completed=completed)
             else:
-                self._overall_progress.update(self._overall_task_id, advance=advance)
+                self._task_progress.update(task_id, advance=advance)
+
+            # Update overall progress
+            if self._overall_task_id is not None:
+                if completed is not None:
+                    # For completed, don't double-count
+                    pass
+                else:
+                    self._overall_progress.update(self._overall_task_id, advance=advance)
 
     def complete_task(self, task_id: TaskID, task_name: str):
-        """Mark task as complete and hide it.
+        """Mark task as complete and hide it (thread-safe).
 
         Args:
             task_id: Task ID to complete
             task_name: Task name for cleanup
         """
-        self._task_progress.update(task_id, visible=False)
-        if task_name in self._active_tasks:
-            del self._active_tasks[task_name]
+        with self._lock:
+            self._task_progress.update(task_id, visible=False)
+            if task_name in self._active_tasks:
+                del self._active_tasks[task_name]
 
     def log(self, message: str, level: str = "info"):
-        """Log a message above the progress display.
+        """Log a message above the progress display (thread-safe).
 
         Args:
             message: Message to log
             level: Log level (info, warning, error)
         """
-        # Print to console - Rich Live will handle positioning
-        if level == "error":
-            self._console.print(f"[red]ERROR:[/red] {message}")
-        elif level == "warning":
-            self._console.print(f"[yellow]WARNING:[/yellow] {message}")
-        else:
-            self._console.print(message)
+        with self._lock:
+            # Print to console - Rich Live will handle positioning
+            if level == "error":
+                self._console.print(f"[red]ERROR:[/red] {message}")
+            elif level == "warning":
+                self._console.print(f"[yellow]WARNING:[/yellow] {message}")
+            else:
+                self._console.print(message)
