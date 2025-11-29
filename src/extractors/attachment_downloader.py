@@ -4,7 +4,7 @@ import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -46,6 +46,7 @@ class AttachmentDownloader:
         chunk_size: int = 8192,
         connect_timeout: int = DEFAULT_CONNECT_TIMEOUT,
         read_timeout: int = DEFAULT_READ_TIMEOUT,
+        progress_callback: Optional[Callable[[int], None]] = None,
     ) -> None:
         """Initialize AttachmentDownloader with required dependencies.
 
@@ -57,6 +58,7 @@ class AttachmentDownloader:
             chunk_size: Chunk size in bytes for streaming downloads
             connect_timeout: HTTP connection timeout in seconds
             read_timeout: HTTP read timeout in seconds
+            progress_callback: Optional callback function(bytes_downloaded: int) for real-time progress
         """
         self._repository = repository
         self._logger = logger
@@ -65,6 +67,7 @@ class AttachmentDownloader:
         self._chunk_size = chunk_size
         self._connect_timeout = connect_timeout
         self._read_timeout = read_timeout
+        self._progress_callback = progress_callback
 
         # Setup HTTP session with retry logic
         self._session = requests.Session()
@@ -299,6 +302,10 @@ class AttachmentDownloader:
                         f.write(chunk)
                         hash_obj.update(chunk)
                         bytes_downloaded += len(chunk)
+
+                        # Report progress if callback provided
+                        if self._progress_callback:
+                            self._progress_callback(len(chunk))
 
             # Get hash and determine final filename
             file_hash = hash_obj.hexdigest()

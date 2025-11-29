@@ -1,18 +1,9 @@
 """Download mode coordinator for orchestrating binary attachment downloads."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-from rich.progress import (
-    Progress,
-    TextColumn,
-    BarColumn,
-    DownloadColumn,
-    TransferSpeedColumn,
-    TimeRemainingColumn,
-    TimeElapsedColumn,
-)
 
 from ..cli.services.shared import SharedServices
 from ..config import ConfigManagerImpl
@@ -21,6 +12,7 @@ from ..interfaces import Logger
 from ..models import Attachment, AttachmentQueueItem, DownloadFilters
 from ..reports import DownloadReportGenerator
 from ..repositories import Repository
+from ..ui import MultiProgressDisplay
 
 
 class DownloadModeCoordinator:
@@ -266,12 +258,91 @@ class DownloadModeCoordinator:
 
         return filtered_items
 
+    def _download_worker(
+        self,
+        queue_item: AttachmentQueueItem,
+        base_download_path: str,
+        display: MultiProgressDisplay,
+        task_id: int,
+    ) -> Dict[str, Any]:
+        """Worker function for parallel downloads with progress tracking.
+
+        Runs in thread pool. Downloads attachment and reports progress to MultiProgressDisplay.
+        Does NOT update database - caller handles that.
+
+        Args:
+            queue_item: Queue item to download
+            base_download_path: Base path for downloads
+            display: MultiProgressDisplay instance for progress updates
+            task_id: Task ID for this download in the progress display
+
+        Returns:
+            dict with:
+            - queue_item: Original queue item
+            - success: bool
+            - attachment: Attachment object (if found)
+            - download_result: Result dict from AttachmentDownloader
+            - error: Exception or error message (if failed)
+            - task_id: Progress task ID (for completion tracking)
+        """
+        try:
+            # Get attachment metadata
+            attachment = self._repository.get_attachment_by_id(queue_item.attachment_id)
+            if not attachment:
+                return {
+                    "queue_item": queue_item,
+                    "success": False,
+                    "attachment": None,
+                    "download_result": None,
+                    "error": f"Attachment not found: {queue_item.attachment_id}",
+                    "task_id": task_id,
+                }
+
+            # Create progress callback for this download
+            def progress_callback(bytes_chunk: int):
+                display.update(task_id, advance=bytes_chunk)
+
+            # Create downloader (each thread gets own instance)
+            downloader = AttachmentDownloader(
+                repository=self._repository,
+                logger=self._logger,
+                base_download_path=base_download_path,
+                progress_callback=progress_callback,
+            )
+
+            # Download file
+            download_result = downloader.download_attachment(attachment)
+
+            return {
+                "queue_item": queue_item,
+                "success": download_result["success"],
+                "attachment": attachment,
+                "download_result": download_result,
+                "error": download_result.get("error_message") if not download_result["success"] else None,
+                "task_id": task_id,
+            }
+
+        except Exception as e:
+            self._logger.error(f"Worker exception for {queue_item.attachment_id}: {e}")
+            return {
+                "queue_item": queue_item,
+                "success": False,
+                "attachment": None,
+                "download_result": None,
+                "error": str(e),
+                "task_id": task_id,
+            }
+
     def _process_downloads(
         self,
         queue_items: List[AttachmentQueueItem],
         output_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
-        """Process attachment downloads with progress tracking.
+        """Process attachment downloads with parallel execution and multi-progress tracking.
+
+        Uses ThreadPoolExecutor to download multiple attachments concurrently with
+        individual progress bars for each active download plus aggregate statistics.
+        Database writes are serialized in the main thread for thread-safety.
 
         Args:
             queue_items: List of queue items to download
@@ -283,60 +354,86 @@ class DownloadModeCoordinator:
             - failed: Number that failed
             - total_bytes: Total bytes downloaded
         """
-        # Initialize attachment downloader
+        # Get concurrency setting from config
+        attachment_config = self._config_manager.get_attachment_config()
+        max_workers = attachment_config.get("concurrent_downloads", 3)
+
         base_download_path = str(output_dir) if output_dir else "./attachments"
-        attachment_downloader = AttachmentDownloader(
-            logger=self._logger,
-            base_download_path=base_download_path,
+
+        # Calculate total bytes for overall progress
+        total_bytes_to_download = sum(
+            (self._repository.get_attachment_by_id(item.attachment_id).file_size or 0)
+            for item in queue_items
+            if self._repository.get_attachment_by_id(item.attachment_id)
         )
 
         # Track results
         downloaded_count = 0
         failed_count = 0
-        total_bytes = 0
+        total_bytes_downloaded = 0
 
-        # Process downloads with Rich progress bar
-        with Progress(
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(),
-            DownloadColumn(),
-            TransferSpeedColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-            TimeElapsedColumn(),
+        # Process downloads with MultiProgressDisplay
+        with MultiProgressDisplay(
             console=self._console,
-        ) as progress:
-            task_id = progress.add_task(
-                f"Downloading {len(queue_items)} attachments...",
-                total=len(queue_items),
+            max_workers=max_workers,
+            description=f"Downloading {len(queue_items)} attachments",
+            show_speed=True,
+        ) as display:
+            # Start overall progress tracking
+            display.start_overall(
+                total_items=len(queue_items),
+                total_bytes=total_bytes_to_download,
             )
 
-            for queue_item in queue_items:
-                try:
-                    # Mark in progress
-                    queue_item.status = "in_progress"
-                    queue_item.updated_at = self._get_current_timestamp()
-                    self._repository.update_attachment_queue_status(queue_item)
+            # Submit all downloads to thread pool
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit jobs and create progress tasks
+                futures = {}
 
-                    # Get attachment metadata from repository
-                    attachment = self._repository.get_attachment_by_id(queue_item.attachment_id)
-
+                for item in queue_items:
+                    # Get attachment for file size
+                    attachment = self._repository.get_attachment_by_id(item.attachment_id)
                     if not attachment:
-                        # Attachment not found in database
-                        queue_item.status = "failed"
-                        queue_item.last_error = f"Attachment not found: {queue_item.attachment_id}"
-                        queue_item.attempt_count += 1
-                        queue_item.updated_at = self._get_current_timestamp()
-                        self._repository.update_attachment_queue_status(queue_item)
+                        # Handle missing attachment - mark as failed immediately
+                        item.status = "failed"
+                        item.last_error = f"Attachment not found: {item.attachment_id}"
+                        item.attempt_count += 1
+                        item.updated_at = self._get_current_timestamp()
+                        self._repository.update_attachment_queue_status(item)
                         failed_count += 1
-                        progress.update(task_id, advance=1)
+                        display.log(f"✗ {item.attachment_id[:12]} - Attachment not found", level="error")
                         continue
 
-                    # Download attachment file
-                    download_result = attachment_downloader.download_attachment(attachment)
+                    file_size = attachment.file_size or 0
+                    task_name = attachment.file_name or item.attachment_id[:12]
 
-                    if download_result["success"]:
-                        # Update attachment metadata with downloaded file path
+                    # Add task to display
+                    task_id = display.add_task(task_name, total_bytes=file_size)
+
+                    # Submit worker
+                    future = executor.submit(
+                        self._download_worker,
+                        item,
+                        base_download_path,
+                        display,
+                        task_id,
+                    )
+                    futures[future] = (item, task_id, task_name)
+
+                # Process results as they complete
+                for future in as_completed(futures):
+                    item, task_id, task_name = futures[future]
+                    result = future.result()
+                    queue_item = result["queue_item"]
+
+                    # Update database based on result (serialized in main thread)
+                    queue_item.updated_at = self._get_current_timestamp()
+
+                    if result["success"]:
+                        # Update attachment with local file path
+                        attachment = result["attachment"]
+                        download_result = result["download_result"]
+
                         updated_attachment = Attachment(
                             id=attachment.id,
                             note_id=attachment.note_id,
@@ -349,37 +446,32 @@ class DownloadModeCoordinator:
                         )
                         self._repository.save_attachments([updated_attachment])
 
-                        # Mark done
                         queue_item.status = "done"
                         queue_item.last_error = None
                         downloaded_count += 1
-                        total_bytes += download_result.get("bytes_downloaded", 0)
+                        total_bytes_downloaded += download_result.get("bytes_downloaded", 0)
+
+                        # Log success
+                        display.log(f"✓ {task_name} ({download_result.get('bytes_downloaded', 0):,} bytes)")
                     else:
-                        # Download failed
                         queue_item.status = "failed"
-                        queue_item.last_error = download_result.get("error_message", "Unknown error")
+                        queue_item.last_error = result["error"]
                         queue_item.attempt_count += 1
                         failed_count += 1
 
-                    queue_item.updated_at = self._get_current_timestamp()
+                        # Log failure
+                        display.log(f"✗ {task_name} - {result['error']}", level="error")
+
+                    # Update queue status
                     self._repository.update_attachment_queue_status(queue_item)
 
-                except Exception as e:
-                    # Mark failed with exception info
-                    self._logger.error(f"Failed to download attachment {queue_item.attachment_id}: {e}")
-                    queue_item.status = "failed"
-                    queue_item.last_error = str(e)
-                    queue_item.attempt_count += 1
-                    queue_item.updated_at = self._get_current_timestamp()
-                    self._repository.update_attachment_queue_status(queue_item)
-                    failed_count += 1
-
-                progress.update(task_id, advance=1)
+                    # Complete and hide this task
+                    display.complete_task(task_id, task_name)
 
         return {
             "downloaded": downloaded_count,
             "failed": failed_count,
-            "total_bytes": total_bytes,
+            "total_bytes": total_bytes_downloaded,
         }
 
     def _preview_download_queue(

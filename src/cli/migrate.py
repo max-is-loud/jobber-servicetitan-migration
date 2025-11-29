@@ -162,22 +162,15 @@ def download_attachments(
             show_default=True,
         ),
     ] = Path("./attachments"),
-    batch_size: Annotated[
-        int,
-        typer.Option(
-            "--batch-size",
-            help="Number of attachments to fetch per batch",
-            min=1,
-            max=1000,
-            show_default=True,
-        ),
-    ] = 100,
 ) -> None:
-    """Download pending attachment files from Jobber.
+    """Download pending attachment files from Jobber with parallel downloads.
 
     Phase 2 of the two-phase ETL pattern for binary file downloads.
     Fetches all attachments with download_status='pending' and saves them
     to hash-based storage: {sha256_hash}.{original_extension}
+
+    Uses parallel downloads with multi-progress display showing individual
+    download progress and aggregate stats.
 
     The database must already contain attachment metadata from Phase 1
     (entity extraction).
@@ -188,103 +181,148 @@ def download_attachments(
 
         # Specify custom database and output directory
         tightbeam migrate download-attachments --db ./data/export.db --output-dir ./files
-
-        # Control batch size for large datasets
-        tightbeam migrate download-attachments --batch-size 50
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from src.extractors.attachment_downloader import AttachmentDownloader
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+    from src.ui import MultiProgressDisplay
 
     # Resolve database path with environment variable and config fallback
     db = SharedServices.resolve_db_path(db)
 
-    console.print(f"\n{INFO_EMOJI} Starting attachment download")
+    console.print(f"\n{INFO_EMOJI} Starting parallel attachment downloads")
     console.print(f"   Database: {db}")
-    console.print(f"   Output directory: {output_dir}")
-    console.print(f"   Batch size: {batch_size}\n")
+    console.print(f"   Output directory: {output_dir}\n")
 
     # Validate database exists
     if not db.exists():
         console.print(f"{ERROR_EMOJI} Database not found: {db}", style="bold red")
-        console.print(f"   Run 'tightbeam migrate jobber' first to extract metadata\n")
+        console.print(f"   Run 'tightbeam migrate max-extract' first to extract metadata\n")
         raise typer.Exit(code=1)
 
     try:
         # Initialize services
         repository = ServiceFactory.create_repository(db)
         logger = ServiceFactory.create_logger(verbose=True)
+        config_manager = ServiceFactory.create_config_manager()
 
-        # Check for pending attachments
-        pending_count_query = repository._connection.cursor()
-        pending_count_query.execute("SELECT COUNT(*) FROM attachments WHERE download_status = 'pending'")
-        total_pending = pending_count_query.fetchone()[0]
-        pending_count_query.close()
+        # Get concurrent downloads setting
+        attachment_config = config_manager.get_attachment_config()
+        max_workers = attachment_config.get("concurrent_downloads", 3)
 
-        if total_pending == 0:
+        # Ensure it's within safe limits
+        max_workers = max(1, min(max_workers, 10))
+
+        # Get all pending attachments
+        pending_attachments = repository.get_pending_attachments()
+
+        if not pending_attachments:
             console.print(f"{INFO_EMOJI} No pending attachments found", style="yellow")
             console.print(f"   All attachments already downloaded or no attachments in database\n")
             return
 
-        console.print(f"{INFO_EMOJI} Found {total_pending} pending attachment(s)\n")
+        console.print(f"{INFO_EMOJI} Found {len(pending_attachments)} pending attachment(s)")
+        console.print(f"{INFO_EMOJI} Using {max_workers} concurrent downloads\n")
 
-        # Initialize downloader
-        downloader = AttachmentDownloader(
-            repository=repository,
-            logger=logger,
-            base_download_path=str(output_dir),
-            max_retries=3,
-        )
+        # Calculate total bytes
+        total_bytes = sum(att.file_size or 0 for att in pending_attachments)
 
-        # Validate dependencies
-        downloader.validate_dependencies()
+        # Track results
+        downloaded_count = 0
+        failed_count = 0
+        total_bytes_downloaded = 0
 
-        # Download with progress tracking
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
+        # Worker function for parallel downloads
+        def download_worker(attachment, display, _unused_task_id):
+            try:
+                # Create progress task when worker starts (not upfront for all 30k files)
+                file_size = attachment.file_size or 0
+                task_name = attachment.file_name or attachment.id[:12]
+                task_id = display.add_task(task_name, total_bytes=file_size)
+
+                # Create progress callback
+                def progress_callback(bytes_chunk: int):
+                    display.update(task_id, advance=bytes_chunk)
+
+                # Create downloader for this thread
+                downloader = AttachmentDownloader(
+                    repository=repository,
+                    logger=logger,
+                    base_download_path=str(output_dir),
+                    max_retries=3,
+                    progress_callback=progress_callback,
+                )
+
+                # Download file
+                result = downloader.download_attachment(attachment)
+                return {
+                    "attachment": attachment,
+                    "success": result["success"],
+                    "result": result,
+                    "task_id": task_id,
+                }
+            except Exception as e:
+                logger.error(f"Worker exception for {attachment.id}: {e}")
+                return {
+                    "attachment": attachment,
+                    "success": False,
+                    "result": {"error_message": str(e)},
+                    "task_id": None,
+                }
+
+        # Download with multi-progress display
+        with MultiProgressDisplay(
             console=console,
-        ) as progress:
-            task = progress.add_task("Downloading attachments...", total=total_pending)
+            max_workers=max_workers,
+            description=f"Downloading {len(pending_attachments)} attachments",
+            show_speed=True,
+        ) as display:
+            # Start overall progress
+            display.start_overall(
+                total_items=len(pending_attachments),
+                total_bytes=total_bytes,
+            )
 
-            # Get initial stats
-            stats = {"success": 0, "failed": 0, "total_bytes": 0}
+            # Submit all downloads (but don't create progress tasks yet - worker will handle that)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {}
 
-            # Process in batches
-            while True:
-                batch = repository.get_pending_attachments()
-                if not batch:
-                    break
+                for attachment in pending_attachments:
+                    file_size = attachment.file_size or 0
+                    task_name = attachment.file_name or attachment.id[:12]
 
-                # Limit batch size
-                batch = batch[:batch_size]
+                    # Note: We create the progress task inside the worker function
+                    # to avoid creating 30,000 tasks upfront
+                    # Submit worker WITHOUT pre-creating task
+                    future = executor.submit(download_worker, attachment, display, None)
+                    futures[future] = (attachment, None, task_name)
 
-                for attachment in batch:
-                    result = downloader.download_attachment(attachment)
+                # Process results as they complete
+                for future in as_completed(futures):
+                    attachment, _, task_name = futures[future]
+                    result = future.result()
 
                     if result["success"]:
-                        stats["success"] += 1
-                        stats["total_bytes"] += result["bytes_downloaded"]
+                        downloaded_count += 1
+                        total_bytes_downloaded += result["result"].get("bytes_downloaded", 0)
+                        display.log(f"✓ {task_name} ({result['result'].get('bytes_downloaded', 0):,} bytes)")
                     else:
-                        stats["failed"] += 1
+                        failed_count += 1
+                        error_msg = result["result"].get("error_message", "Unknown error")
+                        display.log(f"✗ {task_name} - {error_msg}", level="error")
 
-                    # Update progress
-                    progress.update(task, advance=1)
-
-                # If we got fewer than batch_size, we're done
-                if len(batch) < batch_size:
-                    break
+                    # Complete and hide this task (if it was created)
+                    if result["task_id"] is not None:
+                        display.complete_task(result["task_id"], task_name)
 
         # Display summary
         console.print()
         console.print("📊 Download Summary:", style="bold cyan")
-        console.print(f"   ✓ Success: {stats['success']} files ({_format_bytes(stats['total_bytes'])})")
-        if stats["failed"] > 0:
-            console.print(f"   ✗ Failed: {stats['failed']} files", style="bold red")
+        console.print(f"   ✓ Success: {downloaded_count} files ({_format_bytes(total_bytes_downloaded)})")
+        if failed_count > 0:
+            console.print(f"   ✗ Failed: {failed_count} files", style="bold red")
         console.print()
 
-        if stats["failed"] > 0:
+        if failed_count > 0:
             console.print(f"{INFO_EMOJI} Check database download_error field for failure details:")
             console.print(f"   SELECT id, file_name, download_error FROM attachments WHERE download_status = 'failed'\n")
 

@@ -72,6 +72,10 @@ database:
 # Attachment handling
 attachments:
   auto_download: false        # Automatically download attachments during extraction
+  concurrent_downloads: 3     # Number of parallel downloads (1-10)
+                              # Higher values = faster downloads but more memory/network
+                              # Recommended: 3-5 for most systems
+  max_concurrent_downloads: 10  # Upper limit for validation
 
 # Metrics collection configuration
 metrics:

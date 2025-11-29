@@ -204,11 +204,34 @@ class AttachmentConfig:
     """Attachment download configuration."""
 
     auto_download: bool  # Automatically download attachment files
+    concurrent_downloads: int = 3  # Number of parallel downloads (1-10)
+    max_concurrent_downloads: int = 10  # Upper limit for validation
 
     def __post_init__(self) -> None:
         """Validate attachment configuration values."""
         if not isinstance(self.auto_download, bool):
             raise ValueError(f"auto_download must be a boolean, got {type(self.auto_download).__name__}")
+
+        # Validate max_concurrent_downloads first (before using it in range check)
+        if not isinstance(self.max_concurrent_downloads, int):
+            raise ValueError(
+                f"max_concurrent_downloads must be an integer, got {type(self.max_concurrent_downloads).__name__}"
+            )
+        if self.max_concurrent_downloads < 1:
+            raise ValueError(
+                f"max_concurrent_downloads must be at least 1, got {self.max_concurrent_downloads}"
+            )
+
+        # Validate concurrent_downloads (using validated max_concurrent_downloads)
+        if not isinstance(self.concurrent_downloads, int):
+            raise ValueError(
+                f"concurrent_downloads must be an integer, got {type(self.concurrent_downloads).__name__}"
+            )
+        if not 1 <= self.concurrent_downloads <= self.max_concurrent_downloads:
+            raise ValueError(
+                f"concurrent_downloads must be between 1 and {self.max_concurrent_downloads}, "
+                f"got {self.concurrent_downloads}"
+            )
 
 
 @dataclass(frozen=True)
