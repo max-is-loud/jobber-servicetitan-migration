@@ -1,8 +1,10 @@
 """Reusable multi-progress display for concurrent operations."""
 
+from collections import deque
 from threading import Lock
 from typing import Dict, Optional
-from rich.console import Console, Group
+from rich.console import Console, RenderableType
+from rich.layout import Layout
 from rich.live import Live
 from rich.progress import (
     Progress,
@@ -14,6 +16,7 @@ from rich.progress import (
     TaskID,
 )
 from rich.panel import Panel
+from rich.text import Text
 
 
 class MultiProgressDisplay:
@@ -44,6 +47,7 @@ class MultiProgressDisplay:
         max_workers: int = 3,
         description: str = "Processing",
         show_speed: bool = True,
+        max_log_lines: int = 50,
     ):
         """Initialize multi-progress display.
 
@@ -52,13 +56,19 @@ class MultiProgressDisplay:
             max_workers: Maximum concurrent tasks to display
             description: Overall progress description
             show_speed: Whether to show transfer speeds
+            max_log_lines: Maximum log lines to keep in scrollback
         """
         self._console = console
         self._max_workers = max_workers
         self._description = description
         self._show_speed = show_speed
+        self._max_log_lines = max_log_lines
+
+        # Log buffer (fixed size circular buffer)
+        self._log_buffer: deque = deque(maxlen=max_log_lines)
 
         # Create individual task progress (one bar per active worker)
+        # Don't pass console - we'll render it ourselves
         task_columns = [
             TextColumn("[bold cyan]{task.fields[task_name]}", justify="right"),
             BarColumn(bar_width=None),
@@ -71,7 +81,7 @@ class MultiProgressDisplay:
             ])
         task_columns.append(TimeRemainingColumn())
 
-        self._task_progress = Progress(*task_columns, console=console)
+        self._task_progress = Progress(*task_columns)
 
         # Create overall progress (aggregate)
         self._overall_progress = Progress(
@@ -82,7 +92,6 @@ class MultiProgressDisplay:
             TransferSpeedColumn(),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeRemainingColumn(),
-            console=console,
         )
 
         # Overall task ID
@@ -91,21 +100,48 @@ class MultiProgressDisplay:
         # Track active task IDs for cleanup
         self._active_tasks: Dict[str, TaskID] = {}
 
-        # Live display
+        # Layout and Live display
+        self._layout: Optional[Layout] = None
         self._live: Optional[Live] = None
 
         # Thread lock for synchronizing updates from worker threads
         self._lock = Lock()
 
+    def _render_logs(self) -> RenderableType:
+        """Render the log buffer."""
+        if not self._log_buffer:
+            return Text("No logs yet...", style="dim")
+
+        # Join all log lines
+        return Text("\n".join(self._log_buffer))
+
     def __enter__(self):
-        """Start the live display."""
-        # Create grouped display (tasks above, overall below)
-        progress_group = Group(
-            Panel(self._task_progress, title="Active Downloads", border_style="green"),
-            self._overall_progress,
+        """Start the live display with fixed layout."""
+        # Create layout with fixed sections
+        self._layout = Layout()
+
+        # Split into log area (top, grows) and progress area (bottom, fixed height)
+        self._layout.split_column(
+            Layout(name="logs", ratio=3),  # Top 75% - scrollable logs
+            Layout(name="progress", size=self._max_workers + 5),  # Bottom - fixed height
         )
 
-        self._live = Live(progress_group, console=self._console, refresh_per_second=10)
+        # Split progress area into active downloads and overall
+        self._layout["progress"].split_column(
+            Layout(Panel(self._task_progress, title="Active Downloads", border_style="green"), name="tasks"),
+            Layout(self._overall_progress, size=1, name="overall"),
+        )
+
+        # Initialize log area
+        self._layout["logs"].update(Panel(self._render_logs(), title="Download Log", border_style="blue"))
+
+        # Start Live display with full screen takeover
+        self._live = Live(
+            self._layout,
+            console=self._console,
+            screen=False,  # Don't take over full terminal
+            refresh_per_second=4,  # Reduce refresh rate to prevent flickering
+        )
         self._live.start()
 
         return self
@@ -192,17 +228,26 @@ class MultiProgressDisplay:
                 del self._active_tasks[task_name]
 
     def log(self, message: str, level: str = "info"):
-        """Log a message above the progress display (thread-safe).
+        """Log a message to the log buffer (thread-safe).
 
         Args:
             message: Message to log
             level: Log level (info, warning, error)
         """
         with self._lock:
-            # Print to console - Rich Live will handle positioning
+            # Format message with level styling
             if level == "error":
-                self._console.print(f"[red]ERROR:[/red] {message}")
+                formatted = f"[red]ERROR:[/red] {message}"
             elif level == "warning":
-                self._console.print(f"[yellow]WARNING:[/yellow] {message}")
+                formatted = f"[yellow]WARNING:[/yellow] {message}"
             else:
-                self._console.print(message)
+                formatted = message
+
+            # Add to circular buffer
+            self._log_buffer.append(formatted)
+
+            # Update log panel in layout
+            if self._layout:
+                self._layout["logs"].update(
+                    Panel(self._render_logs(), title="Download Log", border_style="blue")
+                )
