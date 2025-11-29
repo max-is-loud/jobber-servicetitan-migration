@@ -227,6 +227,8 @@ class ConfigManagerImpl:
             attachment_data = config_data.get("attachments", {"auto_download": True})
             attachments = AttachmentConfig(
                 auto_download=attachment_data.get("auto_download", True),
+                concurrent_downloads=attachment_data.get("concurrent_downloads", 3),
+                max_concurrent_downloads=attachment_data.get("max_concurrent_downloads", 10),
             )
 
             return AppConfig(
@@ -342,6 +344,8 @@ class ConfigManagerImpl:
 
         return {
             "auto_download": self.config.attachments.auto_download,
+            "concurrent_downloads": self.config.attachments.concurrent_downloads,
+            "max_concurrent_downloads": self.config.attachments.max_concurrent_downloads,
         }
 
     def reload_config(self, environment: str | None = None) -> None:

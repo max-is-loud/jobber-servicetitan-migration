@@ -54,5 +54,6 @@ database:
   wal_mode: true
 attachments:
   auto_download: false
+  concurrent_downloads: 10  # Number of parallel downloads (1-10, default: 3)
 metrics:
   default_batch_size: 30

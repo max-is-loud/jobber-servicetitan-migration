@@ -47,8 +47,8 @@ class ServiceFactory:
         # Ensure parent directories exist
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create database connection
-        connection = sqlite3.Connection(str(db_path))
+        # Create database connection with cross-thread access enabled for parallel downloads
+        connection = sqlite3.Connection(str(db_path), check_same_thread=False)
         repository = Repository(connection)
 
         # Initialize schema including oauth_tokens table

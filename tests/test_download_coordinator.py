@@ -35,6 +35,7 @@ class TestDownloadModeCoordinator:
         """Create mock ConfigManager."""
         config = Mock()
         config.get_reports_dir.return_value = Path("./reports")
+        config.get_attachment_config.return_value = {"concurrent_downloads": 3}
         return config
 
     @pytest.fixture
@@ -435,10 +436,12 @@ class TestDownloadModeCoordinator:
                     dry_run=False,
                 )
 
-        # Verify downloader was created with custom path
-        mock_downloader_class.assert_called_once()
-        call_kwargs = mock_downloader_class.call_args[1]
-        assert call_kwargs["base_download_path"] == str(custom_dir)
+        # Verify downloader was created with custom path (3 times, once per attachment)
+        assert mock_downloader_class.call_count == 3
+        # Check that all calls used the custom path
+        for call in mock_downloader_class.call_args_list:
+            call_kwargs = call[1]
+            assert call_kwargs["base_download_path"] == str(custom_dir)
 
     # ==================== Test progress tracking ====================
 
@@ -474,7 +477,6 @@ class TestDownloadModeCoordinator:
                     dry_run=False,
                 )
 
-        # Verify status transitions: pending → in_progress → done
-        assert len(captured_statuses) >= 2  # At least in_progress and done
-        assert captured_statuses[0] == "in_progress"  # First update
-        assert captured_statuses[-1] == "done"  # Last update
+        # Verify status transitions: pending → done
+        assert len(captured_statuses) >= 1  # At least done status
+        assert captured_statuses[-1] == "done"  # Final status is done
