@@ -1637,7 +1637,7 @@ class JobberClient:
                     response_data, rate_limit_headers = result
 
                     # Track rate limit headers if available
-                    remaining = rate_limit_headers.get("x-ratelimit-remaining")
+                    remaining = rate_limit_headers.get("x-ratelimit-remaining")  # type: ignore[assignment]
                     reset_time = rate_limit_headers.get("x-ratelimit-reset")
                     if remaining is not None:
                         try:

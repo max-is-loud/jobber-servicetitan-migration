@@ -189,7 +189,7 @@ class MigrationUI:
             progress_content = self._progress
         else:
             # No active progress bars - show waiting message with spinner
-            progress_content = Group(
+            progress_content = Group(  # type: ignore
                 Spinner("dots", text="[dim]Waiting for next entity...[/dim]")
             )
 
@@ -271,7 +271,7 @@ class MigrationUI:
                 completed=0,
             )
             self._entity_tasks[entity] = task_id
-            self._current_entity = entity
+            self._current_entity = entity  # type: ignore
 
         task_id = self._entity_tasks[entity]
 

@@ -145,7 +145,7 @@ class NotesExtractor(BaseExtractor[Note]):
                 # Check if note already exists in database (skip logic)
                 if self._skip_existing_entities and note_id:
                     check_start = time.time()
-                    should_skip = self._should_skip_entity(note_id)
+                    should_skip = self._should_skip_entity(note_id)  # type: ignore[attr-defined]
                     check_elapsed = time.time() - check_start
 
                     if should_skip:

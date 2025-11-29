@@ -278,7 +278,7 @@ class MaxExtractCoordinator:
 
         # Show run header with database path
         self._migration_ui.show_run_header(
-            db_path=self._db_path,
+            db_path=self._db_path,  # type: ignore
             config=None  # No config manager currently integrated
         )
 
