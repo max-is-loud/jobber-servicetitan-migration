@@ -69,7 +69,7 @@ class AttachmentDownloader:
         self._read_timeout = read_timeout
         self._progress_callback = progress_callback
 
-        # Setup HTTP session with retry logic
+        # Setup HTTP session with retry logic and connection pooling
         self._session = requests.Session()
         retry_strategy = Retry(
             total=max_retries,
@@ -77,7 +77,14 @@ class AttachmentDownloader:
             allowed_methods=["HEAD", "GET", "OPTIONS"],
             backoff_factor=1,
         )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        # HTTPAdapter with connection pooling for better performance
+        # pool_connections: number of connection pools to cache
+        # pool_maxsize: maximum number of connections in each pool
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,  # Default - can be overridden by config
+            pool_maxsize=10,  # Default - can be overridden by config
+        )
         self._session.mount("http://", adapter)
         self._session.mount("https://", adapter)
 
@@ -333,6 +340,7 @@ class AttachmentDownloader:
                 "local_file_path": str(local_file_path),
                 "bytes_downloaded": bytes_downloaded,
                 "hash": file_hash,
+                "downloaded_at": downloaded_at,
                 "error_message": "",
             }
 

@@ -202,15 +202,21 @@ def download_attachments(
     try:
         # Initialize services
         repository = ServiceFactory.create_repository(db)
-        logger = ServiceFactory.create_logger(verbose=True)
+        # Don't use verbose logger - it conflicts with Rich Live display
+        # Debug logs will go to file if configured
+        logger = ServiceFactory.create_logger(verbose=False)
         config_manager = ServiceFactory.create_config_manager()
 
-        # Get concurrent downloads setting
+        # Get concurrent downloads and performance settings from config
         attachment_config = config_manager.get_attachment_config()
         max_workers = attachment_config.get("concurrent_downloads", 3)
+        chunk_size = attachment_config.get("chunk_size", 65536)  # 64KB default
+        pool_connections = attachment_config.get("http_pool_connections", 50)
+        pool_maxsize = attachment_config.get("http_pool_maxsize", 50)
 
-        # Ensure it's within safe limits
-        max_workers = max(1, min(max_workers, 10))
+        # Validate max_workers against configured maximum
+        max_allowed = attachment_config.get("max_concurrent_downloads", 50)
+        max_workers = max(1, min(max_workers, max_allowed))
 
         # Get all pending attachments
         pending_attachments = repository.get_pending_attachments()
@@ -231,6 +237,35 @@ def download_attachments(
         failed_count = 0
         total_bytes_downloaded = 0
 
+        # Create a logger wrapper that routes to display instead of console
+        class DisplayLogger:
+            """Logger wrapper that sends output to MultiProgressDisplay."""
+            def info(self, msg):
+                pass  # Suppress info messages
+
+            def debug(self, msg):
+                pass  # Suppress debug messages
+
+            def success(self, msg):
+                pass  # Success logged separately
+
+            def warning(self, msg):
+                display.log(msg, level="warning")
+
+            def error(self, msg):
+                display.log(msg, level="error")
+
+        display_logger = DisplayLogger()
+
+        # Create a null repository that prevents worker threads from writing to SQLite
+        # This avoids "cannot commit - no transaction is active" errors
+        class NullRepository:
+            """No-op repository for worker threads - prevents SQLite threading issues."""
+            def update_attachment_download(self, **kwargs):
+                pass  # Database updates handled by main thread
+
+        null_repository = NullRepository()
+
         # Worker function for parallel downloads
         def download_worker(attachment, display, _unused_task_id):
             try:
@@ -243,17 +278,42 @@ def download_attachments(
                 def progress_callback(bytes_chunk: int):
                     display.update(task_id, advance=bytes_chunk)
 
-                # Create downloader for this thread
+                # Create downloader for this thread - use null repository and display logger
+                # to prevent SQLite threading issues (main thread handles all DB writes)
+                # Use configured chunk_size and pool settings for optimal performance
                 downloader = AttachmentDownloader(
-                    repository=repository,
-                    logger=logger,
+                    repository=null_repository,  # Prevents worker thread DB writes
+                    logger=display_logger,  # Use wrapper instead of verbose logger
                     base_download_path=str(output_dir),
                     max_retries=3,
+                    chunk_size=chunk_size,  # Use configured chunk size
                     progress_callback=progress_callback,
                 )
+                # Update HTTP adapter with configured pool settings for high-speed connections
+                from requests.adapters import HTTPAdapter
+                from urllib3.util.retry import Retry
+
+                retry_strategy = Retry(
+                    total=3,
+                    status_forcelist=[429, 500, 502, 503, 504],
+                    allowed_methods=["HEAD", "GET", "OPTIONS"],
+                    backoff_factor=1,
+                )
+                adapter = HTTPAdapter(
+                    max_retries=retry_strategy,
+                    pool_connections=pool_connections,  # From config
+                    pool_maxsize=pool_maxsize,  # From config
+                )
+                downloader._session.mount("http://", adapter)
+                downloader._session.mount("https://", adapter)
 
                 # Download file
                 result = downloader.download_attachment(attachment)
+
+                # Hide progress bar immediately when download completes
+                # (Don't wait for main thread DB write - that causes "jammed" appearance)
+                display.complete_task(task_id, task_name)
+
                 return {
                     "attachment": attachment,
                     "success": result["success"],
@@ -270,61 +330,95 @@ def download_attachments(
                 }
 
         # Download with multi-progress display
-        with MultiProgressDisplay(
-            console=console,
-            max_workers=max_workers,
-            description=f"Downloading {len(pending_attachments)} attachments",
-            show_speed=True,
-        ) as display:
-            # Start overall progress
-            display.start_overall(
-                total_items=len(pending_attachments),
-                total_bytes=total_bytes,
-            )
+        try:
+            with MultiProgressDisplay(
+                console=console,
+                max_workers=max_workers,
+                description=f"Downloading {len(pending_attachments)} attachments",
+                show_speed=True,
+            ) as display:
+                # Start overall progress
+                display.start_overall(
+                    total_items=len(pending_attachments),
+                    total_bytes=total_bytes,
+                )
 
-            # Submit all downloads (but don't create progress tasks yet - worker will handle that)
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {}
+                # Submit all downloads (but don't create progress tasks yet - worker will handle that)
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {}
 
-                for attachment in pending_attachments:
-                    file_size = attachment.file_size or 0
-                    task_name = attachment.file_name or attachment.id[:12]
+                    for attachment in pending_attachments:
+                        file_size = attachment.file_size or 0
+                        task_name = attachment.file_name or attachment.id[:12]
 
-                    # Note: We create the progress task inside the worker function
-                    # to avoid creating 30,000 tasks upfront
-                    # Submit worker WITHOUT pre-creating task
-                    future = executor.submit(download_worker, attachment, display, None)
-                    futures[future] = (attachment, None, task_name)
+                        # Note: We create the progress task inside the worker function
+                        # to avoid creating 30,000 tasks upfront
+                        # Submit worker WITHOUT pre-creating task
+                        future = executor.submit(download_worker, attachment, display, None)
+                        futures[future] = (attachment, None, task_name)
 
-                # Process results as they complete
-                for future in as_completed(futures):
-                    attachment, _, task_name = futures[future]
-                    result = future.result()
+                    # Process results as they complete
+                    try:
+                        for future in as_completed(futures):
+                            attachment, _, task_name = futures[future]
+                            result = future.result()
 
-                    if result["success"]:
-                        downloaded_count += 1
-                        total_bytes_downloaded += result["result"].get("bytes_downloaded", 0)
-                        display.log(f"✓ {task_name} ({result['result'].get('bytes_downloaded', 0):,} bytes)")
-                    else:
-                        failed_count += 1
-                        error_msg = result["result"].get("error_message", "Unknown error")
-                        display.log(f"✗ {task_name} - {error_msg}", level="error")
+                            if result["success"]:
+                                # Update database in main thread (thread-safe)
+                                repository.update_attachment_download(
+                                    attachment_id=attachment.id,
+                                    local_file_path=result["result"].get("local_file_path", ""),
+                                    hash=result["result"].get("hash", ""),
+                                    download_status="completed",
+                                    downloaded_at=result["result"].get("downloaded_at"),
+                                )
 
-                    # Complete and hide this task (if it was created)
-                    if result["task_id"] is not None:
-                        display.complete_task(result["task_id"], task_name)
+                                downloaded_count += 1
+                                total_bytes_downloaded += result["result"].get("bytes_downloaded", 0)
+                                display.log(f"✓ {task_name} ({result['result'].get('bytes_downloaded', 0):,} bytes)")
+                            else:
+                                # Update database with failure in main thread (thread-safe)
+                                error_msg = result["result"].get("error_message", "Unknown error")
+                                repository.update_attachment_download(
+                                    attachment_id=attachment.id,
+                                    download_status="failed",
+                                    download_error=error_msg,
+                                )
 
-        # Display summary
-        console.print()
-        console.print("📊 Download Summary:", style="bold cyan")
-        console.print(f"   ✓ Success: {downloaded_count} files ({_format_bytes(total_bytes_downloaded)})")
-        if failed_count > 0:
-            console.print(f"   ✗ Failed: {failed_count} files", style="bold red")
-        console.print()
+                                failed_count += 1
+                                display.log(f"✗ {task_name} - {error_msg}", level="error")
 
-        if failed_count > 0:
-            console.print(f"{INFO_EMOJI} Check database download_error field for failure details:")
-            console.print(f"   SELECT id, file_name, download_error FROM attachments WHERE download_status = 'failed'\n")
+                            # Note: Task is already hidden by worker thread (no need to call complete_task here)
+
+                    except KeyboardInterrupt:
+                        # Show prominent shutdown message in display
+                        display.log("", level="info")  # Blank line
+                        display.log("[bold yellow on red] SHUTDOWN REQUESTED - Ctrl+C detected [/bold yellow on red]", level="info")
+                        display.log("[yellow]Waiting for active downloads to complete to avoid file corruption...[/yellow]", level="info")
+                        display.log("[yellow]Press Ctrl+C again to force quit (may corrupt files)[/yellow]", level="info")
+                        display.log("", level="info")  # Blank line
+
+                        # Cancel all pending futures immediately
+                        for future in futures:
+                            future.cancel()
+                        # Executor context manager will clean up
+                        raise  # Re-raise to outer except
+
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Download interrupted by user. Partial results below.[/yellow]\n")
+            # Fall through to show partial summary
+
+        # Display summary (unless completely interrupted)
+        if downloaded_count > 0 or failed_count > 0:
+            console.print("📊 Download Summary:", style="bold cyan")
+            console.print(f"   ✓ Success: {downloaded_count} files ({_format_bytes(total_bytes_downloaded)})")
+            if failed_count > 0:
+                console.print(f"   ✗ Failed: {failed_count} files", style="bold red")
+            console.print()
+
+            if failed_count > 0:
+                console.print(f"{INFO_EMOJI} Check database download_error field for failure details:")
+                console.print(f"   SELECT id, file_name, download_error FROM attachments WHERE download_status = 'failed'\n")
 
     except ConfigurationError as e:
         console.print(f"{ERROR_EMOJI} Configuration error: {e}", style="bold red")

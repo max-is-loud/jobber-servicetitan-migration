@@ -13,7 +13,10 @@ class TestAttachmentConfig:
 
         assert config.auto_download is False
         assert config.concurrent_downloads == 3
-        assert config.max_concurrent_downloads == 10
+        assert config.max_concurrent_downloads == 50
+        assert config.chunk_size == 65536
+        assert config.http_pool_connections == 50
+        assert config.http_pool_maxsize == 50
 
     def test_valid_custom_concurrent_downloads(self):
         """Test AttachmentConfig with valid custom concurrent_downloads values."""
@@ -22,12 +25,12 @@ class TestAttachmentConfig:
         assert config.concurrent_downloads == 1
 
         # Test middle value
-        config = AttachmentConfig(auto_download=True, concurrent_downloads=5)
-        assert config.concurrent_downloads == 5
+        config = AttachmentConfig(auto_download=True, concurrent_downloads=25)
+        assert config.concurrent_downloads == 25
 
         # Test maximum value (default max)
-        config = AttachmentConfig(auto_download=True, concurrent_downloads=10)
-        assert config.concurrent_downloads == 10
+        config = AttachmentConfig(auto_download=True, concurrent_downloads=50)
+        assert config.concurrent_downloads == 50
 
     def test_valid_custom_max_concurrent_downloads(self):
         """Test AttachmentConfig with custom max_concurrent_downloads."""
@@ -51,8 +54,8 @@ class TestAttachmentConfig:
 
     def test_invalid_concurrent_downloads_exceeds_max(self):
         """Test that concurrent_downloads > max_concurrent_downloads raises ValueError."""
-        with pytest.raises(ValueError, match="concurrent_downloads must be between 1 and 10"):
-            AttachmentConfig(auto_download=True, concurrent_downloads=11)
+        with pytest.raises(ValueError, match="concurrent_downloads must be between 1 and 50"):
+            AttachmentConfig(auto_download=True, concurrent_downloads=51)
 
     def test_invalid_concurrent_downloads_type_string(self):
         """Test that concurrent_downloads with string type raises ValueError."""

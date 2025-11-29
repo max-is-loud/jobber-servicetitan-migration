@@ -228,7 +228,10 @@ class ConfigManagerImpl:
             attachments = AttachmentConfig(
                 auto_download=attachment_data.get("auto_download", True),
                 concurrent_downloads=attachment_data.get("concurrent_downloads", 3),
-                max_concurrent_downloads=attachment_data.get("max_concurrent_downloads", 10),
+                max_concurrent_downloads=attachment_data.get("max_concurrent_downloads", 50),
+                chunk_size=attachment_data.get("chunk_size", 65536),
+                http_pool_connections=attachment_data.get("http_pool_connections", 50),
+                http_pool_maxsize=attachment_data.get("http_pool_maxsize", 50),
             )
 
             return AppConfig(
@@ -346,6 +349,9 @@ class ConfigManagerImpl:
             "auto_download": self.config.attachments.auto_download,
             "concurrent_downloads": self.config.attachments.concurrent_downloads,
             "max_concurrent_downloads": self.config.attachments.max_concurrent_downloads,
+            "chunk_size": self.config.attachments.chunk_size,
+            "http_pool_connections": self.config.attachments.http_pool_connections,
+            "http_pool_maxsize": self.config.attachments.http_pool_maxsize,
         }
 
     def reload_config(self, environment: str | None = None) -> None:

@@ -54,6 +54,10 @@ database:
   wal_mode: true
 attachments:
   auto_download: false
-  concurrent_downloads: 10  # Number of parallel downloads (1-10, default: 3)
+  concurrent_downloads: 30  # Number of parallel downloads (1-50, default: 3)
+                            # For 1Gbps+ connections, consider 20-30
+  chunk_size: 65536         # 64KB chunks for optimal throughput
+  http_pool_connections: 50 # Connection pool size
+  http_pool_maxsize: 50     # Max connections per pool
 metrics:
   default_batch_size: 30
