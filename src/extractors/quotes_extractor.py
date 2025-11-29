@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """QuotesExtractor for extracting Quote entities from Jobber GraphQL API."""
 
-from typing import Any, List, Optional
+from typing import Any
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
@@ -28,7 +28,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
-        config_manager: Optional[ConfigManagerImpl] = None,
+        config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
         **kwargs,
     ) -> None:
@@ -41,7 +41,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
             logger: Logger for structured output and progress tracking
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
-            **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
+            **kwargs: Reserved for future use
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -55,9 +55,9 @@ class QuotesExtractor(BaseExtractor[Quote]):
             **kwargs,
         )
         # Track entities from last batch for extract_all
-        self._last_batch_entities: List[Quote] = []
+        self._last_batch_entities: list[Quote] = []
 
-    def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
+    def _fetch_page(self, cursor: str | None = None) -> dict[str, Any]:
         """Fetch a page of quotes from the Jobber API.
 
         Args:
@@ -68,7 +68,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
         """
         return self._jobber_client.fetch_quotes(cursor)
 
-    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -93,7 +93,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
         """
         return self._entity_mapper.map_quote(node)
 
-    def _save_entities(self, entities: List[Quote]) -> None:
+    def _save_entities(self, entities: list[Quote]) -> None:
         """Save quotes to repository.
 
         Args:
@@ -131,7 +131,7 @@ class QuotesExtractor(BaseExtractor[Quote]):
         """
         self._save_notes_and_attachments(related_entities)
 
-    def _get_entities_from_last_batch(self) -> List[Quote]:
+    def _get_entities_from_last_batch(self) -> list[Quote]:
         """Get quotes from the last extraction batch.
 
         Returns:

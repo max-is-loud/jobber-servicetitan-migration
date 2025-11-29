@@ -107,10 +107,7 @@ class DownloadFilters:
         if self.min_size is not None and file_size < self.min_size:
             return False
 
-        if self.max_size is not None and file_size > self.max_size:
-            return False
-
-        return True
+        return not (self.max_size is not None and file_size > self.max_size)
 
     def matches_parent_type(self, parent_type: str) -> bool:
         """Check if parent entity type matches filter.

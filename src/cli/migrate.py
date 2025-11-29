@@ -7,9 +7,9 @@ import typer
 
 from src.constants import (
     DEFAULT_OPTIMIZATION_LEVEL,
-    MIGRATION_EMOJI,
     ERROR_EMOJI,
     INFO_EMOJI,
+    MIGRATION_EMOJI,
 )
 from src.exceptions import (
     ConfigurationError,
@@ -25,15 +25,15 @@ def _check_authentication(console) -> None:
     """Check if user is authenticated before allowing migration operations."""
     import os
     import sys
+
     from src.auth import AuthProvider
     from src.exceptions import OAuth2Error
 
     # Check for environment token first
     jobber_token = os.environ.get("JOBBER_TOKEN")
-    if jobber_token:
-        # Simple validation - make sure it's not empty
-        if jobber_token.strip():
-            return  # Authentication via environment token is valid
+    # Simple validation - make sure it's not empty
+    if jobber_token and jobber_token.strip():
+        return  # Authentication via environment token is valid
 
     # Check OAuth2 authentication
     try:
@@ -61,7 +61,8 @@ def _check_authentication(console) -> None:
     console.print("1. [green]Environment Token:[/green] Set JOBBER_TOKEN environment variable")
     console.print("2. [green]OAuth2 Setup:[/green] Run 'tightbeam oauth init' to authenticate")
     console.print(
-        f"\n[yellow]{INFO_EMOJI} For more information:[/yellow] Run 'tightbeam oauth status' to check your current authentication"
+        f"\n[yellow]{INFO_EMOJI} For more information:[/yellow] "
+        "Run 'tightbeam oauth status' to check your current authentication"
     )
     sys.exit(1)
 
@@ -182,9 +183,11 @@ def download_attachments(
         # Specify custom database and output directory
         tightbeam migrate download-attachments --db ./data/export.db --output-dir ./files
     """
+    import time
     from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from src.extractors.attachment_downloader import AttachmentDownloader
-    from src.ui import MultiProgressDisplay
+    from src.ui.migration_ui import MigrationUI
 
     # Resolve database path with environment variable and config fallback
     db = SharedServices.resolve_db_path(db)
@@ -196,7 +199,7 @@ def download_attachments(
     # Validate database exists
     if not db.exists():
         console.print(f"{ERROR_EMOJI} Database not found: {db}", style="bold red")
-        console.print(f"   Run 'tightbeam migrate max-extract' first to extract metadata\n")
+        console.print("   Run 'tightbeam migrate max-extract' first to extract metadata\n")
         raise typer.Exit(code=1)
 
     try:
@@ -223,7 +226,7 @@ def download_attachments(
 
         if not pending_attachments:
             console.print(f"{INFO_EMOJI} No pending attachments found", style="yellow")
-            console.print(f"   All attachments already downloaded or no attachments in database\n")
+            console.print("   All attachments already downloaded or no attachments in database\n")
             return
 
         console.print(f"{INFO_EMOJI} Found {len(pending_attachments)} pending attachment(s)")
@@ -237,9 +240,9 @@ def download_attachments(
         failed_count = 0
         total_bytes_downloaded = 0
 
-        # Create a logger wrapper that routes to display instead of console
+        # Create a logger wrapper that suppresses output during progress display
         class DisplayLogger:
-            """Logger wrapper that sends output to MultiProgressDisplay."""
+            """Logger wrapper that suppresses output to avoid conflicting with MigrationUI."""
             def info(self, msg):
                 pass  # Suppress info messages
 
@@ -250,10 +253,13 @@ def download_attachments(
                 pass  # Success logged separately
 
             def warning(self, msg):
-                display.log(msg, level="warning")
+                pass  # Suppress warnings during display
 
             def error(self, msg):
-                display.log(msg, level="error")
+                pass  # Errors shown in summary
+
+            def log_summary(self, summary):
+                pass  # Suppress summary output
 
         display_logger = DisplayLogger()
 
@@ -267,16 +273,16 @@ def download_attachments(
         null_repository = NullRepository()
 
         # Worker function for parallel downloads
-        def download_worker(attachment, display, _unused_task_id):
+        def download_worker(attachment, migration_ui, _unused_task_id):
             try:
                 # Create progress task when worker starts (not upfront for all 30k files)
                 file_size = attachment.file_size or 0
                 task_name = attachment.file_name or attachment.id[:12]
-                task_id = display.add_task(task_name, total_bytes=file_size)
+                task_id = migration_ui.add_download_task(task_name, file_size)
 
                 # Create progress callback
                 def progress_callback(bytes_chunk: int):
-                    display.update(task_id, advance=bytes_chunk)
+                    migration_ui.update_download_task(task_id, bytes_chunk)
 
                 # Create downloader for this thread - use null repository and display logger
                 # to prevent SQLite threading issues (main thread handles all DB writes)
@@ -312,7 +318,7 @@ def download_attachments(
 
                 # Hide progress bar immediately when download completes
                 # (Don't wait for main thread DB write - that causes "jammed" appearance)
-                display.complete_task(task_id, task_name)
+                migration_ui.complete_download_task(task_id, task_name)
 
                 return {
                     "attachment": attachment,
@@ -329,103 +335,101 @@ def download_attachments(
                     "task_id": None,
                 }
 
-        # Download with multi-progress display
+        # Download with MigrationUI progress display
+        migration_ui = MigrationUI(console)
+        start_time = time.time()
+
         try:
-            with MultiProgressDisplay(
-                console=console,
-                max_workers=max_workers,
-                description=f"Downloading {len(pending_attachments)} attachments",
-                show_speed=True,
-            ) as display:
-                # Start overall progress
-                display.start_overall(
-                    total_items=len(pending_attachments),
-                    total_bytes=total_bytes,
-                )
+            # Start download progress tracking
+            migration_ui.start_download_progress(
+                total_files=len(pending_attachments),
+                total_bytes=total_bytes,
+            )
 
-                # Submit all downloads (but don't create progress tasks yet - worker will handle that)
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = {}
+            # Submit all downloads (but don't create progress tasks yet - worker will handle that)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {}
 
-                    for attachment in pending_attachments:
-                        file_size = attachment.file_size or 0
-                        task_name = attachment.file_name or attachment.id[:12]
+                for attachment in pending_attachments:
+                    task_name = attachment.file_name or attachment.id[:12]
 
-                        # Note: We create the progress task inside the worker function
-                        # to avoid creating 30,000 tasks upfront
-                        # Submit worker WITHOUT pre-creating task
-                        future = executor.submit(download_worker, attachment, display, None)
-                        futures[future] = (attachment, None, task_name)
+                    # Note: We create the progress task inside the worker function
+                    # to avoid creating 30,000 tasks upfront
+                    # Submit worker WITHOUT pre-creating task
+                    future = executor.submit(download_worker, attachment, migration_ui, None)
+                    futures[future] = (attachment, None, task_name)
 
-                    # Process results as they complete
-                    try:
-                        for future in as_completed(futures):
-                            attachment, _, task_name = futures[future]
-                            result = future.result()
+                # Process results as they complete
+                try:
+                    for future in as_completed(futures):
+                        attachment, _, task_name = futures[future]
+                        result = future.result()
 
-                            if result["success"]:
-                                # Update database in main thread (thread-safe)
-                                repository.update_attachment_download(
-                                    attachment_id=attachment.id,
-                                    local_file_path=result["result"].get("local_file_path", ""),
-                                    hash=result["result"].get("hash", ""),
-                                    download_status="completed",
-                                    downloaded_at=result["result"].get("downloaded_at"),
-                                )
+                        if result["success"]:
+                            # Update database in main thread (thread-safe)
+                            repository.update_attachment_download(
+                                attachment_id=attachment.id,
+                                local_file_path=result["result"].get("local_file_path", ""),
+                                hash=result["result"].get("hash", ""),
+                                download_status="completed",
+                                downloaded_at=result["result"].get("downloaded_at"),
+                            )
 
-                                downloaded_count += 1
-                                total_bytes_downloaded += result["result"].get("bytes_downloaded", 0)
-                                display.log(f"✓ {task_name} ({result['result'].get('bytes_downloaded', 0):,} bytes)")
-                            else:
-                                # Update database with failure in main thread (thread-safe)
-                                error_msg = result["result"].get("error_message", "Unknown error")
-                                repository.update_attachment_download(
-                                    attachment_id=attachment.id,
-                                    download_status="failed",
-                                    download_error=error_msg,
-                                )
+                            downloaded_count += 1
+                            total_bytes_downloaded += result["result"].get("bytes_downloaded", 0)
+                        else:
+                            # Update database with failure in main thread (thread-safe)
+                            error_msg = result["result"].get("error_message", "Unknown error")
+                            repository.update_attachment_download(
+                                attachment_id=attachment.id,
+                                download_status="failed",
+                                download_error=error_msg,
+                            )
 
-                                failed_count += 1
-                                display.log(f"✗ {task_name} - {error_msg}", level="error")
+                            failed_count += 1
 
-                            # Note: Task is already hidden by worker thread (no need to call complete_task here)
+                        # Note: Task is already hidden by worker thread (no need to call complete_task here)
 
-                    except KeyboardInterrupt:
-                        # Show prominent shutdown message in display
-                        display.log("", level="info")  # Blank line
-                        display.log("[bold yellow on red] SHUTDOWN REQUESTED - Ctrl+C detected [/bold yellow on red]", level="info")
-                        display.log("[yellow]Waiting for active downloads to complete to avoid file corruption...[/yellow]", level="info")
-                        display.log("[yellow]Press Ctrl+C again to force quit (may corrupt files)[/yellow]", level="info")
-                        display.log("", level="info")  # Blank line
-
-                        # Cancel all pending futures immediately
-                        for future in futures:
-                            future.cancel()
-                        # Executor context manager will clean up
-                        raise  # Re-raise to outer except
+                except KeyboardInterrupt:
+                    # Cancel all pending futures immediately
+                    for future in futures:
+                        future.cancel()
+                    # Executor context manager will clean up
+                    raise  # Re-raise to outer except
 
         except KeyboardInterrupt:
-            console.print("\n[yellow]Download interrupted by user. Partial results below.[/yellow]\n")
+            # Show keyboard interrupt message with MigrationUI
+            migration_ui.show_keyboard_interrupt()
             # Fall through to show partial summary
+        finally:
+            # Finalize the MigrationUI display
+            migration_ui.finalize()
 
-        # Display summary (unless completely interrupted)
+        # Calculate duration
+        duration = time.time() - start_time
+
+        # Display summary using MigrationUI (unless completely interrupted)
         if downloaded_count > 0 or failed_count > 0:
-            console.print("📊 Download Summary:", style="bold cyan")
-            console.print(f"   ✓ Success: {downloaded_count} files ({_format_bytes(total_bytes_downloaded)})")
-            if failed_count > 0:
-                console.print(f"   ✗ Failed: {failed_count} files", style="bold red")
-            console.print()
+            migration_ui.show_download_summary(
+                total_files=downloaded_count,
+                total_bytes=total_bytes_downloaded,
+                duration=duration,
+                failures=failed_count,
+            )
 
             if failed_count > 0:
-                console.print(f"{INFO_EMOJI} Check database download_error field for failure details:")
-                console.print(f"   SELECT id, file_name, download_error FROM attachments WHERE download_status = 'failed'\n")
+                console.print(f"\n{INFO_EMOJI} Check database download_error field for failure details:")
+                console.print(
+                    "   SELECT id, file_name, download_error FROM attachments "
+                    "WHERE download_status = 'failed'\n"
+                )
 
     except ConfigurationError as e:
         console.print(f"{ERROR_EMOJI} Configuration error: {e}", style="bold red")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except Exception as e:
         console.print(f"{ERROR_EMOJI} Unexpected error: {e}", style="bold red")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 def _format_bytes(bytes_count: int) -> str:
@@ -500,18 +504,16 @@ def max_extract(
         tightbeam migrate max-extract --optimization-level aggressive
     """
     from src.coordinators.max_extract_coordinator import MaxExtractCoordinator
+    from src.ui.migration_ui import MigrationUI
 
     # Resolve database path with environment variable and config fallback
     db = SharedServices.resolve_db_path(db)
 
+    # Brief startup message (MigrationUI will show the detailed header)
     console.print(f"\n{MIGRATION_EMOJI} Starting Jobber Max Extract (Pass 1: Metadata)")
-    console.print(f"   Database: {db}")
     console.print(f"   Optimization level: {optimization_level}")
-    console.print(f"   Resume: {resume}")
     if entities:
         console.print(f"   Entities: {', '.join(entities)}")
-    else:
-        console.print(f"   Entities: ALL (in dependency order)")
     console.print()
 
     try:
@@ -520,56 +522,41 @@ def max_extract(
         logger = ServiceFactory.create_logger(verbose=True)
         config_manager = ServiceFactory.create_config_manager()
 
-        # Create authenticated Jobber client with rate limiting
+        # Create MigrationUI for Rich-based progress display (before JobberClient)
+        migration_ui = MigrationUI(console)
+
+        # Create authenticated Jobber client with rate limiting and UI integration
         auth_provider = ServiceFactory.create_auth_provider(repository, logger)
         jobber_client = ServiceFactory.create_rate_limited_jobber_client(
             auth_provider=auth_provider,
             repository=repository,
             config_manager=config_manager,
             optimization_level=optimization_level,
+            migration_ui=migration_ui,
         )
 
         # Create entity mapper
         entity_mapper = ServiceFactory.create_entity_mapper()
 
-        # Initialize coordinator
+        # Initialize coordinator with MigrationUI
         coordinator = MaxExtractCoordinator(
             jobber_client=jobber_client,
             repository=repository,
             logger=logger,
             entity_mapper=entity_mapper,
+            migration_ui=migration_ui,
+            db_path=str(db),
         )
 
-        # Execute extraction
-        console.print(f"{INFO_EMOJI} Beginning extraction...\n")
-
+        # Execute extraction (UI is handled by coordinator)
         summary = coordinator.extract_all(
             entities=entities,
             resume=resume,
         )
 
-        # Display results
+        # Simple completion message (detailed summary shown by MigrationUI during extraction)
         console.print(f"\n{MIGRATION_EMOJI} Extraction Complete!")
-        console.print(f"\n📊 Summary:")
         console.print(f"   Total entities extracted: {summary['total_entities']}")
-        console.print(f"   Entity types processed: {len(summary['results'])}")
-
-        # Show per-entity breakdown
-        console.print(f"\n📦 By Entity Type:")
-        for entity_type, count in summary['results'].items():
-            # Special handling for notes - they're extracted inline, not as a separate entity
-            if entity_type == "notes":
-                # Query actual note count from database
-                try:
-                    note_count = repository._connection.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
-                    status_icon = "✓" if note_count > 0 else "○"
-                    console.print(f"   {status_icon} {entity_type}: {note_count} (extracted inline)")
-                except Exception:
-                    # If query fails, skip notes entirely
-                    continue
-            else:
-                status_icon = "✓" if count > 0 else "○"
-                console.print(f"   {status_icon} {entity_type}: {count}")
 
         # Show errors if any
         if summary['errors']:
@@ -577,11 +564,18 @@ def max_extract(
             for error in summary['errors']:
                 console.print(f"   ✗ {error['entity_type']}: {error['error']}", style="bold red")
 
-        console.print(f"\n{INFO_EMOJI} Next step: Run 'tightbeam migrate download-attachments' to fetch binaries (Pass 2)\n")
+        console.print(
+            f"\n{INFO_EMOJI} Next step: Run 'tightbeam migrate download-attachments' "
+            "to fetch binaries (Pass 2)\n"
+        )
 
+    except KeyboardInterrupt:
+        # Graceful shutdown already handled by MigrationUI
+        console.print()  # Add spacing
+        raise typer.Exit(code=130) from None
     except ConfigurationError as e:
         console.print(f"{ERROR_EMOJI} Configuration error: {e}", style="bold red")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except Exception as e:
         console.print(f"{ERROR_EMOJI} Extraction failed: {e}", style="bold red")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None

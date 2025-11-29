@@ -1,6 +1,5 @@
 """Configuration manager implementation for TightBeam v2."""
 
-import os
 import threading
 import time
 from pathlib import Path
@@ -370,7 +369,7 @@ class ConfigManagerImpl:
             # Watch the config directory for changes
             self._observer.schedule(handler, str(self.config_dir), recursive=False)
             self._observer.start()
-        except Exception as e:
+        except Exception:
             # Silently disable hot reload if watchdog is not available
             self.enable_hot_reload = False
 

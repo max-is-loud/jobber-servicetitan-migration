@@ -2,14 +2,14 @@ from __future__ import annotations
 
 """UsersExtractor for extracting User entities from Jobber GraphQL API."""
 
-from typing import Any, List, Optional
+from typing import Any
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
 from ..exceptions import MappingError
 from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import User
+from ..models import Note, User
 from ..repositories import Repository
 from .base_extractor import BaseExtractor
 
@@ -32,7 +32,7 @@ class UsersExtractor(BaseExtractor[User]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
-        config_manager: Optional[ConfigManagerImpl] = None,
+        config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
         **kwargs,
     ) -> None:
@@ -45,7 +45,7 @@ class UsersExtractor(BaseExtractor[User]):
             logger: Logger for structured output and progress tracking
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
-            **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
+            **kwargs: Reserved for future use
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -59,9 +59,9 @@ class UsersExtractor(BaseExtractor[User]):
             **kwargs,
         )
         # Track entities from last batch for extract_all
-        self._last_batch_entities: List[User] = []
+        self._last_batch_entities: list[User] = []
 
-    def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
+    def _fetch_page(self, cursor: str | None = None) -> dict[str, Any]:
         """Fetch a page of users from the Jobber API.
 
         Args:
@@ -72,7 +72,7 @@ class UsersExtractor(BaseExtractor[User]):
         """
         return self._jobber_client.fetch_users(cursor)
 
-    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -97,7 +97,7 @@ class UsersExtractor(BaseExtractor[User]):
         """
         return self._entity_mapper.map_user(node)
 
-    def _save_entities(self, entities: List[User]) -> None:
+    def _save_entities(self, entities: list[User]) -> None:
         """Save users to repository.
 
         Args:
@@ -111,7 +111,7 @@ class UsersExtractor(BaseExtractor[User]):
         """Extract users data from GraphQL response."""
         return response.get("data", {}).get("users", {})
 
-    def _extract_related_entities(self, node: dict[str, Any], primary_entity: User) -> dict[str, List[Note]]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: User) -> dict[str, list[Note]]:
         """Extract notes related to the user.
 
         Args:
@@ -142,7 +142,7 @@ class UsersExtractor(BaseExtractor[User]):
 
         return related
 
-    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, list[Note]]) -> None:
         """Save notes related to users.
 
         Args:
@@ -152,7 +152,7 @@ class UsersExtractor(BaseExtractor[User]):
         if notes:
             self._repository.save_notes(notes)
 
-    def _get_entities_from_last_batch(self) -> List[User]:
+    def _get_entities_from_last_batch(self) -> list[User]:
         """Get users from the last extraction batch.
 
         Returns:

@@ -5,9 +5,10 @@ subcommand modules using Typer's add_typer functionality.
 It's designed to be minimal and maintainable.
 """
 
+from typing import Annotated
+
 import typer
 from dotenv import load_dotenv
-from typing import Annotated
 
 from src.cli.migrate import migrate_app
 from src.cli.oauth import oauth_app

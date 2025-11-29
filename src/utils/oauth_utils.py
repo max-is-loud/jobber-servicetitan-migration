@@ -9,7 +9,7 @@ import os
 import subprocess
 import webbrowser
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from rich.console import Console
 

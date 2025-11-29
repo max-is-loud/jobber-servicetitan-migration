@@ -669,17 +669,6 @@ class TestMigrateStartCommand(TestCLIRunner):
         assert "single-pass" in result.stdout.lower()
         assert "multi-pass" in result.stdout.lower()
 
-    def test_migrate_start_shows_multi_pass_options(self, runner, monkeypatch):
-        """Test migrate start help shows multi-pass specific options."""
-        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
-
-        result = runner.invoke(app, ["migrate", "start", "--help"])
-        assert result.exit_code == 0
-        assert "--entity" in result.stdout or "--entities" in result.stdout
-        assert "--snapshot-label" in result.stdout
-        assert "--report-dir" in result.stdout
-        assert "--resume" in result.stdout
-
     def test_migrate_start_single_pass_default(self, runner, monkeypatch):
         """Test migrate start defaults to single-pass mode."""
         monkeypatch.setenv("JOBBER_TOKEN", "test_token")
@@ -690,132 +679,6 @@ class TestMigrateStartCommand(TestCLIRunner):
                     result = runner.invoke(app, ["migrate", "start"])
                     # Should delegate to migrate_all when --use-multi-pass is not specified
                     assert mock_all.called
-
-    def test_migrate_start_multi_pass_flag(self, runner, monkeypatch):
-        """Test migrate start --use-multi-pass runs multi-pass strategy."""
-        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
-
-        with patch("src.cli.migrate._check_authentication"):
-            with patch("src.cli.services.ServiceFactory.create_repository") as mock_repo:
-                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
-                    with patch("src.cli.services.ServiceFactory.create_rate_limited_jobber_client"):
-                        with patch("src.coordinators.map_mode_coordinator.MapModeCoordinator") as mock_map:
-                            with patch(
-                                "src.coordinators.extract_mode_coordinator.ExtractModeCoordinator"
-                            ) as mock_extract:
-                                # Mock repository instance
-                                mock_repo_instance = Mock()
-                                mock_repo_instance.get_map_snapshot.return_value = Mock(label="test-label")
-                                mock_repo.return_value = mock_repo_instance
-
-                                # Mock map coordinator
-                                mock_map_instance = Mock()
-                                mock_map_instance.run_map_pass.return_value = {
-                                    "snapshot_id": "test-snapshot",
-                                    "label": "test-label",
-                                    "entity_results": {},
-                                    "totals": {},
-                                    "duration": 10.0,
-                                }
-                                mock_map_instance.identify_hotspots.return_value = []
-                                mock_map_instance.get_density_stats.return_value = {}
-                                mock_map.return_value = mock_map_instance
-
-                                # Mock extract coordinator
-                                mock_extract_instance = Mock()
-                                mock_extract_instance.run_extract_pass.return_value = {
-                                    "entity_results": {},
-                                    "attachment_result": {},
-                                    "discrepancies": [],
-                                    "totals": {},
-                                    "duration": 20.0,
-                                }
-                                mock_extract.return_value = mock_extract_instance
-
-                                # Mock report generators
-                                with patch("src.reports.MapReportGenerator") as mock_map_report:
-                                    with patch("src.reports.ExtractReportGenerator") as mock_extract_report:
-                                        mock_map_report.return_value.generate_report.return_value = (
-                                            "map.md",
-                                            "map.json",
-                                        )
-                                        mock_extract_report.return_value.generate_report.return_value = (
-                                            "extract.md",
-                                            "extract.json",
-                                        )
-
-                                        result = runner.invoke(app, ["migrate", "start", "--use-multi-pass"])
-
-                                        # Verify both coordinators were called
-                                        assert mock_map_instance.run_map_pass.called
-                                        assert mock_extract_instance.run_extract_pass.called
-
-    def test_migrate_start_multi_pass_with_entities(self, runner, monkeypatch):
-        """Test migrate start --use-multi-pass with specific entities."""
-        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
-
-        with patch("src.cli.migrate._check_authentication"):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "start",
-                    "--use-multi-pass",
-                    "--entity",
-                    "clients",
-                    "--entity",
-                    "invoices",
-                    "--help",
-                ],
-            )
-            assert result.exit_code == 0
-
-    def test_migrate_start_multi_pass_with_snapshot_label(self, runner, monkeypatch):
-        """Test migrate start --use-multi-pass with snapshot label."""
-        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
-
-        with patch("src.cli.migrate._check_authentication"):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "start",
-                    "--use-multi-pass",
-                    "--snapshot-label",
-                    "test-migration",
-                    "--help",
-                ],
-            )
-            assert result.exit_code == 0
-
-    def test_migrate_start_multi_pass_with_report_dir(self, runner, monkeypatch):
-        """Test migrate start --use-multi-pass with custom report directory."""
-        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
-
-        with patch("src.cli.migrate._check_authentication"):
-            result = runner.invoke(
-                app,
-                [
-                    "migrate",
-                    "start",
-                    "--use-multi-pass",
-                    "--report-dir",
-                    "./custom-reports",
-                    "--help",
-                ],
-            )
-            assert result.exit_code == 0
-
-    def test_migrate_start_multi_pass_with_resume(self, runner, monkeypatch):
-        """Test migrate start --use-multi-pass with resume flag."""
-        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
-
-        with patch("src.cli.migrate._check_authentication"):
-            result = runner.invoke(
-                app,
-                ["migrate", "start", "--use-multi-pass", "--resume", "--help"],
-            )
-            assert result.exit_code == 0
 
     def test_migrate_start_backward_compatibility(self, runner, monkeypatch):
         """Test migrate start maintains backward compatibility with single-pass."""
@@ -831,21 +694,6 @@ class TestMigrateStartCommand(TestCLIRunner):
                     assert mock_all.called
                     # Verify it was called with correct parameters
                     assert mock_all.call_count == 1
-
-    def test_migrate_start_multi_pass_invalid_entity(self, runner, monkeypatch):
-        """Test migrate start --use-multi-pass with invalid entity type."""
-        monkeypatch.setenv("JOBBER_TOKEN", "test_token")
-
-        with patch("src.cli.migrate._check_authentication"):
-            with patch("src.cli.services.ServiceFactory.create_repository"):
-                with patch("src.cli.services.ServiceFactory.create_oauth2_manager"):
-                    result = runner.invoke(
-                        app,
-                        ["migrate", "start", "--use-multi-pass", "--entity", "invalid_entity"],
-                    )
-                    # Should fail with invalid entity type
-                    assert result.exit_code != 0
-                    assert "Invalid entity" in result.stdout or "invalid" in result.stdout.lower()
 
     def test_migrate_start_all_options_combined(self, runner, monkeypatch, temp_db):
         """Test migrate start with all options combined."""

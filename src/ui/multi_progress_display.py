@@ -1,24 +1,22 @@
 """Reusable multi-progress display for concurrent operations."""
 
-from collections import deque
 from threading import Lock
 from typing import Dict, Optional
-from rich.console import Console, RenderableType, Group
+
+from rich.console import Console, RenderableType
 from rich.layout import Layout
 from rich.live import Live
+from rich.panel import Panel
 from rich.progress import (
-    Progress,
-    TextColumn,
     BarColumn,
     DownloadColumn,
-    TransferSpeedColumn,
-    TimeRemainingColumn,
+    Progress,
     TaskID,
-    Task,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
 )
-from rich.panel import Panel
 from rich.text import Text
-from rich.table import Table
 
 
 class MultiProgressDisplay:

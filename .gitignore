@@ -209,6 +209,7 @@ downloads/
 /WIP*.md
 /SCRATCH*.md
 /PLAN*.md
+/verification_report.md
 # Only README.md is allowed in project root (CLAUDE.md is ignored above)
 
 # Temporary data and cache
@@ -228,3 +229,6 @@ shrimp-rules.md
 oauth_tokens.db
 credentials.json
 secrets.json
+
+# Migration log files
+logs/

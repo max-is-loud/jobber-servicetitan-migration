@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Generic, List, Optional, Type, TypeVar
+from typing import Any, Generic, List, TypeVar
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
@@ -110,9 +110,9 @@ class BaseExtractor(ABC, Generic[T]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
-        entity_type: Type[T],
+        entity_type: type[T],
         entity_name: str,
-        config_manager: Optional[ConfigManagerImpl] = None,
+        config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
         **kwargs,
     ) -> None:
@@ -127,9 +127,7 @@ class BaseExtractor(ABC, Generic[T]):
             entity_name: Human-readable name of entity for logging
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
-            **kwargs: Additional optional parameters:
-                - queue_attachments: If True, queue attachments instead of downloading (default: False)
-                - map_snapshot_id: Required if queue_attachments is True, for attachment queue foreign key
+            **kwargs: Reserved for future use
         """
         self._jobber_client = jobber_client
         self._entity_mapper = entity_mapper
@@ -169,11 +167,6 @@ class BaseExtractor(ABC, Generic[T]):
         self._download_failures = 0
         self._attachment_mapping_failures = 0
 
-        # Extract mode attachment queuing (Phase 3)
-        self._queue_attachments = kwargs.get("queue_attachments", False)
-        self._map_snapshot_id = kwargs.get("map_snapshot_id")
-        self._attachments_queued = 0  # Track attachments added to queue
-
         # Data quality issue tracking - detailed failure information
         # Preserves specific IDs and errors for debugging and reporting
         self._data_quality_issues: list[dict[str, Any]] = []
@@ -181,6 +174,9 @@ class BaseExtractor(ABC, Generic[T]):
         # Note reference collector for deferred note loading (Phase 2)
         # Optional - only provided for extractors that collect note IDs
         self._note_reference_collector = kwargs.get("note_reference_collector")
+
+        # Progress callback for UI updates (set by coordinator)
+        self._progress_callback = None
 
     @staticmethod
     def _pluralize(word: str) -> str:
@@ -200,7 +196,7 @@ class BaseExtractor(ABC, Generic[T]):
         else:
             return word + 's'
 
-    def _filter_new_entities(self, entities: List[T]) -> tuple[List[T], int]:
+    def _filter_new_entities(self, entities: list[T]) -> tuple[list[T], int]:
         """Filter out existing entities if skip logic is enabled.
 
         Uses batch existence checking to avoid N+1 query pattern.
@@ -236,7 +232,7 @@ class BaseExtractor(ABC, Generic[T]):
         return new_entities, skipped_count
 
     @abstractmethod
-    def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
+    def _fetch_page(self, cursor: str | None = None) -> dict[str, Any]:
         """Fetch a page of entities from the Jobber API.
 
         Args:
@@ -248,7 +244,7 @@ class BaseExtractor(ABC, Generic[T]):
         ...
 
     @abstractmethod
-    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -291,7 +287,7 @@ class BaseExtractor(ABC, Generic[T]):
         ...
 
     @abstractmethod
-    def _save_entities(self, entities: List[T]) -> None:
+    def _save_entities(self, entities: list[T]) -> None:
         """Save entities to repository.
 
         Args:
@@ -299,7 +295,7 @@ class BaseExtractor(ABC, Generic[T]):
         """
         ...
 
-    def _fetch_single(self, entity_id: str) -> Optional[dict[str, Any]]:
+    def _fetch_single(self, entity_id: str) -> dict[str, Any] | None:
         """Fetch a single entity by ID using GraphQL node interface.
 
         This method uses the GraphQL node(id:) interface to fetch a single entity.
@@ -340,11 +336,9 @@ class BaseExtractor(ABC, Generic[T]):
             return None
 
     def extract_single(self, entity_id: str) -> dict[str, Any]:
-        """Extract a single entity by ID for queue-based extraction.
+        """Extract a single entity by ID.
 
-        Used in extract mode to fetch and process individual entities from the
-        extract queue. Performs complete extraction for one entity including
-        related entities (notes, attachments, etc.).
+        Performs complete extraction for one entity including related entities (notes, attachments, etc.).
 
         Args:
             entity_id: The ID of the entity to extract
@@ -448,7 +442,7 @@ class BaseExtractor(ABC, Generic[T]):
         """
         pass
 
-    def get_resume_cursor(self, entity_type_name: str) -> Optional[str]:
+    def get_resume_cursor(self, entity_type_name: str) -> str | None:
         """Get the last saved cursor position for resuming extraction.
 
         Args:
@@ -467,7 +461,7 @@ class BaseExtractor(ABC, Generic[T]):
             self._logger.debug(f"Failed to get resume cursor for {entity_type_name}: {e}")
             return None
 
-    def _save_cursor_progress(self, entity_type_name: str, cursor: Optional[str]) -> None:
+    def _save_cursor_progress(self, entity_type_name: str, cursor: str | None) -> None:
         """Save cursor position for resumption.
 
         Args:
@@ -494,8 +488,8 @@ class BaseExtractor(ABC, Generic[T]):
 
     def extract(
         self,
-        cursor: Optional[str] = None,
-        page_limit: Optional[int] = None,
+        cursor: str | None = None,
+        page_limit: int | None = None,
     ) -> dict[str, Any]:
         """Extract entities from Jobber GraphQL API with cursor-based pagination.
 
@@ -575,6 +569,10 @@ class BaseExtractor(ABC, Generic[T]):
                         self._logger.debug(f"Failed to extract totalCount: {e}")
                         self._total_count = None
 
+                    # Initialize progress bar immediately after getting total count
+                    if self._progress_callback:
+                        self._progress_callback(0)
+
                 if not edges:
                     self._logger.debug(f"No more {self._entity_name} data to process")
                     break
@@ -610,6 +608,10 @@ class BaseExtractor(ABC, Generic[T]):
                     if entities_to_save:
                         self._save_entities(entities_to_save)
                         entities_processed += len(entities_to_save)
+
+                    # Update progress callback if set (for UI updates)
+                    if self._progress_callback:
+                        self._progress_callback(entities_processed)
 
                     # Log with processed vs skipped counts and percentage if available
                     if hasattr(self, '_total_count') and self._total_count:
@@ -720,7 +722,7 @@ class BaseExtractor(ABC, Generic[T]):
             self._logger.error(f"{self._entity_name} extraction failed: {e}")
             raise
 
-    def extract_all(self, resume: bool = False) -> List[T]:
+    def extract_all(self, resume: bool = False) -> list[T]:
         """Extract all entities with automatic pagination and resumable checkpoints.
 
         Continuously calls extract() with cursor pagination until all available
@@ -742,7 +744,6 @@ class BaseExtractor(ABC, Generic[T]):
             ConfigurationError: If authentication or configuration is invalid
             RepositoryError: If database operations fail
         """
-        all_entities = []
         cursor = None
         total_pages = 0
         total_fetched = 0
@@ -807,7 +808,7 @@ class BaseExtractor(ABC, Generic[T]):
         return []
 
     @abstractmethod
-    def _get_entities_from_last_batch(self) -> List[T]:
+    def _get_entities_from_last_batch(self) -> list[T]:
         """Get entities from the last extraction batch.
 
         Used by extract_all to accumulate entities.
@@ -817,7 +818,7 @@ class BaseExtractor(ABC, Generic[T]):
         """
         ...
 
-    def get_entity_count(self) -> Optional[int]:
+    def get_entity_count(self) -> int | None:
         """Get total count of entities available for extraction.
 
         Returns totalCount from API if available, otherwise None.
@@ -965,7 +966,7 @@ class BaseExtractor(ABC, Generic[T]):
         entities_skipped: int,
         pages_processed: int,
         extraction_time: float,
-        last_cursor: Optional[str],
+        last_cursor: str | None,
         status: str,
         error_count: int,
     ) -> None:
@@ -1421,13 +1422,8 @@ class BaseExtractor(ABC, Generic[T]):
     def _save_notes_and_attachments(self, related_entities: dict[str, Any]) -> None:
         """Save notes and attachments to repository.
 
-        Changed to inline extraction pattern:
-        - Notes are extracted inline and saved immediately
-        - Attachments are processed as before
-
-        In queue mode (queue_attachments=True), attachments are added to attachment_queue
-        for later batch processing. Otherwise, downloads attachment files and updates metadata
-        with local file paths before saving (unless auto_download is disabled).
+        Notes are extracted inline and saved immediately.
+        Attachments are downloaded if auto_download is enabled, otherwise metadata only is saved.
 
         Args:
             related_entities: Dictionary with 'notes' and 'attachments' lists
@@ -1437,13 +1433,9 @@ class BaseExtractor(ABC, Generic[T]):
         if notes:
             self._repository.save_notes(notes)
 
-        # Handle attachments (queue or download)
+        # Handle attachments
         attachments = related_entities.get("attachments", [])
         if attachments:
-            # Extract mode: queue attachments for later batch processing
-            if self._queue_attachments:
-                self._queue_attachments_for_download(attachments)
-                return
             # Track total attachments processed
             self._attachments_processed += len(attachments)
 
@@ -1489,56 +1481,3 @@ class BaseExtractor(ABC, Generic[T]):
 
             # Save all attachments with updated file paths
             self._repository.save_attachments(attachments_with_files)
-
-    def _queue_attachments_for_download(self, attachments: List[Attachment]) -> None:
-        """Queue attachments for batch download processing.
-
-        Used in extract mode to decouple attachment downloads from entity extraction.
-        Adds attachments to attachment_queue table for later processing, enabling:
-        - Retry of failed downloads without re-fetching parent entity
-        - Batch download processing with separate progress tracking
-        - Status tracking per attachment (pending/in_progress/done/failed)
-
-        Args:
-            attachments: List of Attachment domain models to queue
-
-        Raises:
-            ConfigurationError: If map_snapshot_id is not set (required for queuing)
-        """
-        if not self._map_snapshot_id:
-            raise ConfigurationError("map_snapshot_id is required when queue_attachments=True")
-
-        # Prepare attachment queue items
-        attachment_queue_items = []
-        for attachment in attachments:
-            # Determine parent entity ID from note_id pattern
-            # Note IDs follow pattern: {parent_type}_{parent_id}_note_{note_number}
-            # Example: "client_12345_note_1" -> parent_type="clients", parent_id="12345"
-            note_id_parts = attachment.note_id.split("_")
-            if len(note_id_parts) >= 2:
-                parent_type = f"{note_id_parts[0]}s"  # Convert singular to plural
-                parent_id = note_id_parts[1]
-            else:
-                # Fallback: use entity_name if note_id pattern doesn't match
-                parent_type = self._entity_name
-                parent_id = attachment.note_id.split("_")[0] if "_" in attachment.note_id else attachment.note_id
-
-            attachment_queue_items.append(
-                {
-                    "attachment_id": attachment.id,
-                    "parent_type": parent_type,
-                    "parent_id": parent_id,
-                }
-            )
-
-        # Save attachments metadata first
-        self._repository.save_attachments(attachments)
-
-        # Add to attachment queue
-        if attachment_queue_items:
-            self._repository.create_attachment_queue(
-                snapshot_id=self._map_snapshot_id,
-                attachments=attachment_queue_items,
-            )
-            self._attachments_queued += len(attachment_queue_items)
-            self._logger.debug(f"Queued {len(attachment_queue_items)} attachment(s) for download")

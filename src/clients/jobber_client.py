@@ -1297,6 +1297,7 @@ class JobberClient:
         http_client: Optional[IHttpClient] = None,
         metrics_collector: Optional[MetricsCollector] = None,
         config_manager: Optional[ConfigManagerImpl] = None,
+        migration_ui: Optional[Any] = None,
     ) -> None:
         """
         Initialize the JobberClient with authentication provider.
@@ -1312,11 +1313,14 @@ class JobberClient:
                              monitoring features are disabled.
             config_manager: Optional ConfigManagerImpl for pagination settings.
                           If not provided, a new instance will be created.
+            migration_ui: Optional MigrationUI instance for displaying status
+                         messages in the full-screen layout.
         """
         self.auth_provider = auth_provider
 
         self.metrics_collector = metrics_collector
         self.config_manager = config_manager or ConfigManagerImpl()
+        self.migration_ui = migration_ui
 
         # Configure HTTP client with timeout settings
         if http_client:
@@ -1537,24 +1541,42 @@ class JobberClient:
                 current_time = time.time()
                 if current_time < self._rate_limit_reset_time:
                     wait_time = self._rate_limit_reset_time - current_time
-                    print(
-                        f"\n⏸️  Rate limit cooldown active (account-wide). "
-                        f"Waiting {wait_time:.1f}s until reset..."
-                    )
 
-                    # Countdown timer for cooldown period
-                    remaining = wait_time
-                    while remaining > 0:
-                        print(
-                            f"\r⏸️  Rate limit cooldown: {remaining:.1f}s remaining...",
-                            end="",
-                            flush=True
-                        )
-                        sleep_time = min(0.1, remaining)
-                        time.sleep(sleep_time)
-                        remaining -= sleep_time
+                    # Use MigrationUI if available, otherwise fall back to Rich Status
+                    if self.migration_ui:
+                        # Use full-screen layout status message
+                        remaining = wait_time
+                        while remaining > 0:
+                            self.migration_ui.set_status(
+                                f"⏸️  Rate limit cooldown: {remaining:.1f}s remaining..."
+                            )
+                            sleep_time = min(0.1, remaining)
+                            time.sleep(sleep_time)
+                            remaining -= sleep_time
 
-                    print("\r✅ Rate limit cooldown complete, resuming requests...".ljust(80))
+                        self.migration_ui.set_status(None)  # Clear status
+                        self.migration_ui.add_log("[green]✅ Rate limit cooldown complete, resuming requests...[/green]")
+                    else:
+                        # Fallback: Use Rich Status for in-place countdown
+                        from rich.console import Console
+                        console = Console()
+
+                        with console.status(
+                            f"[yellow]⏸️  Rate limit cooldown active (account-wide). "
+                            f"Waiting {wait_time:.1f}s until reset...[/yellow]",
+                            spinner="dots"
+                        ) as status:
+                            remaining = wait_time
+                            while remaining > 0:
+                                status.update(
+                                    f"[yellow]⏸️  Rate limit cooldown: {remaining:.1f}s remaining...[/yellow]"
+                                )
+                                sleep_time = min(0.1, remaining)
+                                time.sleep(sleep_time)
+                                remaining -= sleep_time
+
+                        console.print("[green]✅ Rate limit cooldown complete, resuming requests...[/green]")
+
                     # Clear the reset time now that we've waited
                     self._rate_limit_reset_time = None
 
@@ -2571,35 +2593,35 @@ class JobberClient:
     }}
     """
         elif entity_type == "expense":
-            return f"""
-    query GetExpense($id: EncodedId!) {{
-      expense(id: $id) {{
+            return """
+    query GetExpense($id: EncodedId!) {
+      expense(id: $id) {
         id
-        linkedJob {{
+        linkedJob {
           id
-        }}
+        }
         title
         description
         total
         date
-        enteredBy {{
+        enteredBy {
           id
-        }}
-        paidBy {{
+        }
+        paidBy {
           id
-        }}
-        reimbursableTo {{
+        }
+        reimbursableTo {
           id
-        }}
+        }
         createdAt
         updatedAt
-      }}
-    }}
+      }
+    }
     """
         elif entity_type == "productOrService":
-            return f"""
-    query GetProductService($id: EncodedId!) {{
-      productOrService(id: $id) {{
+            return """
+    query GetProductService($id: EncodedId!) {
+      productOrService(id: $id) {
         id
         name
         description
@@ -2612,28 +2634,28 @@ class JobberClient:
         visible
         onlineBookingsEnabled
         onlineBookingSortOrder
-      }}
-    }}
+      }
+    }
     """
         elif entity_type == "property":
-            return f"""
-    query GetProperty($id: EncodedId!) {{
-      property(id: $id) {{
+            return """
+    query GetProperty($id: EncodedId!) {
+      property(id: $id) {
         id
-        client {{
+        client {
           id
-        }}
+        }
         name
-        address {{
+        address {
           street1
           street2
           city
           province
           postalCode
           country
-        }}
-      }}
-    }}
+        }
+      }
+    }
     """
         elif entity_type == "request":
             # Query for Request using correct field names from Jobber API schema
@@ -2992,17 +3014,18 @@ class JobberClient:
         return entity_data.get("noteAttachments", {})
 
     # ========================================================================
-    # Map Mode Query Variants - Lightweight queries for discovery pass
+    # DEPRECATED: Map Mode Query Variants - Lightweight queries for discovery pass
     # ========================================================================
-    # These queries fetch minimal fields (id, updatedAt, totalCount) to enable
-    # fast entity discovery and relation counting. Used in multi-pass migration
-    # strategy to estimate extraction effort before full data retrieval.
+    # These queries fetch minimal fields (id, updatedAt, totalCount) for entity discovery.
+    # Note: Map mode and multi-pass migration are deprecated - these methods are retained
+    # for backward compatibility only. Use standard extractors with checkpoint-based
+    # progress tracking instead.
     # Cost: ~5-10 points per query vs ~100-500 for full queries
 
     def _get_clients_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for clients map mode."""
         size = page_size or self._get_pagination_size("clients")
-        return """
+        return f"""
     query GetClientsMap($cursor: String) {{
       clients(first: {size}, after: $cursor) {{
         totalCount
@@ -3024,12 +3047,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_invoices_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for invoices map mode."""
         size = page_size or self._get_pagination_size("invoices")
-        return """
+        return f"""
     query GetInvoicesMap($cursor: String) {{
       invoices(first: {size}, after: $cursor) {{
         totalCount
@@ -3051,12 +3074,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_quotes_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for quotes map mode."""
         size = page_size or self._get_pagination_size("quotes")
-        return """
+        return f"""
     query GetQuotesMap($cursor: String) {{
       quotes(first: {size}, after: $cursor) {{
         totalCount
@@ -3081,12 +3104,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_jobs_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for jobs map mode."""
         size = page_size or self._get_pagination_size("jobs")
-        return """
+        return f"""
     query GetJobsMap($cursor: String) {{
       jobs(first: {size}, after: $cursor) {{
         totalCount
@@ -3108,12 +3131,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_properties_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for properties map mode."""
         size = page_size or self._get_pagination_size("properties")
-        return """
+        return f"""
     query GetPropertiesMap($cursor: String) {{
       properties(first: {size}, after: $cursor) {{
         totalCount
@@ -3128,12 +3151,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_requests_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for requests map mode."""
         size = page_size or self._get_pagination_size("requests")
-        return """
+        return f"""
     query GetRequestsMap($cursor: String) {{
       requests(first: {size}, after: $cursor) {{
         totalCount
@@ -3155,12 +3178,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_users_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for users map mode."""
         size = page_size or self._get_pagination_size("users")
-        return """
+        return f"""
     query GetUsersMap($cursor: String) {{
       users(first: {size}, after: $cursor) {{
         totalCount
@@ -3176,12 +3199,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_expenses_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for expenses map mode."""
         size = page_size or self._get_pagination_size("expenses")
-        return """
+        return f"""
     query GetExpensesMap($cursor: String) {{
       expenses(first: {size}, after: $cursor) {{
         totalCount
@@ -3197,12 +3220,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_visits_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for visits map mode."""
         size = page_size or self._get_pagination_size("visits")
-        return """
+        return f"""
     query GetVisitsMap($cursor: String) {{
       visits(first: {size}, after: $cursor) {{
         totalCount
@@ -3218,12 +3241,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_timesheet_entries_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for timesheet entries map mode."""
         size = page_size or self._get_pagination_size("timesheetEntries")
-        return """
+        return f"""
     query GetTimesheetEntriesMap($cursor: String) {{
       timeSheetEntries(first: {size}, after: $cursor) {{
         totalCount
@@ -3239,12 +3262,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_products_services_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for products/services map mode."""
         size = page_size or self._get_pagination_size("productsAndServices")
-        return """
+        return f"""
     query GetProductsServicesMap($cursor: String) {{
       productOrServices(first: {size}, after: $cursor) {{
         totalCount
@@ -3259,12 +3282,12 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def _get_tax_rates_map_query(self, page_size: Optional[int] = None) -> str:
         """Get lightweight GraphQL query for tax rates map mode."""
         size = page_size or self._get_pagination_size("taxRates")
-        return """
+        return f"""
     query GetTaxRatesMap($cursor: String) {{
       taxRates(first: {size}, after: $cursor) {{
         totalCount
@@ -3279,7 +3302,7 @@ class JobberClient:
         }}
       }}
     }}
-    """.format(size=size)
+    """
 
     def fetch_clients_map(self, cursor: Optional[str] = None, page_size: Optional[int] = None) -> dict[str, Any]:
         """Fetch clients with minimal fields for map mode (discovery pass)."""

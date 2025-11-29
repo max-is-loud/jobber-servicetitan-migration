@@ -5,10 +5,9 @@ pagination sizes and page delays to achieve maximum throughput while
 avoiding API throttling.
 """
 
-import math
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from ..config import ConfigManagerImpl
 from ..interfaces import Logger
@@ -301,13 +300,14 @@ class AdaptivePerformanceOptimizer:
             return
         try:
             # Update configuration (this will trigger hot-reload)
-            import yaml
             from pathlib import Path
+
+            import yaml
 
             # Read current config
             config_path = Path("config/settings.yaml")
             if config_path.exists():
-                with open(config_path, "r") as f:
+                with open(config_path) as f:
                     config_data = yaml.safe_load(f)
 
                 # Update settings

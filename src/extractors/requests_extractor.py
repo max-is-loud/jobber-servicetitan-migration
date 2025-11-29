@@ -3,7 +3,7 @@ from __future__ import annotations
 """RequestsExtractor for extracting Request entities from Jobber GraphQL API."""
 
 import time
-from typing import Any, List, Optional
+from typing import Any
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
@@ -33,7 +33,7 @@ class RequestsExtractor(BaseExtractor[Request]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
-        config_manager: Optional[ConfigManagerImpl] = None,
+        config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
         **kwargs,
     ) -> None:
@@ -46,7 +46,7 @@ class RequestsExtractor(BaseExtractor[Request]):
             logger: Logger for structured output and progress tracking
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
-            **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
+            **kwargs: Reserved for future use
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -60,7 +60,7 @@ class RequestsExtractor(BaseExtractor[Request]):
             **kwargs,
         )
         # Track entities from last batch for extract_all
-        self._last_batch_entities: List[Request] = []
+        self._last_batch_entities: list[Request] = []
 
         # Batch fetching optimization for extract mode
         self._batch_cache: dict[str, dict[str, Any]] = {}  # entity_id -> node data
@@ -137,7 +137,7 @@ class RequestsExtractor(BaseExtractor[Request]):
             self._logger.debug(f"Failed to batch fetch requests: {e}")
             return found_entities  # Return what we found before the error
 
-    def _fetch_single(self, entity_id: str) -> Optional[dict[str, Any]]:
+    def _fetch_single(self, entity_id: str) -> dict[str, Any] | None:
         """
         Fetch a single request by ID using batch-optimized pagination.
 
@@ -169,7 +169,7 @@ class RequestsExtractor(BaseExtractor[Request]):
 
         # Cache miss - paginate and cache everything we see
         self._logger.debug(
-            f"Batch cache empty, paginating through ALL requests and caching (one-time cost)"
+            "Batch cache empty, paginating through ALL requests and caching (one-time cost)"
         )
 
         cursor = None
@@ -223,7 +223,7 @@ class RequestsExtractor(BaseExtractor[Request]):
             # Return target if we found it before the error
             return self._batch_cache.get(entity_id)
 
-    def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
+    def _fetch_page(self, cursor: str | None = None) -> dict[str, Any]:
         """Fetch a page of requests from the Jobber API.
 
         Args:
@@ -234,7 +234,7 @@ class RequestsExtractor(BaseExtractor[Request]):
         """
         return self._jobber_client.fetch_requests(cursor)
 
-    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -259,7 +259,7 @@ class RequestsExtractor(BaseExtractor[Request]):
         """
         return self._entity_mapper.map_request(node)
 
-    def _save_entities(self, entities: List[Request]) -> None:
+    def _save_entities(self, entities: list[Request]) -> None:
         """Save requests to repository.
 
         Args:
@@ -300,7 +300,7 @@ class RequestsExtractor(BaseExtractor[Request]):
         """
         self._save_notes_and_attachments(related_entities)
 
-    def _get_entities_from_last_batch(self) -> List[Request]:
+    def _get_entities_from_last_batch(self) -> list[Request]:
         """Get requests from the last extraction batch.
 
         Returns:

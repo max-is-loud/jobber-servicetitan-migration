@@ -87,7 +87,7 @@ class PaginationConfig:
 
                 warnings.warn(
                     f"Pagination size for {field} is {value} (>100). Consider using smaller values to avoid API rate limits.",
-                    UserWarning,
+                    UserWarning, stacklevel=2,
                 )
 
 
@@ -110,7 +110,7 @@ class DelayConfig:
 
             warnings.warn(
                 f"Page delay is {self.page_delay}s (>30s). This may significantly slow down migrations.",
-                UserWarning,
+                UserWarning, stacklevel=2,
             )
 
         if not isinstance(self.request_timeout, (int, float)):
