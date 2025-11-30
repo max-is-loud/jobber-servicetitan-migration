@@ -17,6 +17,7 @@ from .config_models import (
     DatabaseConfig,
     DelayConfig,
     LoggingConfig,
+    NoteReferenceConfig,
     PaginationConfig,
     RateLimitConfig,
 )
@@ -222,6 +223,12 @@ class ConfigManagerImpl:
                 wal_mode=database_data["wal_mode"],
             )
 
+            # Create note reference configuration (with default if not present for backwards compatibility)
+            note_ref_data = config_data.get("note_references", {"batch_size": 1})
+            note_references = NoteReferenceConfig(
+                batch_size=note_ref_data.get("batch_size", 1),
+            )
+
             # Create attachment configuration (with default if not present for backwards compatibility)
             attachment_data = config_data.get("attachments", {"auto_download": True})
             attachments = AttachmentConfig(
@@ -241,6 +248,7 @@ class ConfigManagerImpl:
                 backoff=backoff,
                 logging=logging,
                 database=database,
+                note_references=note_references,
                 attachments=attachments,
             )
 
@@ -352,6 +360,17 @@ class ConfigManagerImpl:
             "http_pool_connections": self.config.attachments.http_pool_connections,
             "http_pool_maxsize": self.config.attachments.http_pool_maxsize,
         }
+
+    def get_note_reference_batch_size(self) -> int:
+        """Get note reference batch size from configuration.
+
+        Returns:
+            Number of note references to collect before writing to database (default: 1)
+        """
+        if not self.config:
+            raise ConfigurationError("Configuration not loaded")
+
+        return self.config.note_references.batch_size
 
     def reload_config(self, environment: str | None = None) -> None:
         """Reload configuration from YAML files."""

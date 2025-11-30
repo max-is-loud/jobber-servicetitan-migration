@@ -200,6 +200,20 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
+class NoteReferenceConfig:
+    """Note reference collection configuration."""
+
+    batch_size: int = 1  # How many note references to collect before writing to database
+
+    def __post_init__(self) -> None:
+        """Validate note reference configuration values."""
+        if self.batch_size < 1:
+            raise ValueError("batch_size must be at least 1")
+        if self.batch_size > 1000:
+            raise ValueError("batch_size should not exceed 1000")
+
+
+@dataclass(frozen=True)
 class AttachmentConfig:
     """Attachment download configuration."""
 
@@ -267,6 +281,7 @@ class AppConfig:
     backoff: BackoffConfig
     logging: LoggingConfig
     database: DatabaseConfig
+    note_references: NoteReferenceConfig
     attachments: AttachmentConfig
 
     def __post_init__(self) -> None:

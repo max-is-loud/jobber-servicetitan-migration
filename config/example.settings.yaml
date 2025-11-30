@@ -69,6 +69,13 @@ database:
   timeout: 30.0                   # Database operation timeout (seconds)
   wal_mode: true                  # Enable Write-Ahead Logging for better concurrency
 
+# Note reference collection (deferred note processing)
+note_references:
+  batch_size: 1  # How many note references to collect before writing to database
+                 # 1 = immediate writes (safest, minimal overhead with local SQLite)
+                 # 10-50 = batched writes (slight performance gain, less crash-safe)
+                 # Recommendation: Keep at 1 for local SQLite (crash safety with negligible cost)
+
 # Attachment handling
 attachments:
   auto_download: false        # Automatically download attachments during extraction

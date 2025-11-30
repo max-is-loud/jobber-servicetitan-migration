@@ -19,7 +19,7 @@ rate_limits:
     safety_margin: 0.04
 max_retries: 15
 pagination:
-  clients: 20
+  clients: 10
   invoices: 14
   quotes: 10
   jobs: 20
@@ -52,6 +52,10 @@ database:
   default_path: tightbeam.sqlite
   timeout: 30.0
   wal_mode: true
+note_references:
+  batch_size: 1  # How many note references to collect before writing to database
+                 # 1 = immediate writes (safest, minimal overhead with local SQLite)
+                 # 10-50 = batched writes (slight performance gain, less crash-safe)
 attachments:
   auto_download: false
   concurrent_downloads: 30  # Number of parallel downloads (1-50, default: 3)

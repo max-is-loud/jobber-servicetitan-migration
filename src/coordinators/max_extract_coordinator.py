@@ -70,22 +70,25 @@ class MaxExtractCoordinator:
         entity_mapper: EntityMapper,
         migration_ui: Optional[MigrationUI] = None,
         db_path: Optional[str] = None,
+        config_manager: Optional[Any] = None,
     ) -> None:
         """Initialize coordinator with required dependencies.
 
         Args:
             jobber_client: GraphQL client for Jobber API
-            repository: Database repository for persistence
+            repository: Repository for persistence
             logger: Logger for structured output
             entity_mapper: Entity mapper for GraphQL transformations
             migration_ui: Optional MigrationUI for Rich UI output (creates default if not provided)
             db_path: Optional database path for display purposes
+            config_manager: Optional ConfigManager for configuration access
         """
         self._jobber_client = jobber_client
         self._repository = repository
         self._logger = logger
         self._entity_mapper = entity_mapper
         self._db_path = db_path
+        self._config_manager = config_manager
 
         # Create or use provided MigrationUI
         if migration_ui is None:
@@ -95,10 +98,12 @@ class MaxExtractCoordinator:
             self._migration_ui = migration_ui
 
         # Create note reference collector for deferred note loading
+        batch_size = self._config_manager.get_note_reference_batch_size() if self._config_manager else 1
         self._note_collector = NoteReferenceCollector(
             repository=repository,
             logger=logger,
             enable_persistence=True,  # Persist note references to database
+            batch_size=batch_size,  # Configurable via settings.yaml (default: 1 for crash safety)
         )
 
         self._extractors = self._build_extractors()
@@ -330,6 +335,12 @@ class MaxExtractCoordinator:
                     # Extract all entities
                     extractor.extract_all(resume=resume)
 
+                    # Flush any remaining note references to storage
+                    # (Important: ensures note references are persisted even if batch size not reached)
+                    if hasattr(self, '_note_collector') and self._note_collector:
+                        self._note_collector.flush_to_storage()
+                        # No logging on success - only errors are worth capturing
+
                     # Restore original logger
                     extractor._logger = original_logger
 
@@ -352,8 +363,11 @@ class MaxExtractCoordinator:
                     raise
 
                 except Exception as e:
+                    import traceback
                     error_msg = f"Failed to extract {entity_type}: {e}"
                     ui_logger.error(error_msg)
+                    # Log full traceback for debugging
+                    ui_logger.error(f"Traceback:\n{traceback.format_exc()}")
                     errors.append({"entity_type": entity_type, "error": str(e)})
                     results[entity_type] = 0
 
