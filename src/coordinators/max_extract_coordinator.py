@@ -20,7 +20,6 @@ from ..extractors import (
     UsersExtractor,
     VisitsExtractor,
 )
-from ..extractors.note_reference_collector import NoteReferenceCollector
 from ..interfaces import Logger
 from ..mappers import EntityMapper
 from ..models.migration_summary import MigrationSummary
@@ -97,15 +96,7 @@ class MaxExtractCoordinator:
         else:
             self._migration_ui = migration_ui
 
-        # Create note reference collector for deferred note loading
-        batch_size = self._config_manager.get_note_reference_batch_size() if self._config_manager else 1
-        self._note_collector = NoteReferenceCollector(
-            repository=repository,
-            logger=logger,
-            enable_persistence=True,  # Persist note references to database
-            batch_size=batch_size,  # Configurable via settings.yaml (default: 1 for crash safety)
-        )
-
+        # Note: Note reference collector removed - notes are extracted inline with parent entities
         self._extractors = self._build_extractors()
 
     def _build_extractors(self) -> dict[str, Any]:
@@ -123,14 +114,12 @@ class MaxExtractCoordinator:
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
-                note_reference_collector=self._note_collector,
             ),
             "clients": ClientsExtractor(
                 jobber_client=self._jobber_client,
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
-                note_reference_collector=self._note_collector,
             ),
             "properties": PropertiesExtractor(
                 jobber_client=self._jobber_client,
@@ -143,21 +132,18 @@ class MaxExtractCoordinator:
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
-                note_reference_collector=self._note_collector,
             ),
             "quotes": QuotesExtractor(
                 jobber_client=self._jobber_client,
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
-                note_reference_collector=self._note_collector,
             ),
             "jobs": JobsExtractor(
                 jobber_client=self._jobber_client,
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
-                note_reference_collector=self._note_collector,
             ),
             "visits": VisitsExtractor(
                 jobber_client=self._jobber_client,
@@ -170,7 +156,6 @@ class MaxExtractCoordinator:
                 entity_mapper=self._entity_mapper,
                 repository=self._repository,
                 logger=self._logger,
-                note_reference_collector=self._note_collector,
             ),
             "expenses": ExpensesExtractor(
                 jobber_client=self._jobber_client,
@@ -334,12 +319,6 @@ class MaxExtractCoordinator:
 
                     # Extract all entities
                     extractor.extract_all(resume=resume)
-
-                    # Flush any remaining note references to storage
-                    # (Important: ensures note references are persisted even if batch size not reached)
-                    if hasattr(self, '_note_collector') and self._note_collector:
-                        self._note_collector.flush_to_storage()
-                        # No logging on success - only errors are worth capturing
 
                     # Restore original logger
                     extractor._logger = original_logger

@@ -271,57 +271,33 @@ class NotesExtractor(BaseExtractor[Note]):
             )
 
     def extract_all(self, resume: bool = False) -> List[Note]:
-        """Extract all notes using deferred loading pattern.
+        """Notes are extracted inline with parent entities - no separate extraction needed.
 
-        REFACTORED: Fetches note references from repository and bulk-fetches via node(id:).
-        This is the proper implementation of the documented deferred loading strategy
-        (docs/notes_extraction_strategy.md - Option C: Phase 2).
-
-        Strategy Reference: docs/notes_extraction_strategy.md - Phase 2: Bulk Fetch Full Notes
+        Notes are automatically extracted during parent entity processing (clients, jobs,
+        quotes, invoices, requests) via the _extract_related_entities() method in each
+        parent extractor. This extractor exists only for consistency with the entity
+        extraction architecture but performs no actual work.
 
         Args:
-            resume: Ignored for notes extraction (notes don't support checkpointing yet)
+            resume: Ignored (not applicable for notes)
 
         Returns:
-            List of all extracted Note objects
-
-        Raises:
-            JobberApiError: If GraphQL API communication fails
-            RepositoryError: If database operations fail
+            Empty list (notes already extracted inline)
         """
-        self._logger.info("Starting deferred note extraction from collected references")
-
-        # Get all note references from repository
-        note_references = self._repository.get_note_references()
-
-        if not note_references:
-            self._logger.info("No note references found - skipping note extraction")
-            return []
-
-        self._logger.info(f"Found {len(note_references)} note references to process")
-
-        # Use extract_deferred_notes which implements the bulk fetching logic
-        result = self.extract_deferred_notes(note_references)
-
-        processed = result.get("processed", 0)
-        skipped = result.get("skipped", 0)
-
+        notes_count = self._repository.get_entity_count("notes")
         self._logger.info(
-            f"Completed deferred note extraction: {processed} processed, {skipped} skipped"
+            f"Notes extraction complete - {notes_count} notes already extracted inline with parent entities"
         )
-
-        # Return empty list since notes are saved directly in extract_deferred_notes
         return []
 
     def get_entity_count(self) -> int:
-        """Get total count of notes available for extraction.
+        """Get total count of notes already extracted inline.
 
-        Returns count of note references collected during parent entity extraction.
+        Returns count from notes table (extracted inline with parent entities).
         """
         try:
-            count = self._repository.get_note_references_count()
-            self._logger.debug(f"Note reference count from repository: {count}")
+            count = self._repository.get_entity_count("notes")
             return count
         except Exception as e:
-            self._logger.debug(f"Failed to get note reference count: {e}")
+            self._logger.debug(f"Failed to get note count: {e}")
             return 0
