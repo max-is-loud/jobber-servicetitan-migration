@@ -4,10 +4,12 @@ This module implements factory patterns for creating and managing
 service dependencies used across CLI commands.
 """
 
-import sqlite3
 import atexit
+import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+from rich.console import Console
 
 from src.auth import AuthProvider, OAuth2Manager
 from src.clients import HttpClient, JobberClient
@@ -22,6 +24,7 @@ from src.rate_limiting import (
     TokenBucketRateLimiter,
 )
 from src.repositories import Repository
+
 from .shared import SharedServices
 
 
@@ -84,7 +87,7 @@ class ServiceFactory:
         return HttpClient()
 
     @staticmethod
-    def get_console():
+    def get_console() -> Console:
         """Get shared console instance.
 
         Returns:
@@ -99,6 +102,7 @@ class ServiceFactory:
         config_manager: ConfigManagerImpl,
         optimization_level: str = "moderate",
         enable_cost_monitoring: bool = True,
+        migration_ui: Optional[Any] = None,
     ) -> JobberClient:
         """Create JobberClient with rate limiting and cost monitoring configured.
 
@@ -127,6 +131,8 @@ class ServiceFactory:
                               (default: 'moderate')
             enable_cost_monitoring: Whether to enable GraphQL cost tracking and metrics
                                    collection (default: True)
+            migration_ui: Optional MigrationUI instance for displaying status messages
+                         in the full-screen layout
 
         Returns:
             JobberClient: Fully configured client with rate limiting, backoff strategy,
@@ -151,6 +157,7 @@ class ServiceFactory:
             auth_provider,
             metrics_collector=metrics_collector,
             config_manager=config_manager,
+            migration_ui=migration_ui,
         )
 
         # Get rate limiting configuration based on optimization level

@@ -69,13 +69,27 @@ database:
   timeout: 30.0                   # Database operation timeout (seconds)
   wal_mode: true                  # Enable Write-Ahead Logging for better concurrency
 
+# Note reference collection (deferred note processing)
+note_references:
+  batch_size: 1  # How many note references to collect before writing to database
+                 # 1 = immediate writes (safest, minimal overhead with local SQLite)
+                 # 10-50 = batched writes (slight performance gain, less crash-safe)
+                 # Recommendation: Keep at 1 for local SQLite (crash safety with negligible cost)
+
 # Attachment handling
 attachments:
   auto_download: false        # Automatically download attachments during extraction
-  concurrent_downloads: 3     # Number of parallel downloads (1-10)
+  concurrent_downloads: 3     # Number of parallel downloads (1-50)
                               # Higher values = faster downloads but more memory/network
-                              # Recommended: 3-5 for most systems
-  max_concurrent_downloads: 10  # Upper limit for validation
+                              # Recommended: 3-5 for most systems, 20-30 for 1Gbps+ connections
+  max_concurrent_downloads: 50  # Upper limit for validation (allows high-speed optimization)
+  chunk_size: 65536           # Download chunk size in bytes (default: 65536 = 64KB)
+                              # Larger chunks = less overhead, better for fast connections
+                              # Smaller chunks = more granular progress updates
+  http_pool_connections: 50   # HTTP connection pool size (default: 50)
+                              # Should match or exceed concurrent_downloads
+  http_pool_maxsize: 50       # Maximum pool size per host (default: 50)
+                              # Allows connection reuse for better performance
 
 # Metrics collection configuration
 metrics:

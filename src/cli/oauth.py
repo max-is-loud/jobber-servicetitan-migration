@@ -16,14 +16,11 @@ from rich.table import Table
 
 from src.auth import AuthProvider
 from src.constants import (
-    DEFAULT_PORT,
+    ERROR_EMOJI,
+    INFO_EMOJI,
     OAUTH_EMOJI,
-    OAUTH_TIMEOUT_SECONDS,
     REQUIRED_OAUTH_VARS,
     SUCCESS_EMOJI,
-    ERROR_EMOJI,
-    WARNING_EMOJI,
-    INFO_EMOJI,
 )
 from src.exceptions import ConfigurationError, OAuth2Error, RepositoryError
 from src.utils import (
@@ -33,10 +30,11 @@ from src.utils import (
     display_server_auth_info,
     open_browser,
 )
-from .services import CLIErrorHandler, ServiceFactory, SharedServices
+
+from .services import ServiceFactory, SharedServices
 
 # Get shared console instance
-console = ServiceFactory.get_console()
+console = SharedServices.get_console()
 
 
 def _validate_oauth_config(console, verbose: bool = False) -> None:
@@ -272,15 +270,15 @@ def _oauth_init_with_server(db: Optional[Path], port: int) -> None:
         # Generate authorization URL
         auth_url, state = oauth_manager.get_authorization_url()
 
-        typer.echo("🚀 Starting OAuth2 Authorization with Local Callback Server")
-        typer.echo("=" * 60)
-        typer.echo(f"🌐 Local callback server started on http://localhost:{port}")
-        typer.echo()
-        typer.echo("Opening authorization URL in your browser...")
-        typer.echo(f"URL: {auth_url}")
-        typer.echo()
-        typer.echo("⏳ Waiting for authorization... (this will happen automatically)")
-        typer.echo("   Complete the authorization in your browser, then come back here!")
+        console.print("\n[bold blue]🚀 Starting OAuth2 Authorization with Local Callback Server[/bold blue]")
+        console.print("=" * 60)
+        console.print(f"[cyan]🌐 Local callback server started on http://localhost:{port}[/cyan]")
+        console.print()
+        console.print("[yellow]Opening authorization URL in your browser...[/yellow]")
+        console.print(f"[dim]URL: {auth_url}[/dim]")
+        console.print()
+        console.print("[bold green]⏳ Waiting for authorization...[/bold green] [dim](this will happen automatically)[/dim]")
+        console.print("[dim]   Complete the authorization in your browser, then come back here![/dim]")
 
         # Display Rich UI for OAuth setup
         display_server_auth_info(auth_url, port, console)

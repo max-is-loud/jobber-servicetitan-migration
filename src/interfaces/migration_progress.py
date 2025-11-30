@@ -1,6 +1,6 @@
 """Protocol interface for migration progress callbacks and display management."""
 
-from typing import Protocol, Optional, Any
+from typing import Any, Optional, Protocol
 
 
 class MigrationProgressDisplay(Protocol):

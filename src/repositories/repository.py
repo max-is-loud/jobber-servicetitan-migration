@@ -1,20 +1,17 @@
 """Repository class for SQLite database operations."""
 
+import contextlib
 import sqlite3
 from typing import Callable, List, Optional, Union
 
 from ..exceptions import RepositoryError
 from ..models import (
     Attachment,
-    AttachmentQueueItem,
     Client,
-    EntityInventory,
     Expense,
-    ExtractQueueItem,
     GraphQLCost,
     Invoice,
     Job,
-    MapSnapshot,
     MigrationState,
     Note,
     ProductService,
@@ -55,10 +52,8 @@ class Repository:
 
     def __del__(self) -> None:
         """Ensure connections are closed when repository is garbage collected."""
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass
 
     def _migrate_existing_tables(self) -> None:
         """Migrate existing tables to add new columns for enhanced models.
@@ -662,104 +657,6 @@ class Repository:
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_timesheet_entries_paid_by_id ON timesheet_entries(paid_by_id)"  # noqa: E501
-            )
-
-            # Create map_snapshot table for tracking map pass execution metadata
-            map_snapshot_schema = """
-                CREATE TABLE IF NOT EXISTS map_snapshot (
-                    id TEXT PRIMARY KEY,
-                    label TEXT,
-                    created_at TEXT NOT NULL,
-                    entities_included TEXT,
-                    pass1_cutoff TEXT NOT NULL
-                )
-            """
-            cursor.execute(map_snapshot_schema)
-
-            # Create entity_inventory table for map mode discovery
-            entity_inventory_schema = """
-                CREATE TABLE IF NOT EXISTS entity_inventory (
-                    entity_type TEXT NOT NULL,
-                    entity_id TEXT NOT NULL,
-                    updated_at TEXT,
-                    discovered_at TEXT NOT NULL,
-                    estimated_relations_json TEXT,
-                    map_snapshot_id TEXT NOT NULL,
-                    PRIMARY KEY (entity_type, entity_id, map_snapshot_id),
-                    FOREIGN KEY (map_snapshot_id) REFERENCES map_snapshot(id) ON DELETE CASCADE
-                )
-            """
-            cursor.execute(entity_inventory_schema)
-
-            # Create relation_inventory table for tracking relation counts
-            relation_inventory_schema = """
-                CREATE TABLE IF NOT EXISTS relation_inventory (
-                    parent_type TEXT NOT NULL,
-                    parent_id TEXT NOT NULL,
-                    relation_type TEXT NOT NULL,
-                    count INTEGER NOT NULL,
-                    cursor_hint TEXT,
-                    map_snapshot_id TEXT NOT NULL,
-                    PRIMARY KEY (parent_type, parent_id, relation_type, map_snapshot_id),
-                    FOREIGN KEY (map_snapshot_id) REFERENCES map_snapshot(id) ON DELETE CASCADE
-                )
-            """
-            cursor.execute(relation_inventory_schema)
-
-            # Create extract_queue table for tracking entity extraction status
-            extract_queue_schema = """
-                CREATE TABLE IF NOT EXISTS extract_queue (
-                    entity_type TEXT NOT NULL,
-                    entity_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    last_error TEXT,
-                    attempt_count INTEGER DEFAULT 0,
-                    map_snapshot_id TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (entity_type, entity_id, map_snapshot_id),
-                    FOREIGN KEY (map_snapshot_id) REFERENCES map_snapshot(id) ON DELETE CASCADE
-                )
-            """
-            cursor.execute(extract_queue_schema)
-
-            # Create attachment_queue table for tracking attachment download status
-            attachment_queue_schema = """
-                CREATE TABLE IF NOT EXISTS attachment_queue (
-                    parent_type TEXT NOT NULL,
-                    parent_id TEXT NOT NULL,
-                    attachment_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    last_error TEXT,
-                    attempt_count INTEGER DEFAULT 0,
-                    map_snapshot_id TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (attachment_id, map_snapshot_id),
-                    FOREIGN KEY (map_snapshot_id) REFERENCES map_snapshot(id) ON DELETE CASCADE
-                )
-            """
-            cursor.execute(attachment_queue_schema)
-
-            # Create indexes for multi-pass migration tables
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_entity_inventory_snapshot ON entity_inventory(map_snapshot_id)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_entity_inventory_type ON entity_inventory(entity_type)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_relation_inventory_snapshot ON relation_inventory(map_snapshot_id)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_extract_queue_snapshot ON extract_queue(map_snapshot_id)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_extract_queue_status ON extract_queue(map_snapshot_id, status)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_attachment_queue_snapshot ON attachment_queue(map_snapshot_id)"  # noqa: E501
-            )
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_attachment_queue_status ON attachment_queue(map_snapshot_id, status)"  # noqa: E501
             )
 
             # Migrate existing tables to add new columns
@@ -2384,14 +2281,22 @@ class Repository:
             rows = cursor.fetchall()
             cursor.close()
 
-            return [
-                {
+            # Build result list with error checking
+            result = []
+            for row in rows:
+                # Defensive check: ensure row has at least 3 elements
+                if len(row) < 3:
+                    # Log warning but don't fail - skip malformed row
+                    import logging
+                    logging.warning(f"Skipping malformed note_reference row (expected 3 columns, got {len(row)}): {row}")
+                    continue
+
+                result.append({
                     "note_id": row[0],
                     "entity_type": row[1],
                     "entity_id": row[2],
-                }
-                for row in rows
-            ]
+                })
+            return result
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve note references: {e}") from e
@@ -2633,7 +2538,7 @@ class Repository:
                 # Handle missing expires_in field (Jobber API doesn't always include it)
                 expires_in = new_tokens.get("expires_in", 3600)  # Default to 1 hour
 
-                from datetime import datetime, timezone, timedelta
+                from datetime import datetime, timedelta, timezone
 
                 expires_at_datetime = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 new_expires_at = expires_at_datetime.isoformat()
@@ -2902,6 +2807,12 @@ class Repository:
             cursor.close()
 
             if row:
+                # Defensive check: ensure row has all expected columns
+                if len(row) < 6:
+                    import logging
+                    logging.error(f"Malformed migration_state row for {entity_type} (expected 6 columns, got {len(row)}): {row}")
+                    raise RepositoryError(f"Migration state corrupted for {entity_type}: expected 6 columns, got {len(row)}")
+
                 return MigrationState(
                     entity_type=row[0],
                     last_cursor=row[1],
@@ -2915,480 +2826,3 @@ class Repository:
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to get migration state for {entity_type}: {e}") from e
-
-    # Multi-pass migration methods
-
-    def save_map_snapshot(self, snapshot: MapSnapshot) -> None:
-        """Save a map snapshot to the database.
-
-        Stores map pass execution metadata for later extract pass targeting.
-        Uses INSERT OR REPLACE for upsert behavior.
-
-        Args:
-            snapshot: MapSnapshot instance to save
-
-        Raises:
-            RepositoryError: If database operation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            cursor.execute(
-                """INSERT OR REPLACE INTO map_snapshot
-                   (id, label, created_at, entities_included, pass1_cutoff)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (
-                    snapshot.id,
-                    snapshot.label,
-                    snapshot.created_at,
-                    snapshot.entities_included,
-                    snapshot.pass1_cutoff,
-                ),
-            )
-
-            self._connection.commit()
-            cursor.close()
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to save map snapshot {snapshot.id}: {e}") from e
-
-    def get_map_snapshot(self, snapshot_id: str) -> Optional[MapSnapshot]:
-        """Retrieve a map snapshot by ID or label.
-
-        Args:
-            snapshot_id: Snapshot ID or label to retrieve
-
-        Returns:
-            MapSnapshot instance if found, None otherwise
-
-        Raises:
-            RepositoryError: If database operation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            # Try by ID first, then by label
-            cursor.execute(
-                """SELECT id, label, created_at, entities_included, pass1_cutoff
-                   FROM map_snapshot
-                   WHERE id = ? OR label = ?
-                   LIMIT 1""",
-                (snapshot_id, snapshot_id),
-            )
-            row = cursor.fetchone()
-            cursor.close()
-
-            if row:
-                return MapSnapshot(
-                    id=row[0], label=row[1], created_at=row[2], entities_included=row[3], pass1_cutoff=row[4]
-                )
-
-            return None
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to get map snapshot {snapshot_id}: {e}") from e
-
-    def list_map_snapshots(self) -> List[MapSnapshot]:
-        """List all map snapshots ordered by creation date (newest first).
-
-        Returns:
-            List of MapSnapshot instances
-
-        Raises:
-            RepositoryError: If database operation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            cursor.execute(
-                """SELECT id, label, created_at, entities_included, pass1_cutoff
-                   FROM map_snapshot
-                   ORDER BY created_at DESC"""
-            )
-            rows = cursor.fetchall()
-            cursor.close()
-
-            return [
-                MapSnapshot(id=row[0], label=row[1], created_at=row[2], entities_included=row[3], pass1_cutoff=row[4])
-                for row in rows
-            ]
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to list map snapshots: {e}") from e
-
-    def save_entity_inventory(self, inventory: List[EntityInventory]) -> None:
-        """Batch save entity inventory records from map pass.
-
-        Args:
-            inventory: List of EntityInventory instances to save
-
-        Raises:
-            RepositoryError: If batch operation fails
-        """
-        if not inventory:
-            return
-
-        try:
-            cursor = self._connection.cursor()
-
-            inventory_data = [
-                (
-                    item.entity_type,
-                    item.entity_id,
-                    item.updated_at,
-                    item.discovered_at,
-                    item.estimated_relations_json,
-                    item.map_snapshot_id,
-                )
-                for item in inventory
-            ]
-
-            cursor.executemany(
-                """INSERT OR REPLACE INTO entity_inventory
-                   (entity_type, entity_id, updated_at, discovered_at, estimated_relations_json, map_snapshot_id)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                inventory_data,
-            )
-
-            self._connection.commit()
-            cursor.close()
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to save entity inventory batch: {e}") from e
-
-    def get_entity_inventory(self, snapshot_id: str, entity_type: Optional[str] = None) -> List[EntityInventory]:
-        """Retrieve entity inventory for a snapshot, optionally filtered by entity type.
-
-        Args:
-            snapshot_id: Map snapshot ID to retrieve inventory for
-            entity_type: Optional entity type filter (e.g., 'clients')
-
-        Returns:
-            List of EntityInventory instances
-
-        Raises:
-            RepositoryError: If database operation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            if entity_type:
-                cursor.execute(
-                    """SELECT entity_type, entity_id, updated_at, discovered_at,
-                              estimated_relations_json, map_snapshot_id
-                       FROM entity_inventory
-                       WHERE map_snapshot_id = ? AND entity_type = ?
-                       ORDER BY entity_id""",
-                    (snapshot_id, entity_type),
-                )
-            else:
-                cursor.execute(
-                    """SELECT entity_type, entity_id, updated_at, discovered_at,
-                              estimated_relations_json, map_snapshot_id
-                       FROM entity_inventory
-                       WHERE map_snapshot_id = ?
-                       ORDER BY entity_type, entity_id""",
-                    (snapshot_id,),
-                )
-
-            rows = cursor.fetchall()
-            cursor.close()
-
-            return [
-                EntityInventory(
-                    entity_type=row[0],
-                    entity_id=row[1],
-                    updated_at=row[2],
-                    discovered_at=row[3],
-                    estimated_relations_json=row[4],
-                    map_snapshot_id=row[5],
-                )
-                for row in rows
-            ]
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to get entity inventory for snapshot {snapshot_id}: {e}") from e
-
-    def save_relation_inventory(self, inventory: List[dict]) -> None:
-        """Batch save relation inventory records from map pass.
-
-        Args:
-            inventory: List of dicts with keys: parent_type, parent_id, relation_type,
-                      count, cursor_hint, map_snapshot_id
-
-        Raises:
-            RepositoryError: If batch operation fails
-        """
-        if not inventory:
-            return
-
-        try:
-            cursor = self._connection.cursor()
-
-            inventory_data = [
-                (
-                    item["parent_type"],
-                    item["parent_id"],
-                    item["relation_type"],
-                    item["count"],
-                    item.get("cursor_hint"),
-                    item["map_snapshot_id"],
-                )
-                for item in inventory
-            ]
-
-            cursor.executemany(
-                """INSERT OR REPLACE INTO relation_inventory
-                   (parent_type, parent_id, relation_type, count, cursor_hint, map_snapshot_id)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                inventory_data,
-            )
-
-            self._connection.commit()
-            cursor.close()
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to save relation inventory batch: {e}") from e
-
-    def create_extract_queue(self, snapshot_id: str, entity_type: str) -> None:
-        """Create extract queue from entity inventory for a specific entity type.
-
-        Populates the extract_queue table with pending items from entity_inventory.
-
-        Args:
-            snapshot_id: Map snapshot ID to create queue from
-            entity_type: Entity type to create queue for (e.g., 'clients')
-
-        Raises:
-            RepositoryError: If queue creation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            cursor.execute(
-                """INSERT OR IGNORE INTO extract_queue
-                   (entity_type, entity_id, status, map_snapshot_id, updated_at)
-                   SELECT entity_type, entity_id, 'pending', map_snapshot_id, datetime('now')
-                   FROM entity_inventory
-                   WHERE map_snapshot_id = ? AND entity_type = ?""",
-                (snapshot_id, entity_type),
-            )
-
-            self._connection.commit()
-            cursor.close()
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to create extract queue for {entity_type}: {e}") from e
-
-    def get_extract_queue(
-        self, snapshot_id: str, entity_type: str, status: Optional[str] = None
-    ) -> List[ExtractQueueItem]:
-        """Retrieve extract queue items for a snapshot and entity type.
-
-        Args:
-            snapshot_id: Map snapshot ID
-            entity_type: Entity type (e.g., 'clients')
-            status: Optional status filter ('pending', 'in_progress', 'done', 'failed')
-
-        Returns:
-            List of ExtractQueueItem instances
-
-        Raises:
-            RepositoryError: If database operation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            if status:
-                cursor.execute(
-                    """SELECT entity_type, entity_id, status, last_error, attempt_count,
-                              map_snapshot_id, updated_at
-                       FROM extract_queue
-                       WHERE map_snapshot_id = ? AND entity_type = ? AND status = ?
-                       ORDER BY entity_id""",
-                    (snapshot_id, entity_type, status),
-                )
-            else:
-                cursor.execute(
-                    """SELECT entity_type, entity_id, status, last_error, attempt_count,
-                              map_snapshot_id, updated_at
-                       FROM extract_queue
-                       WHERE map_snapshot_id = ? AND entity_type = ?
-                       ORDER BY entity_id""",
-                    (snapshot_id, entity_type),
-                )
-
-            rows = cursor.fetchall()
-            cursor.close()
-
-            return [
-                ExtractQueueItem(
-                    entity_type=row[0],
-                    entity_id=row[1],
-                    status=row[2],
-                    map_snapshot_id=row[5],
-                    updated_at=row[6],
-                    last_error=row[3],
-                    attempt_count=row[4],
-                )
-                for row in rows
-            ]
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to get extract queue for {entity_type}: {e}") from e
-
-    def update_queue_status(self, queue_item: ExtractQueueItem) -> None:
-        """Update extract queue item status.
-
-        Args:
-            queue_item: ExtractQueueItem with updated status
-
-        Raises:
-            RepositoryError: If database operation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            cursor.execute(
-                """UPDATE extract_queue
-                   SET status = ?, last_error = ?, attempt_count = ?, updated_at = datetime('now')
-                   WHERE entity_type = ? AND entity_id = ? AND map_snapshot_id = ?""",
-                (
-                    queue_item.status,
-                    queue_item.last_error,
-                    queue_item.attempt_count,
-                    queue_item.entity_type,
-                    queue_item.entity_id,
-                    queue_item.map_snapshot_id,
-                ),
-            )
-
-            self._connection.commit()
-            cursor.close()
-
-        except sqlite3.Error as e:
-            raise RepositoryError(
-                f"Failed to update queue status for {queue_item.entity_type}/{queue_item.entity_id}: {e}"
-            ) from e
-
-    def create_attachment_queue(self, snapshot_id: str, attachments: List[dict]) -> None:
-        """Create attachment download queue from discovered attachments.
-
-        Args:
-            snapshot_id: Map snapshot ID
-            attachments: List of dicts with keys: attachment_id, parent_type, parent_id
-
-        Raises:
-            RepositoryError: If batch operation fails
-        """
-        if not attachments:
-            return
-
-        try:
-            cursor = self._connection.cursor()
-
-            attachment_data = [
-                (item["parent_type"], item["parent_id"], item["attachment_id"], "pending", snapshot_id)
-                for item in attachments
-            ]
-
-            cursor.executemany(
-                """INSERT OR IGNORE INTO attachment_queue
-                   (parent_type, parent_id, attachment_id, status, map_snapshot_id, updated_at)
-                   VALUES (?, ?, ?, ?, ?, datetime('now'))""",
-                attachment_data,
-            )
-
-            self._connection.commit()
-            cursor.close()
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to create attachment queue: {e}") from e
-
-    def get_attachment_queue(self, snapshot_id: str, status: Optional[str] = None) -> List[AttachmentQueueItem]:
-        """Retrieve attachment queue items for a snapshot.
-
-        Args:
-            snapshot_id: Map snapshot ID
-            status: Optional status filter ('pending', 'in_progress', 'done', 'failed')
-
-        Returns:
-            List of AttachmentQueueItem instances
-
-        Raises:
-            RepositoryError: If database operation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            if status:
-                cursor.execute(
-                    """SELECT attachment_id, parent_type, parent_id, status, last_error,
-                              attempt_count, map_snapshot_id, updated_at
-                       FROM attachment_queue
-                       WHERE map_snapshot_id = ? AND status = ?
-                       ORDER BY attachment_id""",
-                    (snapshot_id, status),
-                )
-            else:
-                cursor.execute(
-                    """SELECT attachment_id, parent_type, parent_id, status, last_error,
-                              attempt_count, map_snapshot_id, updated_at
-                       FROM attachment_queue
-                       WHERE map_snapshot_id = ?
-                       ORDER BY attachment_id""",
-                    (snapshot_id,),
-                )
-
-            rows = cursor.fetchall()
-            cursor.close()
-
-            return [
-                AttachmentQueueItem(
-                    attachment_id=row[0],
-                    parent_type=row[1],
-                    parent_id=row[2],
-                    status=row[3],
-                    map_snapshot_id=row[6],
-                    updated_at=row[7],
-                    last_error=row[4],
-                    attempt_count=row[5],
-                )
-                for row in rows
-            ]
-
-        except sqlite3.Error as e:
-            raise RepositoryError(f"Failed to get attachment queue: {e}") from e
-
-    def update_attachment_queue_status(self, queue_item: AttachmentQueueItem) -> None:
-        """Update attachment queue item status.
-
-        Args:
-            queue_item: AttachmentQueueItem with updated status
-
-        Raises:
-            RepositoryError: If database operation fails
-        """
-        try:
-            cursor = self._connection.cursor()
-
-            cursor.execute(
-                """UPDATE attachment_queue
-                   SET status = ?, last_error = ?, attempt_count = ?, updated_at = datetime('now')
-                   WHERE attachment_id = ? AND map_snapshot_id = ?""",
-                (
-                    queue_item.status,
-                    queue_item.last_error,
-                    queue_item.attempt_count,
-                    queue_item.attachment_id,
-                    queue_item.map_snapshot_id,
-                ),
-            )
-
-            self._connection.commit()
-            cursor.close()
-
-        except sqlite3.Error as e:
-            raise RepositoryError(
-                f"Failed to update attachment queue status for {queue_item.attachment_id}: {e}"
-            ) from e

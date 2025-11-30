@@ -1,6 +1,7 @@
 """Rich-enhanced logger implementation with beautiful terminal formatting."""
 
 from typing import Any, Optional
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -101,10 +102,7 @@ class RichLogger(Logger):
                 else:
                     styled_value = f"[yellow]{value}[/yellow]"
             elif key == "errors_count":
-                if value == 0:
-                    styled_value = f"[green]{value}[/green]"
-                else:
-                    styled_value = f"[red]{value}[/red]"
+                styled_value = f"[green]{value}[/green]" if value == 0 else f"[red]{value}[/red]"
             elif "processed" in key:
                 styled_value = f"[cyan]{value:,}[/cyan]"
             else:

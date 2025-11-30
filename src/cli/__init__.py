@@ -3,9 +3,10 @@
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 
 
-def _load_cli_module():
+def _load_cli_module() -> ModuleType:
     """Load the main CLI module dynamically to avoid circular imports."""
     cli_file_path = Path(__file__).parent.parent / "cli.py"
     spec = importlib.util.spec_from_file_location("main_cli", cli_file_path)
@@ -31,9 +32,9 @@ _cli_module = _load_cli_module()
 app = _cli_module.app
 
 
-def main():
+def main() -> None:
     """Entry point wrapper for the CLI application."""
-    return _cli_module.main()
+    _cli_module.main()
 
 
 __all__ = ["app", "main"]

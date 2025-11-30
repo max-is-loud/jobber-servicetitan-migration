@@ -1,6 +1,5 @@
 """Configuration manager implementation for TightBeam v2."""
 
-import os
 import threading
 import time
 from pathlib import Path
@@ -18,6 +17,7 @@ from .config_models import (
     DatabaseConfig,
     DelayConfig,
     LoggingConfig,
+    NoteReferenceConfig,
     PaginationConfig,
     RateLimitConfig,
 )
@@ -223,12 +223,21 @@ class ConfigManagerImpl:
                 wal_mode=database_data["wal_mode"],
             )
 
+            # Create note reference configuration (with default if not present for backwards compatibility)
+            note_ref_data = config_data.get("note_references", {"batch_size": 1})
+            note_references = NoteReferenceConfig(
+                batch_size=note_ref_data.get("batch_size", 1),
+            )
+
             # Create attachment configuration (with default if not present for backwards compatibility)
             attachment_data = config_data.get("attachments", {"auto_download": True})
             attachments = AttachmentConfig(
                 auto_download=attachment_data.get("auto_download", True),
                 concurrent_downloads=attachment_data.get("concurrent_downloads", 3),
-                max_concurrent_downloads=attachment_data.get("max_concurrent_downloads", 10),
+                max_concurrent_downloads=attachment_data.get("max_concurrent_downloads", 50),
+                chunk_size=attachment_data.get("chunk_size", 65536),
+                http_pool_connections=attachment_data.get("http_pool_connections", 50),
+                http_pool_maxsize=attachment_data.get("http_pool_maxsize", 50),
             )
 
             return AppConfig(
@@ -239,6 +248,7 @@ class ConfigManagerImpl:
                 backoff=backoff,
                 logging=logging,
                 database=database,
+                note_references=note_references,
                 attachments=attachments,
             )
 
@@ -346,7 +356,21 @@ class ConfigManagerImpl:
             "auto_download": self.config.attachments.auto_download,
             "concurrent_downloads": self.config.attachments.concurrent_downloads,
             "max_concurrent_downloads": self.config.attachments.max_concurrent_downloads,
+            "chunk_size": self.config.attachments.chunk_size,
+            "http_pool_connections": self.config.attachments.http_pool_connections,
+            "http_pool_maxsize": self.config.attachments.http_pool_maxsize,
         }
+
+    def get_note_reference_batch_size(self) -> int:
+        """Get note reference batch size from configuration.
+
+        Returns:
+            Number of note references to collect before writing to database (default: 1)
+        """
+        if not self.config:
+            raise ConfigurationError("Configuration not loaded")
+
+        return self.config.note_references.batch_size
 
     def reload_config(self, environment: str | None = None) -> None:
         """Reload configuration from YAML files."""
@@ -364,7 +388,7 @@ class ConfigManagerImpl:
             # Watch the config directory for changes
             self._observer.schedule(handler, str(self.config_dir), recursive=False)
             self._observer.start()
-        except Exception as e:
+        except Exception:
             # Silently disable hot reload if watchdog is not available
             self.enable_hot_reload = False
 

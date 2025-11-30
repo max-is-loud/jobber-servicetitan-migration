@@ -12,6 +12,7 @@ from .oauth_utils import (
     display_server_auth_info,
     open_browser,
 )
+from .process_lock import ProcessLock, ProcessLockError
 
 __all__ = [
     "complete_oauth_flow",
@@ -19,4 +20,6 @@ __all__ = [
     "display_oauth_success",
     "display_server_auth_info",
     "open_browser",
+    "ProcessLock",
+    "ProcessLockError",
 ]

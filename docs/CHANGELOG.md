@@ -5,7 +5,72 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2025-11-29
+
+### Added
+- Unified `MigrationUI` class for consistent Rich-based CLI output across all commands
+- Real-time progress bars for all entity extraction operations with live updates
+- Styled error panels and success messages with Rich components
+- Comprehensive summary tables displaying migration metrics and statistics
+- Full-screen multi-progress display for parallel attachment downloads
+
+### Changed
+- `MaxExtractCoordinator` now uses `MigrationUI` for all user-facing terminal output
+- Attachment downloads integrated with unified UI layer replacing standalone `MultiProgressDisplay`
+- OAuth commands standardized with Rich panels and status displays for consistency
+- Separation of concerns: `RichLogger` handles file logging, `MigrationUI` handles terminal output
+
+### Removed
+- **BREAKING**: Legacy multi-pass extraction workflow coordinators (already deprecated)
+- **BREAKING**: Map-mode coordinators and extractors (`MapModeCoordinator`, all map-mode entity extractors)
+- **BREAKING**: Snapshot and queue-based extraction models (`MapSnapshot`, `EntityInventory`, `ExtractQueueItem`, `AttachmentQueueItem`)
+- **BREAKING**: Legacy report generators (`MapReportGenerator`, `DownloadReportGenerator`, `ReportGenerator`, `ExtractReportGenerator`)
+- `BaseMigrationCoordinator` - consolidated into `MaxExtractCoordinator`
+- `RichMigrationCoordinator` - functionality merged into `MigrationUI`
+- `DownloadModeCoordinator` and `ExtractModeCoordinator` - no longer needed
+- Entire `src/extractors/map_mode/` directory (14 map-mode extractor files)
+- Unused CLI service helpers (`entity_extraction.py`, `error_handling.py`) that were made redundant by new architecture
+
+### Migration Guide
+
+**For End Users:**
+- No action required - all existing commands (`max-extract`, `download-attachments`, `oauth`) continue to work with improved Rich UI
+- Database schema remains unchanged - existing databases are fully compatible
+- Enjoy the improved visual feedback and progress tracking
+
+**For Developers with Custom Scripts:**
+- If importing removed coordinators (`BaseMigrationCoordinator`, `RichMigrationCoordinator`, `MapModeCoordinator`):
+  - Update to use `MaxExtractCoordinator` directly
+  - Pass optional `MigrationUI` instance for custom UI behavior
+
+- If importing removed models (`MapSnapshot`, `EntityInventory`, queue items):
+  - These were internal implementation details - use repository methods instead
+  - Migration state tracking continues via `repository.get_migration_state()`
+  - **WARNING**: The following repository methods are deprecated and will fail:
+    - `save_map_snapshot()`, `get_map_snapshot()`, `list_map_snapshots()`
+    - `save_entity_inventory()`, `get_entity_inventory()`
+    - Model classes are deleted, so imports will fail with `ImportError`
+    - Use `repository.get_migration_state()` for state tracking instead
+
+- If using removed report generators:
+  - Summary data now available via `MigrationSummary` model
+  - UI output handled automatically by `MigrationUI`
+
+**Example Migration:**
+```python
+# Before:
+from src.coordinators.rich_migration_coordinator import RichMigrationCoordinator
+coordinator = RichMigrationCoordinator(...)
+
+# After:
+from src.coordinators.max_extract_coordinator import MaxExtractCoordinator
+from src.ui.migration_ui import MigrationUI
+from src.cli.services.shared import SharedServices
+
+console = SharedServices.get_console()
+migration_ui = MigrationUI(console)
+coordinator = MaxExtractCoordinator(..., migration_ui=migration_ui)
+```
 
 ## [0.2.0] - 2025-01-21
 

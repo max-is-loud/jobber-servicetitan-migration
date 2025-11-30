@@ -14,14 +14,14 @@ A powerful, user-friendly command-line tool for migrating data from Jobber to ot
 
 ### 🚀 Advanced Migration Capabilities
 
-- **Multi-pass migration** strategy (Map → Extract → Reconcile)
-- **Incremental migration** with resume support
-- **Adaptive optimization** for performance tuning
+- **Unified Rich UI** with consistent terminal output across all commands
+- **Incremental migration** with checkpoint-based resume support
+- **Real-time progress tracking** for entity extraction and file downloads
 - **OAuth2 authentication** with automatic token refresh
 - **Rate limiting** and throttling protection
-- **Comprehensive error handling** and recovery
-- **Predictable effort estimation** before extraction
-- **Targeted retries** for failed entities
+- **Comprehensive error handling** with styled error panels
+- **Parallel attachment downloads** with multi-progress display
+- **Dependency-aware extraction** following entity relationships
 
 ### 🛠 Developer-Friendly Architecture
 
@@ -69,10 +69,10 @@ uv run tightbeam oauth init
 2. **Run a migration:**
 
 ```bash
-# Extract all Jobber data (Pass 1: metadata extraction)
+# Extract all Jobber data with Rich UI progress tracking
 uv run tightbeam migrate max-extract
 
-# Download binary attachment files (Pass 2: file downloads)
+# Download binary attachment files with parallel downloads
 uv run tightbeam migrate download-attachments
 ```
 
@@ -105,42 +105,44 @@ uv run tightbeam migrate max-extract --db custom.db
 
 This ensures that OAuth operations and migration commands share the same database by default, preventing authentication errors.
 
-## Migration Coordinator Architecture
+## Migration Architecture
 
-Project Tightbeam uses a **unified Rich-based migration coordinator** system that provides:
+Project Tightbeam uses a **unified coordinator architecture** with a dedicated Rich UI layer:
 
-### `BaseMigrationCoordinator`
+### `MaxExtractCoordinator` with `MigrationUI`
 
-The primary migration coordinator with built-in Rich UI support:
+The primary migration coordinator orchestrates multi-entity extraction with integrated Rich UI:
 
 ```python
-from src.coordinators import BaseMigrationCoordinator
+from src.coordinators import MaxExtractCoordinator
+from src.ui.migration_ui import MigrationUI
+from src.cli.services.shared import SharedServices
 
-# Create coordinator with dependencies
-coordinator = BaseMigrationCoordinator(
+# Create shared console
+console = SharedServices.get_console()
+
+# Create UI layer
+migration_ui = MigrationUI(console)
+
+# Create coordinator with Rich UI integration
+coordinator = MaxExtractCoordinator(
     jobber_client=jobber_client,
-    entity_mapper=entity_mapper,
     repository=repository,
     logger=logger,
-    resume=True  # Enable resume functionality
+    entity_mapper=entity_mapper,
+    migration_ui=migration_ui  # Optional - creates default if not provided
 )
 
-# Run migration with Rich progress bars
-summary = coordinator.migrate()
+# Run extraction with automatic progress tracking
+coordinator.extract_all(resume=True)
 ```
 
-### `RichMigrationCoordinator`
+### Key Components
 
-A backward-compatible wrapper that inherits all functionality from `BaseMigrationCoordinator`:
-
-```python
-from src.coordinators import RichMigrationCoordinator
-
-# Drop-in replacement for existing code
-coordinator = RichMigrationCoordinator(
-    # Same parameters as BaseMigrationCoordinator
-)
-```
+- **`MaxExtractCoordinator`**: Orchestrates entity extraction in dependency order
+- **`MigrationUI`**: Provides consistent Rich terminal output across all operations
+- **Checkpoint-based resume**: Continue from last successful extraction point
+- **Dependency order**: Ensures foreign key relationships are maintained
 
 ## Rich UI Features
 
@@ -178,9 +180,9 @@ uv run tightbeam oauth init
 uv run tightbeam oauth status
 ```
 
-### Phase 1: Metadata Extraction
+### Entity Extraction
 
-Extract all entity metadata including attachment URLs:
+Extract all entity metadata including attachment URLs with Rich UI progress tracking:
 
 ```bash
 # Extract all entities (default)
@@ -197,22 +199,29 @@ uv run tightbeam migrate max-extract --optimization-level aggressive
 ```
 
 **Features:**
-- Resumable extraction with checkpoints
-- Processes entities in dependency order
+- Real-time progress bars with Rich UI
+- Resumable extraction with checkpoint-based state tracking
+- Processes entities in dependency order (users → clients → jobs → invoices, etc.)
 - Captures all metadata including attachment URLs
 - Configurable rate limiting (conservative/moderate/aggressive)
 
-### Phase 2: Binary File Downloads
+### Attachment Downloads
 
-Download attachment files after metadata extraction:
+Download attachment files with parallel processing and real-time progress tracking:
 
 ```bash
-# Download all pending attachments
+# Download all pending attachments with parallel workers
 uv run tightbeam migrate download-attachments
 
 # Resume interrupted downloads
 uv run tightbeam migrate download-attachments --resume
 ```
+
+**Features:**
+- Parallel downloads with configurable worker count
+- Multi-progress display showing active downloads
+- Automatic retry on network failures
+- Thread-safe database updates
 
 ### Advanced Options
 
@@ -254,28 +263,43 @@ JOBBER_CLIENT_SECRET=your_client_secret
 JOBBER_REDIRECT_URI=http://localhost:8080/callback
 ```
 
-## Migration from Legacy System
+## Upgrading from Previous Versions
 
 If you're upgrading from an older version of Project Tightbeam:
 
 ### Code Updates
 
 ```python
-# OLD (no longer available)
-from src.coordinators import MigrationCoordinator
-
-# NEW (Rich-based)
+# DEPRECATED (legacy multi-pass coordinators)
 from src.coordinators import BaseMigrationCoordinator
+from src.coordinators import RichMigrationCoordinator
+from src.coordinators import MapModeCoordinator
+
+# NEW (unified architecture with Rich UI)
+from src.coordinators import MaxExtractCoordinator
+from src.ui.migration_ui import MigrationUI
+from src.cli.services.shared import SharedServices
+
+console = SharedServices.get_console()
+migration_ui = MigrationUI(console)
+coordinator = MaxExtractCoordinator(
+    jobber_client=jobber_client,
+    repository=repository,
+    logger=logger,
+    entity_mapper=entity_mapper,
+    migration_ui=migration_ui
+)
 ```
 
-### Benefits of Migration
+### What's New
 
-- **Enhanced user experience**: Professional Rich UI
-- **Better error handling**: Color-coded error panels
-- **Improved performance**: Optimized Rich rendering
-- **Future-proof**: Modern architecture for easy extension
+- **Unified MigrationUI**: Consistent Rich-based terminal output across all commands
+- **Simplified architecture**: Single coordinator with integrated UI layer
+- **Better error handling**: Styled error panels with full exception tracing
+- **Parallel downloads**: Multi-threaded attachment downloads with progress tracking
+- **No breaking changes**: Database schema unchanged - existing databases fully compatible
 
-For detailed migration instructions, see [MIGRATION_COORDINATOR_DOCUMENTATION.md](MIGRATION_COORDINATOR_DOCUMENTATION.md).
+See [CHANGELOG.md](docs/CHANGELOG.md) for detailed version history and migration guide.
 
 ## Development
 
@@ -285,11 +309,13 @@ For detailed migration instructions, see [MIGRATION_COORDINATOR_DOCUMENTATION.md
 src/
 ├── auth/              # OAuth2 authentication
 ├── cli/               # Command-line interface
-├── coordinators/      # Migration coordination (Rich-based)
-├── clients/           # External API clients
+├── coordinators/      # Migration orchestration (MaxExtractCoordinator)
+├── ui/                # Rich terminal UI layer (MigrationUI)
+├── clients/           # External API clients (JobberClient)
+├── extractors/        # Entity-specific extraction logic
 ├── mappers/           # Data transformation
-├── repositories/      # Data persistence
-└── loggers/           # Rich logging system
+├── repositories/      # Data persistence (SQLite)
+└── loggers/           # Structured logging
 ```
 
 ### Running Tests

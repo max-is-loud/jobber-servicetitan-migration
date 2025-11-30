@@ -38,7 +38,7 @@ These optimizations are particularly beneficial for:
 
 import os
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from ..exceptions import ConfigurationError, OAuth2Error

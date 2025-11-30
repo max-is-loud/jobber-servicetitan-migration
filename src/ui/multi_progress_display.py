@@ -1,21 +1,21 @@
 """Reusable multi-progress display for concurrent operations."""
 
-from collections import deque
 from threading import Lock
 from typing import Dict, Optional
+
 from rich.console import Console, RenderableType
 from rich.layout import Layout
 from rich.live import Live
+from rich.panel import Panel
 from rich.progress import (
-    Progress,
-    TextColumn,
     BarColumn,
     DownloadColumn,
-    TransferSpeedColumn,
-    TimeRemainingColumn,
+    Progress,
     TaskID,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
 )
-from rich.panel import Panel
 from rich.text import Text
 
 
@@ -47,7 +47,6 @@ class MultiProgressDisplay:
         max_workers: int = 3,
         description: str = "Processing",
         show_speed: bool = True,
-        max_log_lines: int = 50,
     ):
         """Initialize multi-progress display.
 
@@ -56,16 +55,14 @@ class MultiProgressDisplay:
             max_workers: Maximum concurrent tasks to display
             description: Overall progress description
             show_speed: Whether to show transfer speeds
-            max_log_lines: Maximum log lines to keep in scrollback
         """
         self._console = console
         self._max_workers = max_workers
         self._description = description
         self._show_speed = show_speed
-        self._max_log_lines = max_log_lines
 
-        # Log buffer (fixed size circular buffer)
-        self._log_buffer: deque = deque(maxlen=max_log_lines)
+        # Log buffer (unlimited - shows all logs)
+        self._log_buffer: list = []
 
         # Create individual task progress (one bar per active worker)
         # Don't pass console - we'll render it ourselves
@@ -108,12 +105,24 @@ class MultiProgressDisplay:
         self._lock = Lock()
 
     def _render_logs(self) -> RenderableType:
-        """Render the log buffer."""
-        if not self._log_buffer:
-            return Text("No logs yet...", style="dim")
+        """Render the log buffer with Rich markup.
 
-        # Join all log lines
-        return Text("\n".join(self._log_buffer))
+        Shows only the last 40 lines to create auto-scrolling effect.
+        """
+        if not self._log_buffer:
+            return Text("Waiting for downloads to start...", style="dim italic")
+
+        # Show only last 40 lines to create scrolling "tail -f" effect
+        # This prevents the panel from filling up and stopping
+        visible_lines = self._log_buffer[-40:]
+
+        # Use Text.from_markup to preserve Rich formatting
+        result = Text()
+        for line in visible_lines:
+            result.append_text(Text.from_markup(line))
+            result.append("\n")
+
+        return result
 
     def __enter__(self):
         """Start the live display with fixed layout."""
@@ -139,8 +148,8 @@ class MultiProgressDisplay:
         self._live = Live(
             self._layout,
             console=self._console,
-            screen=False,  # Don't take over full terminal
-            refresh_per_second=4,  # Reduce refresh rate to prevent flickering
+            screen=True,  # Take over full terminal (like top/htop)
+            refresh_per_second=30,  # High refresh rate for smooth UI (30Hz)
         )
         self._live.start()
 
@@ -215,6 +224,10 @@ class MultiProgressDisplay:
                 else:
                     self._overall_progress.update(self._overall_task_id, advance=advance)
 
+            # Note: We don't call _update_sorted_tasks() here because Rich's Live
+            # display already updates at 30Hz, and TransferSpeedColumn has built-in
+            # throttling to keep speeds readable
+
     def complete_task(self, task_id: TaskID, task_name: str):
         """Mark task as complete and hide it (thread-safe).
 
@@ -235,19 +248,24 @@ class MultiProgressDisplay:
             level: Log level (info, warning, error)
         """
         with self._lock:
-            # Format message with level styling
+            # Format message with level styling and bold for visibility
             if level == "error":
-                formatted = f"[red]ERROR:[/red] {message}"
+                formatted = f"[bold red]✗ ERROR:[/bold red] [red]{message}[/red]"
             elif level == "warning":
-                formatted = f"[yellow]WARNING:[/yellow] {message}"
+                formatted = f"[bold yellow]⚠ WARNING:[/bold yellow] [yellow]{message}[/yellow]"
             else:
+                # Keep info messages clean (they already have ✓ from caller)
                 formatted = message
 
-            # Add to circular buffer
+            # Add to log buffer
             self._log_buffer.append(formatted)
 
             # Update log panel in layout
             if self._layout:
                 self._layout["logs"].update(
-                    Panel(self._render_logs(), title="Download Log", border_style="blue")
+                    Panel(
+                        self._render_logs(),
+                        title="[bold blue]Download Log[/bold blue]",
+                        border_style="blue",
+                    )
                 )

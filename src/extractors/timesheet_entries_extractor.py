@@ -33,7 +33,7 @@ class TimesheetEntriesExtractor(BaseExtractor[TimeSheetEntry]):
         logger: Logger,
         config_manager: Optional[ConfigManagerImpl] = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize TimesheetEntriesExtractor with required dependencies.
 
@@ -44,7 +44,7 @@ class TimesheetEntriesExtractor(BaseExtractor[TimeSheetEntry]):
             logger: Logger for structured output and progress tracking
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
-            **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
+            **kwargs: Reserved for future use
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -88,7 +88,7 @@ class TimesheetEntriesExtractor(BaseExtractor[TimeSheetEntry]):
 
         # Cache miss - paginate and cache everything we see
         self._logger.debug(
-            f"Batch cache empty, paginating through ALL timesheet entries and caching (one-time cost)"
+            "Batch cache empty, paginating through ALL timesheet entries and caching (one-time cost)"
         )
 
         cursor = None

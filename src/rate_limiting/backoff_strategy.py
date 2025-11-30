@@ -74,10 +74,7 @@ class ExponentialBackoffStrategy:
         exponential_delay = min(exponential_delay, self.max_delay)
 
         # If server provided Retry-After, use the maximum of both delays
-        if retry_after is not None:
-            base_delay = max(exponential_delay, retry_after)
-        else:
-            base_delay = exponential_delay
+        base_delay = max(exponential_delay, retry_after) if retry_after is not None else exponential_delay
 
         # Add jitter to prevent thundering herd
         return self._add_jitter(base_delay)

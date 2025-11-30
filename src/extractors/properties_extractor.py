@@ -2,13 +2,13 @@ from __future__ import annotations
 
 """PropertiesExtractor for extracting Property entities from Jobber GraphQL API."""
 
-from typing import Any, List, Optional
+from typing import Any
 
 from ..clients import JobberClient
 from ..config import ConfigManagerImpl
 from ..interfaces import Logger
 from ..mappers import EntityMapper
-from ..models import Property
+from ..models import Note, Property
 from ..repositories import Repository
 from .base_extractor import BaseExtractor
 
@@ -32,9 +32,9 @@ class PropertiesExtractor(BaseExtractor[Property]):
         entity_mapper: EntityMapper,
         repository: Repository,
         logger: Logger,
-        config_manager: Optional[ConfigManagerImpl] = None,
+        config_manager: ConfigManagerImpl | None = None,
         skip_existing_entities: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize PropertiesExtractor with required dependencies.
 
@@ -45,7 +45,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
             logger: Logger for structured output and progress tracking
             config_manager: Optional ConfigManager for delays and pagination settings
             skip_existing_entities: Whether to skip entities that already exist in database
-            **kwargs: Additional optional parameters (e.g., queue_attachments, map_snapshot_id)
+            **kwargs: Reserved for future use
         """
         super().__init__(
             jobber_client=jobber_client,
@@ -59,9 +59,9 @@ class PropertiesExtractor(BaseExtractor[Property]):
             **kwargs,
         )
         # Track entities from last batch for extract_all
-        self._last_batch_entities: List[Property] = []
+        self._last_batch_entities: list[Property] = []
 
-    def _fetch_page(self, cursor: Optional[str] = None) -> dict[str, Any]:
+    def _fetch_page(self, cursor: str | None = None) -> dict[str, Any]:
         """Fetch a page of properties from the Jobber API.
 
         Args:
@@ -72,7 +72,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         """
         return self._jobber_client.fetch_properties(cursor)
 
-    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[List[dict[str, Any]], dict[str, Any]]:
+    def _extract_edges_and_page_info(self, response: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Extract edges and page info from API response.
 
         Args:
@@ -97,7 +97,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         """
         return self._entity_mapper.map_property(node)
 
-    def _save_entities(self, entities: List[Property]) -> None:
+    def _save_entities(self, entities: list[Property]) -> None:
         """Save properties to repository.
 
         Args:
@@ -111,7 +111,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         """Extract properties data from GraphQL response."""
         return response.get("data", {}).get("properties", {})
 
-    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Property) -> dict[str, List[Note]]:
+    def _extract_related_entities(self, node: dict[str, Any], primary_entity: Property) -> dict[str, list[Note]]:
         """Extract related entities from property node.
 
         Properties don't have related notes or other complex relationships,
@@ -126,7 +126,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         """
         return {}
 
-    def _save_related_entities(self, related_entities: dict[str, List[Note]]) -> None:
+    def _save_related_entities(self, related_entities: dict[str, list[Note]]) -> None:
         """Save related entities for properties.
 
         Properties don't have related entities, so this is a no-op.
@@ -136,7 +136,7 @@ class PropertiesExtractor(BaseExtractor[Property]):
         """
         pass
 
-    def _get_entities_from_last_batch(self) -> List[Property]:
+    def _get_entities_from_last_batch(self) -> list[Property]:
         """Get properties from the last extraction batch.
 
         Returns:

@@ -87,7 +87,7 @@ class PaginationConfig:
 
                 warnings.warn(
                     f"Pagination size for {field} is {value} (>100). Consider using smaller values to avoid API rate limits.",
-                    UserWarning,
+                    UserWarning, stacklevel=2,
                 )
 
 
@@ -110,7 +110,7 @@ class DelayConfig:
 
             warnings.warn(
                 f"Page delay is {self.page_delay}s (>30s). This may significantly slow down migrations.",
-                UserWarning,
+                UserWarning, stacklevel=2,
             )
 
         if not isinstance(self.request_timeout, (int, float)):
@@ -200,12 +200,29 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
+class NoteReferenceConfig:
+    """Note reference collection configuration."""
+
+    batch_size: int = 1  # How many note references to collect before writing to database
+
+    def __post_init__(self) -> None:
+        """Validate note reference configuration values."""
+        if self.batch_size < 1:
+            raise ValueError("batch_size must be at least 1")
+        if self.batch_size > 1000:
+            raise ValueError("batch_size should not exceed 1000")
+
+
+@dataclass(frozen=True)
 class AttachmentConfig:
     """Attachment download configuration."""
 
     auto_download: bool  # Automatically download attachment files
-    concurrent_downloads: int = 3  # Number of parallel downloads (1-10)
-    max_concurrent_downloads: int = 10  # Upper limit for validation
+    concurrent_downloads: int = 3  # Number of parallel downloads (1-50)
+    max_concurrent_downloads: int = 50  # Upper limit for validation
+    chunk_size: int = 65536  # Download chunk size in bytes (64KB default)
+    http_pool_connections: int = 50  # HTTP connection pool size
+    http_pool_maxsize: int = 50  # Maximum pool size per host
 
     def __post_init__(self) -> None:
         """Validate attachment configuration values."""
@@ -233,6 +250,25 @@ class AttachmentConfig:
                 f"got {self.concurrent_downloads}"
             )
 
+        # Validate chunk_size
+        if not isinstance(self.chunk_size, int):
+            raise ValueError(f"chunk_size must be an integer, got {type(self.chunk_size).__name__}")
+        if self.chunk_size < 1024 or self.chunk_size > 1048576:  # 1KB to 1MB
+            raise ValueError(f"chunk_size must be between 1024 and 1048576 bytes, got {self.chunk_size}")
+
+        # Validate HTTP pool settings
+        if not isinstance(self.http_pool_connections, int):
+            raise ValueError(
+                f"http_pool_connections must be an integer, got {type(self.http_pool_connections).__name__}"
+            )
+        if self.http_pool_connections < 1:
+            raise ValueError(f"http_pool_connections must be at least 1, got {self.http_pool_connections}")
+
+        if not isinstance(self.http_pool_maxsize, int):
+            raise ValueError(f"http_pool_maxsize must be an integer, got {type(self.http_pool_maxsize).__name__}")
+        if self.http_pool_maxsize < 1:
+            raise ValueError(f"http_pool_maxsize must be at least 1, got {self.http_pool_maxsize}")
+
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -245,6 +281,7 @@ class AppConfig:
     backoff: BackoffConfig
     logging: LoggingConfig
     database: DatabaseConfig
+    note_references: NoteReferenceConfig
     attachments: AttachmentConfig
 
     def __post_init__(self) -> None:

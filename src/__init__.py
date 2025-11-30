@@ -19,7 +19,7 @@ from .clients import HttpClient, JobberClient
 from .config import ConfigManagerImpl
 
 # Coordination components
-from .coordinators import BaseMigrationCoordinator, RichMigrationCoordinator
+from .coordinators import MaxExtractCoordinator
 
 # Exception classes for error handling
 from .exceptions import (
@@ -63,8 +63,7 @@ __all__ = [
     "ConsoleLogger",
     "RichLogger",
     # Coordination components
-    "BaseMigrationCoordinator",
-    "RichMigrationCoordinator",
+    "MaxExtractCoordinator",
     # Exception classes
     "TightBeamError",
     "ConfigurationError",

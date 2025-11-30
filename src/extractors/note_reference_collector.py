@@ -107,9 +107,8 @@ class NoteReferenceCollector:
 
         try:
             self._repository.save_note_references(self._note_references)
-            count = len(self._note_references)
             self._note_references.clear()
-            self._logger.debug(f"Flushed {count} note references to persistent storage")
+            # No logging on success - only log errors to keep logs clean
         except Exception as e:
             self._logger.error(f"Failed to flush note references to storage: {e}")
             # Don't raise - keep references in memory as fallback
@@ -136,15 +135,12 @@ class NoteReferenceCollector:
         """
         with self._lock:
             references = self._note_references.copy()
-            self._logger.debug(f"Retrieved {len(references)} references from memory")
+            # No logging - routine operation
 
             # If persistence is enabled, also get references from storage
             if self._enable_persistence:
                 try:
                     storage_count = self._repository.get_note_references_count()
-                    self._logger.info(
-                        f"Loading {storage_count} note references from storage (using efficient cursor-based pagination)..."
-                    )
                     # Get all references from storage using efficient cursor-based batches
                     last_id = 0
                     batch_size = 1000
@@ -155,7 +151,6 @@ class NoteReferenceCollector:
                     while True:
                         batch_count += 1
                         batch_start = time.time()
-                        self._logger.info(f"Loading batch {batch_count}/{estimated_batches} (last_id: {last_id})...")
                         storage_refs, last_id = self._repository.get_note_references_cursor_based(
                             limit=batch_size, last_id=last_id
                         )
@@ -164,22 +159,15 @@ class NoteReferenceCollector:
                             break
                         references.extend(storage_refs)
                         total_from_storage += len(storage_refs)
-                        self._logger.info(
-                            f"Loaded {len(storage_refs)} references from batch {batch_count} in {batch_elapsed:.2f}s (total from storage: {total_from_storage})"
-                        )
-                        if batch_elapsed > 0.5:  # Log batches that take >500ms (should be much faster now)
-                            self._logger.info(
-                                f"⚠️  Batch {batch_count} took {batch_elapsed:.2f}s - unexpected slow performance"
+                        # Only log slow batches (potential problems)
+                        if batch_elapsed > 0.5:
+                            self._logger.warning(
+                                f"Slow batch loading: batch {batch_count} took {batch_elapsed:.2f}s for {len(storage_refs)} references"
                             )
-
-                    self._logger.info(
-                        f"Completed loading {total_from_storage} references from storage in {batch_count - 1} batches"
-                    )
                 except Exception as e:
                     self._logger.error(f"Failed to retrieve references from storage: {e}")
 
-            total_references = len(references)
-            self._logger.info(f"Total references loaded: {total_references}")
+            # Return silently on success - only errors need logging
             return references
 
     def get_reference_count(self) -> int:
@@ -234,7 +222,7 @@ class NoteReferenceCollector:
                 except Exception as e:
                     self._logger.error(f"Failed to clear storage references: {e}")
 
-            self._logger.debug(f"Cleared {references_count} note references from collector")
+            # No logging on success - only errors are worth capturing
 
     def get_unique_note_ids(self) -> List[str]:
         """Get list of unique note IDs from all collected references.

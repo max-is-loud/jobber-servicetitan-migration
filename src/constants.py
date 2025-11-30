@@ -6,7 +6,7 @@ and configuration constants. Update these values in one place to ensure
 consistency across the entire application.
 """
 
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
 # Application Metadata
 APP_NAME = "Project Tightbeam"
