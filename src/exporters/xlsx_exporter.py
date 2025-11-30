@@ -19,7 +19,14 @@ class XlsxExporter(BaseExporter):
     """
 
     # System tables to exclude from export
-    SYSTEM_TABLES = {"sqlite_sequence", "sqlite_stat1"}
+    SYSTEM_TABLES = {
+        "sqlite_sequence",  # SQLite internal
+        "sqlite_stat1",  # SQLite internal
+        "oauth_tokens",  # Sensitive OAuth credentials
+        "graphql_costs",  # Internal API cost tracking
+        "migration_state",  # Internal migration metadata
+        "note_references",  # Internal deferred processing metadata
+    }
 
     # Table relationships documentation
     TABLE_RELATIONSHIPS = {
