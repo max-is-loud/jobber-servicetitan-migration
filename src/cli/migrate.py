@@ -1,5 +1,7 @@
 """Migration commands for TightBeam CLI."""
 
+import atexit
+import tempfile
 from pathlib import Path
 from typing import Annotated, List, Optional
 
@@ -14,6 +16,7 @@ from src.constants import (
 from src.exceptions import (
     ConfigurationError,
 )
+from src.utils import ProcessLock, ProcessLockError
 
 from .services import ServiceFactory, SharedServices
 
@@ -142,6 +145,21 @@ def migrate_callback(
 
     # Check authentication before allowing migration commands
     _check_authentication(console)
+
+    # Acquire process lock to prevent concurrent migrations
+    lock_file = Path(tempfile.gettempdir()) / "tightbeam_migration.lock"
+    process_lock = ProcessLock(lock_file, "migration")
+
+    try:
+        process_lock.acquire()
+    except ProcessLockError as e:
+        console.print(f"\n[red]{ERROR_EMOJI} {e}[/red]")
+        console.print(f"\n[yellow]{INFO_EMOJI} Tip:[/yellow] Use 'ps aux | grep tightbeam' to find running processes\n")
+        raise typer.Exit(1) from None
+
+    # Store lock in context and register cleanup
+    ctx.obj["process_lock"] = process_lock
+    atexit.register(process_lock.release)
 
 
 
@@ -546,6 +564,7 @@ def max_extract(
             entity_mapper=entity_mapper,
             migration_ui=migration_ui,
             db_path=str(db),
+            config_manager=config_manager,
         )
 
         # Execute extraction (UI is handled by coordinator)
