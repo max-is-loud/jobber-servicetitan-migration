@@ -82,7 +82,12 @@ class XlsxExporter(BaseExporter):
 
         try:
             # Create Excel writer with xlsxwriter engine
-            with pd.ExcelWriter(output_file, engine="xlsxwriter") as writer:
+            # Disable string conversion to prevent URL hyperlink warnings when exceeding Excel's 65k limit
+            with pd.ExcelWriter(
+                output_file,
+                engine="xlsxwriter",
+                engine_kwargs={"options": {"strings_to_urls": False}},
+            ) as writer:
                 # Export each table as a separate sheet
                 total_tables = len(tables_to_export)
                 for idx, table_name in enumerate(sorted(tables_to_export), start=1):
