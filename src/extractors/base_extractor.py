@@ -587,6 +587,9 @@ class BaseExtractor(ABC, Generic[T]):
                         entity = self._map_entity(node)
                         entities.append(entity)
 
+                        # Collect note IDs for deferred processing
+                        self._collect_note_ids(node, entity)
+
                         # Extract related entities if any
                         related = self._extract_related_entities(node, entity)
                         for entity_type, related_list in related.items():

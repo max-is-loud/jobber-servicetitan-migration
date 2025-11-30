@@ -2281,14 +2281,22 @@ class Repository:
             rows = cursor.fetchall()
             cursor.close()
 
-            return [
-                {
+            # Build result list with error checking
+            result = []
+            for row in rows:
+                # Defensive check: ensure row has at least 3 elements
+                if len(row) < 3:
+                    # Log warning but don't fail - skip malformed row
+                    import logging
+                    logging.warning(f"Skipping malformed note_reference row (expected 3 columns, got {len(row)}): {row}")
+                    continue
+
+                result.append({
                     "note_id": row[0],
                     "entity_type": row[1],
                     "entity_id": row[2],
-                }
-                for row in rows
-            ]
+                })
+            return result
 
         except sqlite3.Error as e:
             raise RepositoryError(f"Failed to retrieve note references: {e}") from e
@@ -2799,6 +2807,12 @@ class Repository:
             cursor.close()
 
             if row:
+                # Defensive check: ensure row has all expected columns
+                if len(row) < 6:
+                    import logging
+                    logging.error(f"Malformed migration_state row for {entity_type} (expected 6 columns, got {len(row)}): {row}")
+                    raise RepositoryError(f"Migration state corrupted for {entity_type}: expected 6 columns, got {len(row)}")
+
                 return MigrationState(
                     entity_type=row[0],
                     last_cursor=row[1],

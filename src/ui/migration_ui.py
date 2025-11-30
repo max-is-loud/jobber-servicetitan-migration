@@ -604,8 +604,8 @@ class LoggerAdapter:
         self._write_to_file("INFO", msg)
 
     def debug(self, msg: str) -> None:
-        """Log debug message to UI and file."""
-        self._ui.add_log(f"[dim]DEBUG:[/dim] {msg}")
+        """Log debug message to file only (not UI to prevent console spam)."""
+        # Only write to file - debug messages are too verbose for the console
         self._write_to_file("DEBUG", msg)
 
     def success(self, msg: str) -> None:
