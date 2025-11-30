@@ -30,6 +30,8 @@ dependencies = [
     "watchdog>=3.0.0",
     "rich>=13.6.0",
     "pytest-mock>=3.14.1",
+    "pandas>=2.0.0",
+    "xlsxwriter>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -101,6 +103,7 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 dev = [
+    "openpyxl>=3.1.5",
     "types-pyyaml>=6.0.12.20241230",
     "types-requests>=2.32.0.20241016",
 ]

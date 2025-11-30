@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 
+from src.cli.export import export_app
 from src.cli.migrate import migrate_app
 from src.cli.oauth import oauth_app
 from src.cli.services import ServiceFactory
@@ -68,6 +69,7 @@ def main_callback(
 # Register subcommand modules using add_typer
 app.add_typer(oauth_app, name="oauth")
 app.add_typer(migrate_app, name="migrate")
+app.add_typer(export_app, name="export")
 
 
 def main() -> None:
