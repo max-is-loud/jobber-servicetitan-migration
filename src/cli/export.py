@@ -83,6 +83,12 @@ def export_xlsx(
         # Create exporter
         exporter = XlsxExporter(db_path, output_path)
 
+        # Get table count for progress bar
+        if table_list:
+            total_tables = len(table_list)
+        else:
+            total_tables = len(exporter.get_table_list())
+
         # Export with progress bar
         with Progress(
             SpinnerColumn(),
@@ -91,10 +97,10 @@ def export_xlsx(
             MofNCompleteColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("Exporting tables...", total=None)
+            task = progress.add_task("Exporting tables...", total=total_tables)
 
             def progress_callback(table_name: str, current: int, total: int) -> None:
-                progress.update(task, description=f"Exported {table_name}", completed=current, total=total)
+                progress.update(task, description=f"Exporting {table_name}", completed=current)
 
             result_path = exporter.export(
                 tables=table_list,
@@ -183,6 +189,12 @@ def export_csv(
         # Create exporter
         exporter = CsvExporter(db_path, output_path)
 
+        # Get table count for progress bar
+        if table_list:
+            total_tables = len(table_list)
+        else:
+            total_tables = len(exporter.get_table_list())
+
         # Export with progress bar
         with Progress(
             SpinnerColumn(),
@@ -191,10 +203,10 @@ def export_csv(
             MofNCompleteColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("Exporting tables...", total=None)
+            task = progress.add_task("Exporting tables...", total=total_tables)
 
             def progress_callback(table_name: str, current: int, total: int) -> None:
-                progress.update(task, description=f"Exported {table_name}", completed=current, total=total)
+                progress.update(task, description=f"Exporting {table_name}", completed=current)
 
             result_path = exporter.export(
                 tables=table_list,
